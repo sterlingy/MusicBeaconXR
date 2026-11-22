@@ -1,0 +1,17 @@
+{
+ "format": 1,
+ "instrument": "Pulsar",
+ "name": "Tight Funk",
+ "description": "Short and snappy.",
+ "author": "AudioSyncMaster",
+ "order": 1,
+ "params": {
+  "kick.decay": 3,
+  "snare.tone": 7,
+  "snare.snap": 7,
+  "snare.decay": 3,
+  "chat.decay": 3,
+  "ohat.decay": 3,
+  "master.drive": 1
+ }
+}

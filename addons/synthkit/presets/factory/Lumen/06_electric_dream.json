@@ -1,0 +1,22 @@
+{
+ "format": 1,
+ "instrument": "Lumen",
+ "name": "Electric Dream",
+ "description": "Bell-like electric piano.",
+ "author": "AudioSyncMaster",
+ "order": 5,
+ "params": {
+  "osc1.wave": 4,
+  "osc2.wave": 3,
+  "osc2.semi": 12,
+  "osc2.level": 4,
+  "filter.cutoff": 2500,
+  "fenv.decay": 0.8,
+  "aenv.decay": 2.5,
+  "aenv.sustain": 2,
+  "filter.velocity": 8,
+  "chorus.mix": 5,
+  "chorus.rate": 0.8,
+  "reverb.mix": 2
+ }
+}

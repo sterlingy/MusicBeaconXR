@@ -1,0 +1,17 @@
+{
+ "format": 1,
+ "instrument": "Comet",
+ "name": "Sync Scream",
+ "description": "Hard-synced osc 2 swept by the filter envelope.",
+ "author": "AudioSyncMaster",
+ "order": 2,
+ "params": {
+  "osc2.sync": 1,
+  "osc2.semi": 12,
+  "osc2.level": 8,
+  "osc1.level": 2,
+  "filter.env": 6,
+  "fenv.decay": 0.6,
+  "filter.drive": 4
+ }
+}

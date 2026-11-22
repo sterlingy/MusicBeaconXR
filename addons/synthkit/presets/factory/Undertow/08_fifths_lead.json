@@ -1,0 +1,20 @@
+{
+ "format": 1,
+ "instrument": "Undertow",
+ "name": "Fifths Lead",
+ "description": "8' saws a fifth apart: the bass that thinks it's a lead.",
+ "author": "AudioSyncMaster",
+ "order": 7,
+ "params": {
+  "osc1.range": 3,
+  "osc2.range": 3,
+  "osc2.freq": 7,
+  "osc3.range": 4,
+  "osc3.freq": 0,
+  "mix.osc3": 3,
+  "filter.cutoff": 2000,
+  "filter.emphasis": 3,
+  "ctrl.glide": 0.05,
+  "lenv.sustain": 9
+ }
+}

@@ -1,0 +1,273 @@
+<title>Beacon Field</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: an instrument-like workstation. The field (map) fills the left, a rack of readouts on the right; on a phone the field comes first and the rack stacks below. Dark-first. */
+:root {
+  --bg: #0e131a;
+  --panel: #151c25;
+  --raise: #1c2531;
+  --line: #2a3644;
+  --fg: #e6ebf1;
+  --muted: #8d9aab;
+  --accent: #ffb547;
+  --field: #111820;
+  --grid: #1f2a36;
+  --f-display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --f-body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --f-mono: "IBM Plex Mono", Consolas, ui-monospace, monospace;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #eef1f5; --panel: #ffffff; --raise: #f4f6f9; --line: #d5dce5; --fg: #17202b; --muted: #5b6878;
+    --accent: #c46f00; --field: #f8fafc; --grid: #e2e7ee; color-scheme: light;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #eef1f5; --panel: #ffffff; --raise: #f4f6f9; --line: #d5dce5; --fg: #17202b; --muted: #5b6878;
+  --accent: #c46f00; --field: #f8fafc; --grid: #e2e7ee; color-scheme: light;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  background: var(--bg); color: var(--fg); font: 14px/1.5 var(--f-body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 14px 24px;
+}
+button, input, select, textarea { font: inherit; color: inherit; }
+.app { max-width: 1440px; margin: 0 auto; display: grid; gap: 14px; }
+
+header { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+h1 { font: 800 26px/1 var(--f-display); margin: 0; letter-spacing: -0.01em; }
+h1 span { color: var(--accent); }
+.hint { color: var(--muted); font-size: 13px; }
+.spacer { flex: 1; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.seg button { background: transparent; border: 0; padding: 7px 12px; cursor: pointer; color: var(--muted); }
+.seg button[aria-pressed="true"] { background: var(--raise); color: var(--fg); }
+.btn { background: var(--raise); border: 1px solid var(--line); border-radius: 8px; padding: 7px 12px; cursor: pointer; }
+.btn:hover { border-color: var(--muted); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #1a1205; font-weight: 600; }
+.btn:focus-visible, .seg button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, canvas:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+label.inline { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; }
+input[type="range"] { accent-color: var(--accent); width: 110px; }
+
+.main { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(320px, 1fr); gap: 14px; align-items: start; }
+.fieldwrap { position: relative; background: var(--field); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+canvas#field { display: block; width: 100%; aspect-ratio: 1 / 1; touch-action: none; cursor: crosshair; }
+.fieldwrap.globe canvas#field { aspect-ratio: 2 / 1; }
+.overlay { position: absolute; left: 12px; top: 10px; right: 12px; display: flex; flex-wrap: wrap; gap: 8px; pointer-events: none; font: 12px/1.3 var(--f-mono); color: var(--muted); }
+.overlay b { color: var(--fg); font-weight: 500; }
+.fieldbar { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; padding: 10px 12px; border-top: 1px solid var(--line); background: var(--panel); }
+#globeTools[hidden] { display: none !important; }
+#globeTools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+#latlon { width: 150px; background: var(--raise); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; font-family: var(--f-mono); font-size: 12px; }
+select { background: var(--raise); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; }
+
+.rack { display: grid; gap: 12px; min-width: 0; }
+.unit { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px; display: grid; gap: 10px; min-width: 0; }
+.unit h2 { margin: 0; font: 600 11px/1 var(--f-mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+.now { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.now div { display: grid; gap: 2px; min-width: 0; }
+.now small { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; }
+.now strong { font: 600 20px/1.1 var(--f-display); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+.songline { color: var(--muted); font-size: 13px; }
+.songline b { color: var(--fg); font-weight: 600; }
+.beat { display: grid; grid-template-columns: repeat(16, 1fr); gap: 3px; }
+.beat i { height: 6px; border-radius: 2px; background: var(--grid); }
+.beat i.bar { background: var(--line); }
+.beat i.on { background: var(--accent); }
+
+.blend { display: grid; gap: 8px; }
+.brow { display: grid; grid-template-columns: 38px minmax(0, 1fr) 52px; gap: 10px; align-items: center; cursor: pointer; }
+.brow .tag { font: 500 12px var(--f-mono); padding: 3px 0; text-align: center; border-radius: 6px; color: #10151c; }
+.brow .name { min-width: 0; }
+.brow .name div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.brow .name small { color: var(--muted); }
+.brow .pct { text-align: right; font: 500 15px var(--f-mono); font-variant-numeric: tabular-nums; }
+.wbar { height: 4px; background: var(--grid); border-radius: 2px; overflow: hidden; margin-top: 4px; }
+.wbar i { display: block; height: 100%; }
+.brow.harm .name div::after { content: " · sets key"; color: var(--accent); font-size: 12px; }
+
+.tracks { display: grid; gap: 7px; }
+.trow { display: grid; grid-template-columns: 86px minmax(0, 1fr) 44px; gap: 10px; align-items: center; }
+.trow .inst { font-weight: 600; font-size: 13px; }
+.trow .inst small { display: block; color: var(--muted); font-weight: 400; font-size: 11px; }
+.meter { position: relative; height: 18px; background: var(--grid); border-radius: 4px; overflow: hidden; }
+.meter .lvl { position: absolute; inset: 0 auto 0 0; opacity: 0.35; }
+.meter .pk { position: absolute; inset: 0 auto 0 0; }
+.meter .src { position: absolute; inset: auto 0 0 0; height: 3px; display: flex; }
+.meter .src i { display: block; height: 100%; }
+.trow .val { text-align: right; font: 12px var(--f-mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+.params { font: 11.5px/1.6 var(--f-mono); color: var(--muted); display: flex; flex-wrap: wrap; gap: 2px 12px; }
+.params b { color: var(--fg); font-weight: 500; }
+
+.insp { display: grid; gap: 8px; }
+.insp .title { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.insp .title strong { font: 700 20px var(--f-display); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { font: 12px var(--f-mono); padding: 3px 8px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); }
+.chip b { color: var(--fg); font-weight: 500; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; }
+textarea#songJson { width: 100%; min-height: 140px; background: var(--raise); border: 1px solid var(--line); border-radius: 8px; padding: 8px; font: 11.5px/1.45 var(--f-mono); resize: vertical; }
+.msg { font-size: 13px; color: var(--muted); min-height: 1.4em; }
+.msg.err { color: #ff6b6b; }
+details summary { cursor: pointer; color: var(--muted); font-size: 13px; }
+.settings { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px 16px; }
+.settings label { display: grid; gap: 4px; color: var(--muted); font-size: 12.5px; }
+.settings label span { display: flex; justify-content: space-between; }
+.settings input[type="range"] { width: 100%; }
+
+.btn.small { padding: 4px 10px; font-size: 12.5px; }
+#editorWrap { display: grid; gap: 10px; border-top: 1px solid var(--line); padding-top: 12px; }
+.edhead { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.edhead strong { font: 600 15px var(--f-display); }
+#editor { display: grid; gap: 10px; min-width: 0; }
+.egrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 8px; }
+.egrid label { display: grid; gap: 3px; font-size: 12px; color: var(--muted); min-width: 0; }
+.egrid input, .egrid select { background: var(--raise); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; min-width: 0; width: 100%; }
+.eprog { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 12px; color: var(--muted); }
+.eprog select { background: var(--raise); border: 1px solid var(--line); border-radius: 8px; padding: 4px 6px; }
+.etabs, .ebars { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.etab { background: transparent; border: 1px solid var(--line); border-radius: 999px; padding: 4px 10px; font-size: 12.5px; color: var(--muted); cursor: pointer; }
+.etab[aria-pressed="true"] { background: var(--raise); color: var(--fg); border-color: var(--muted); }
+.epart { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px 14px; }
+.eknob { display: grid; gap: 2px; font-size: 12px; color: var(--muted); }
+.eknob span { display: flex; justify-content: space-between; gap: 6px; }
+.eknob b { color: var(--fg); font: 500 12px var(--f-mono); }
+.eknob input { width: 100%; }
+.esteps { display: grid; grid-template-columns: 44px repeat(16, minmax(0, 1fr)); gap: 3px; align-items: center; overflow-x: auto; }
+.esteps .rl { font: 11px var(--f-mono); color: var(--muted); white-space: nowrap; }
+.esteps .ch { font: 10px var(--f-mono); color: var(--muted); text-align: center; }
+.cell { aspect-ratio: 1; min-height: 14px; border: 0; border-radius: 3px; background: var(--grid); cursor: pointer; padding: 0; }
+.cell.beat { background: var(--line); }
+.cell.on { background: var(--accent); }
+.cell:hover { outline: 1px solid var(--muted); }
+.startcard { position: absolute; inset: 0; display: grid; place-items: center; background: color-mix(in srgb, var(--field) 70%, transparent); }
+.startcard[hidden] { display: none !important; }
+.startcard div { text-align: center; display: grid; gap: 10px; justify-items: center; padding: 20px; max-width: 360px; }
+.startcard p { margin: 0; color: var(--muted); }
+.startcard .btn { font-size: 16px; padding: 12px 22px; }
+
+@media (max-width: 960px) {
+  .main { grid-template-columns: minmax(0, 1fr); }
+  .now { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="app">
+  <header>
+    <h1>Beacon <span>Field</span></h1>
+    <span class="hint" id="modeHint">25 beacons, 100 m apart. Drag, tap or use WASD to walk.</span>
+    <div class="spacer"></div>
+    <div class="seg" role="group" aria-label="Field">
+      <button id="modeGrid" aria-pressed="true">Test grid</button>
+      <button id="modeGlobe" aria-pressed="false">Globe</button>
+    </div>
+    <label class="inline" for="vol">Volume <input id="vol" type="range" min="0" max="1" step="0.01" value="0.8"></label>
+    <button class="btn primary" id="play">▶ Start</button>
+  </header>
+
+  <div class="main">
+    <section class="fieldwrap" id="fieldwrap">
+      <canvas id="field" tabindex="0" aria-label="Beacon field. Drag or tap to move the listener; arrow keys or WASD walk."></canvas>
+      <div class="overlay" id="overlay"></div>
+      <div class="startcard" id="startcard">
+        <div>
+          <p>Each beacon plays its own song. Move between them and the three closest blend into one track.</p>
+          <button class="btn primary" id="play2">▶ Start the music</button>
+          <p class="hint">Headphones recommended.</p>
+        </div>
+      </div>
+      <div class="fieldbar">
+        <label class="inline" for="wander"><input id="wander" type="checkbox"> Auto-walk</label>
+        <label class="inline" for="speed">Speed <input id="speed" type="range" min="0.2" max="4" step="0.1" value="1"></label>
+        <label class="inline" for="zones"><input id="zones" type="checkbox" checked> Zones</label>
+        <div id="globeTools" hidden>
+          <select id="city" aria-label="Jump to a place">
+            <option value="">Jump to…</option>
+          </select>
+          <input id="latlon" placeholder="lat, lon" aria-label="Latitude, longitude">
+          <button class="btn" id="goLatLon">Go</button>
+          <button class="btn" id="geo">My location</button>
+          <div class="seg" role="group" aria-label="Map zoom">
+            <button id="zoomLocal" aria-pressed="true">Local</button>
+            <button id="zoomWorld" aria-pressed="false">World</button>
+          </div>
+        </div>
+        <span class="msg" id="fieldMsg"></span>
+      </div>
+    </section>
+
+    <aside class="rack">
+      <section class="unit" aria-label="Now playing">
+        <h2>Now playing</h2>
+        <div class="now">
+          <div><small>Key</small><strong id="nKey">–</strong></div>
+          <div><small>Chord</small><strong id="nChord">–</strong></div>
+          <div><small>Tempo</small><strong id="nBpm">–</strong></div>
+          <div><small>Bar</small><strong id="nBar">–</strong></div>
+        </div>
+        <div class="beat" id="beat"></div>
+        <div class="songline" id="songline">Harmony from –</div>
+      </section>
+
+      <section class="unit" aria-label="Active beacons">
+        <h2>The blend · 3 closest beacons</h2>
+        <div class="blend" id="blend"></div>
+      </section>
+
+      <section class="unit" aria-label="Instruments">
+        <h2>Instruments</h2>
+        <div class="tracks" id="tracks"></div>
+        <div class="params" id="params"></div>
+      </section>
+
+      <section class="unit insp" aria-label="Beacon song">
+        <h2>Beacon song</h2>
+        <div id="insp"></div>
+        <div class="row">
+          <button class="btn" id="goBeacon">Walk here</button>
+          <button class="btn primary" id="editSong">Edit song</button>
+          <button class="btn" id="regen">New song</button>
+          <button class="btn" id="copyJson">Copy JSON</button>
+          <button class="btn" id="editJson">Paste JSON</button>
+          <button class="btn" id="shareSong" hidden>Share with everyone</button>
+          <button class="btn" id="unshareSong" hidden>Remove shared song</button>
+        </div>
+        <div id="editorWrap" hidden>
+          <div class="edhead"><strong id="editorTitle">Editing</strong><button class="btn small" id="closeEditor">Done</button></div>
+          <div id="editor"></div>
+        </div>
+        <div id="jsonBox" hidden>
+          <textarea id="songJson" spellcheck="false" aria-label="Song JSON"></textarea>
+          <div class="row">
+            <button class="btn primary" id="loadJson">Load onto this beacon</button>
+            <button class="btn" id="closeJson">Close</button>
+          </div>
+        </div>
+        <div class="msg" id="inspMsg"></div>
+      </section>
+
+      <section class="unit">
+        <details>
+          <summary>Blend settings</summary>
+          <div class="settings" style="margin-top:12px">
+            <label for="sharp"><span>Zone sharpness <b id="sharpV">1.5</b></span><input id="sharp" type="range" min="0.5" max="4" step="0.1" value="1.5"></label>
+            <label for="hyst"><span>Key change margin <b id="hystV">8%</b></span><input id="hyst" type="range" min="0" max="0.3" step="0.01" value="0.08"></label>
+            <label for="phrase"><span>Key changes on</span>
+              <select id="phrase"><option value="1">every bar</option><option value="2">every 2 bars</option><option value="4">every 4 bars</option></select></label>
+            <label for="glide"><span>Tempo glide <b id="glideV">35%</b></span><input id="glide" type="range" min="0.05" max="1" step="0.05" value="0.35"></label>
+          </div>
+        </details>
+      </section>
+    </aside>
+  </div>
+</div>
+
+<script type="module" src="src/app.js"></script>

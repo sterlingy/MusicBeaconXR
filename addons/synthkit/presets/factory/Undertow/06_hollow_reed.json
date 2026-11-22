@@ -1,0 +1,21 @@
+{
+ "format": 1,
+ "instrument": "Undertow",
+ "name": "Hollow Reed",
+ "description": "Square and narrow pulse with a slow filter swell.",
+ "author": "AudioSyncMaster",
+ "order": 5,
+ "params": {
+  "osc1.range": 3,
+  "osc1.wave": 4,
+  "osc2.range": 3,
+  "osc2.wave": 6,
+  "mix.osc3_on": 0,
+  "filter.cutoff": 1100,
+  "filter.emphasis": 4,
+  "fenv.attack": 0.08,
+  "fenv.decay": 0.5,
+  "fenv.sustain": 5,
+  "lenv.attack": 0.03
+ }
+}

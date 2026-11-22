@@ -1,0 +1,130 @@
+{
+ "format": 1,
+ "instrument": "Tangle",
+ "name": "Wind and Waves",
+ "description": "Filtered pink noise.",
+ "author": "AudioSyncMaster",
+ "order": 5,
+ "params": {
+  "patch": {
+   "modules": [
+    {
+     "id": 0,
+     "type": "midi",
+     "position": [
+      0,
+      0
+     ],
+     "params": {}
+    },
+    {
+     "id": 1,
+     "type": "noise",
+     "position": [
+      1,
+      0
+     ],
+     "params": {}
+    },
+    {
+     "id": 2,
+     "type": "lfo",
+     "position": [
+      1,
+      1
+     ],
+     "params": {
+      "rate": 0.12
+     }
+    },
+    {
+     "id": 3,
+     "type": "vcf",
+     "position": [
+      2,
+      0
+     ],
+     "params": {
+      "cutoff": 900,
+      "res": 0.7,
+      "cv": 2.5
+     }
+    },
+    {
+     "id": 4,
+     "type": "adsr",
+     "position": [
+      2,
+      1
+     ],
+     "params": {
+      "attack": 1.5,
+      "decay": 1.0,
+      "sustain": 1.0,
+      "release": 3.0
+     }
+    },
+    {
+     "id": 5,
+     "type": "vca",
+     "position": [
+      3,
+      0
+     ],
+     "params": {}
+    },
+    {
+     "id": 6,
+     "type": "output",
+     "position": [
+      4,
+      0
+     ],
+     "params": {
+      "mix": 0.45,
+      "size": 0.9,
+      "decay": 6
+     }
+    }
+   ],
+   "cables": [
+    {
+     "from": 1,
+     "out": "pink",
+     "to": 3,
+     "in": "in"
+    },
+    {
+     "from": 2,
+     "out": "sine",
+     "to": 3,
+     "in": "cutoff"
+    },
+    {
+     "from": 0,
+     "out": "gate",
+     "to": 4,
+     "in": "gate"
+    },
+    {
+     "from": 3,
+     "out": "bp",
+     "to": 5,
+     "in": "a"
+    },
+    {
+     "from": 4,
+     "out": "env",
+     "to": 5,
+     "in": "a_cv"
+    },
+    {
+     "from": 5,
+     "out": "a",
+     "to": 6,
+     "in": "l"
+    }
+   ]
+  }
+ }
+}

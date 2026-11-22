@@ -1,0 +1,16 @@
+{
+ "format": 1,
+ "instrument": "Comet",
+ "name": "Square Whistle",
+ "description": "Hollow square with sub and delayed vibrato.",
+ "author": "AudioSyncMaster",
+ "order": 3,
+ "params": {
+  "osc1.wave": 1,
+  "osc2.level": 0,
+  "mix.sub": 3,
+  "filter.cutoff": 5000,
+  "vibrato.depth": 3,
+  "vibrato.delay": 0.5
+ }
+}

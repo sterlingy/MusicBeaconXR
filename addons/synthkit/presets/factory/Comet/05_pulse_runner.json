@@ -1,0 +1,18 @@
+{
+ "format": 1,
+ "instrument": "Comet",
+ "name": "Pulse Runner",
+ "description": "Narrow pulse, resonant 12 dB filter, 1/16 echoes.",
+ "author": "AudioSyncMaster",
+ "order": 4,
+ "params": {
+  "osc1.wave": 2,
+  "osc1.pw": 0.2,
+  "osc2.level": 0,
+  "filter.mode": 1,
+  "filter.resonance": 6,
+  "filter.env": 5,
+  "delay.division": 7,
+  "delay.feedback": 5
+ }
+}

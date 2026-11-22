@@ -1,0 +1,19 @@
+{
+ "format": 1,
+ "instrument": "Lumen",
+ "name": "Glass Choir",
+ "description": "Shimmering pulse-width pad.",
+ "author": "AudioSyncMaster",
+ "order": 3,
+ "params": {
+  "osc1.wave": 2,
+  "osc1.pw": 0.3,
+  "osc2.wave": 4,
+  "osc2.semi": 12,
+  "lfo.pwm": 4,
+  "lfo.rate": 0.4,
+  "aenv.attack": 0.3,
+  "aenv.release": 1.5,
+  "reverb.mix": 6
+ }
+}

@@ -1,0 +1,17 @@
+{
+ "format": 1,
+ "instrument": "Lumen",
+ "name": "String Ensemble",
+ "description": "Wide, chorused strings.",
+ "author": "AudioSyncMaster",
+ "order": 4,
+ "params": {
+  "osc2.fine": 14,
+  "aenv.attack": 0.35,
+  "aenv.release": 1,
+  "filter.cutoff": 4000,
+  "chorus.mix": 7,
+  "chorus.depth": 7,
+  "reverb.mix": 4
+ }
+}

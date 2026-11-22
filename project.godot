@@ -1,0 +1,33 @@
+; Engine configuration file.
+config_version=5
+
+[application]
+
+config/name="MusicBeaconXR"
+config/description="Generative music driven by where you are between beacons."
+run/main_scene="res://scenes/beacon_field.tscn"
+config/features=PackedStringArray("4.7", "GL Compatibility")
+
+[audio]
+
+driver/output_latency=15
+driver/mix_rate=48000
+
+[autoload]
+
+Transport="*res://addons/synthkit/core/transport.gd"
+Midi="*res://addons/synthkit/core/midi_input.gd"
+
+[display]
+
+window/size/viewport_width=1600
+window/size/viewport_height=900
+
+[editor_plugins]
+
+enabled=PackedStringArray("res://addons/synthkit/plugin.cfg")
+
+[rendering]
+
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"

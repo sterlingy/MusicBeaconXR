@@ -1,0 +1,15 @@
+{
+ "format": 1,
+ "instrument": "Lumen",
+ "name": "Glow Pad",
+ "description": "Warm detuned saws, slow attack.",
+ "author": "AudioSyncMaster",
+ "order": 0,
+ "params": {
+  "aenv.attack": 0.6,
+  "aenv.release": 2,
+  "fenv.attack": 0.5,
+  "filter.cutoff": 1800,
+  "reverb.mix": 4
+ }
+}

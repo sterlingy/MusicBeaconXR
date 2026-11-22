@@ -1,0 +1,204 @@
+{
+ "format": 1,
+ "instrument": "Tangle",
+ "name": "Arp Echo",
+ "description": "Keyboard transposes a sequenced arpeggio.",
+ "author": "AudioSyncMaster",
+ "order": 7,
+ "params": {
+  "patch": {
+   "modules": [
+    {
+     "id": 0,
+     "type": "midi",
+     "position": [
+      0,
+      0
+     ],
+     "params": {}
+    },
+    {
+     "id": 1,
+     "type": "clock",
+     "position": [
+      0,
+      1
+     ],
+     "params": {}
+    },
+    {
+     "id": 2,
+     "type": "seq",
+     "position": [
+      1,
+      1
+     ],
+     "params": {
+      "steps": 8,
+      "octave": 0,
+      "scale": 1,
+      "note1": 0,
+      "note2": 2,
+      "note3": 4,
+      "note4": 7,
+      "note5": 9,
+      "note6": 7,
+      "note7": 4,
+      "note8": 2
+     }
+    },
+    {
+     "id": 3,
+     "type": "util",
+     "position": [
+      2,
+      0
+     ],
+     "params": {
+      "a": 1.0,
+      "b": 1.0
+     }
+    },
+    {
+     "id": 4,
+     "type": "vco",
+     "position": [
+      3,
+      0
+     ],
+     "params": {
+      "octave": 0
+     }
+    },
+    {
+     "id": 5,
+     "type": "vcf",
+     "position": [
+      4,
+      0
+     ],
+     "params": {
+      "cutoff": 1800,
+      "res": 0.3,
+      "cv": 2.0
+     }
+    },
+    {
+     "id": 6,
+     "type": "adsr",
+     "position": [
+      3,
+      1
+     ],
+     "params": {
+      "attack": 0.002,
+      "decay": 0.2,
+      "sustain": 0.3,
+      "release": 0.15
+     }
+    },
+    {
+     "id": 7,
+     "type": "vca",
+     "position": [
+      5,
+      0
+     ],
+     "params": {}
+    },
+    {
+     "id": 8,
+     "type": "delay",
+     "position": [
+      6,
+      0
+     ],
+     "params": {
+      "sync": 6,
+      "feedback": 0.45,
+      "mix": 0.4
+     }
+    },
+    {
+     "id": 9,
+     "type": "output",
+     "position": [
+      7,
+      0
+     ],
+     "params": {
+      "mix": 0.2
+     }
+    }
+   ],
+   "cables": [
+    {
+     "from": 1,
+     "out": "16",
+     "to": 2,
+     "in": "clock"
+    },
+    {
+     "from": 0,
+     "out": "pitch",
+     "to": 3,
+     "in": "a"
+    },
+    {
+     "from": 2,
+     "out": "pitch",
+     "to": 3,
+     "in": "b"
+    },
+    {
+     "from": 3,
+     "out": "mix",
+     "to": 4,
+     "in": "pitch"
+    },
+    {
+     "from": 4,
+     "out": "pulse",
+     "to": 5,
+     "in": "in"
+    },
+    {
+     "from": 2,
+     "out": "gate",
+     "to": 6,
+     "in": "gate"
+    },
+    {
+     "from": 6,
+     "out": "env",
+     "to": 5,
+     "in": "cutoff"
+    },
+    {
+     "from": 5,
+     "out": "lp24",
+     "to": 7,
+     "in": "a"
+    },
+    {
+     "from": 6,
+     "out": "env",
+     "to": 7,
+     "in": "a_cv"
+    },
+    {
+     "from": 7,
+     "out": "a",
+     "to": 8,
+     "in": "in"
+    },
+    {
+     "from": 8,
+     "out": "out",
+     "to": 9,
+     "in": "l"
+    }
+   ]
+  }
+ }
+}

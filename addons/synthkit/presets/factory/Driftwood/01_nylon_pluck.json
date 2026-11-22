@@ -1,0 +1,13 @@
+{
+ "format": 1,
+ "instrument": "Driftwood",
+ "name": "Nylon Pluck",
+ "description": "Warm plucked string.",
+ "author": "AudioSyncMaster",
+ "order": 0,
+ "params": {
+  "model.brightness": 5,
+  "model.damping": 5,
+  "body.amount": 4
+ }
+}

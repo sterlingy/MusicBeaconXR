@@ -1,0 +1,16 @@
+# Godot
+.godot/
+*.import
+*.translation
+export_presets.cfg
+
+# Python / Node
+__pycache__/
+node_modules/
+
+# Claude Code local settings
+.claude/settings.local.json
+
+# OS
+Thumbs.db
+.DS_Store

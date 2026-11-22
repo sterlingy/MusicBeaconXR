@@ -1,0 +1,22 @@
+{
+ "format": 1,
+ "instrument": "Lumen",
+ "name": "Night Organ",
+ "description": "Square-wave organ with vibrato.",
+ "author": "AudioSyncMaster",
+ "order": 6,
+ "params": {
+  "osc1.wave": 1,
+  "osc2.wave": 1,
+  "osc2.semi": 12,
+  "osc2.fine": 0,
+  "filter.cutoff": 5000,
+  "filter.env": 0,
+  "aenv.attack": 0.005,
+  "aenv.decay": 0.1,
+  "aenv.sustain": 10,
+  "aenv.release": 0.05,
+  "lfo.pitch": 1,
+  "lfo.rate": 6
+ }
+}

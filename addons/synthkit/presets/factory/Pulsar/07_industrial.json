@@ -1,0 +1,19 @@
+{
+ "format": 1,
+ "instrument": "Pulsar",
+ "name": "Industrial",
+ "description": "Distorted, metallic, loud.",
+ "author": "AudioSyncMaster",
+ "order": 6,
+ "params": {
+  "master.drive": 9,
+  "kick.tone": 10,
+  "kick.snap": 9,
+  "snare.snap": 10,
+  "snare.tone": 9,
+  "clap.snap": 9,
+  "ltom.tone": 8,
+  "htom.tone": 8,
+  "master.volume": 4
+ }
+}

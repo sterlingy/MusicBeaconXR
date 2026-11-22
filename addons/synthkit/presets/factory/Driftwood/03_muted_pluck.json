@@ -1,0 +1,15 @@
+{
+ "format": 1,
+ "instrument": "Driftwood",
+ "name": "Muted Pluck",
+ "description": "Palm-muted, woody and short.",
+ "author": "AudioSyncMaster",
+ "order": 2,
+ "params": {
+  "model.brightness": 3,
+  "model.damping": 8,
+  "model.decay": 0.6,
+  "model.hardness": 3,
+  "body.amount": 5
+ }
+}

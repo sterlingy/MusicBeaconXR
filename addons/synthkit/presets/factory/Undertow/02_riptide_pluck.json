@@ -1,0 +1,19 @@
+{
+ "format": 1,
+ "instrument": "Undertow",
+ "name": "Riptide Pluck",
+ "description": "Short, snappy filter pluck.",
+ "author": "AudioSyncMaster",
+ "order": 1,
+ "params": {
+  "osc2.wave": 4,
+  "filter.cutoff": 280,
+  "filter.emphasis": 5,
+  "filter.contour": 8,
+  "fenv.decay": 0.18,
+  "fenv.sustain": 0,
+  "lenv.decay": 0.45,
+  "lenv.sustain": 0,
+  "out.decay_switch": 1
+ }
+}

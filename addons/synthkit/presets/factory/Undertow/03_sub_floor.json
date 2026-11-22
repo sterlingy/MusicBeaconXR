@@ -1,0 +1,19 @@
+{
+ "format": 1,
+ "instrument": "Undertow",
+ "name": "Sub Floor",
+ "description": "Pure low end: one triangle at 32'.",
+ "author": "AudioSyncMaster",
+ "order": 2,
+ "params": {
+  "osc1.range": 1,
+  "osc1.wave": 0,
+  "mix.osc1": 10,
+  "mix.osc2_on": 0,
+  "mix.osc3_on": 0,
+  "filter.cutoff": 420,
+  "filter.emphasis": 0,
+  "filter.contour": 1,
+  "ctrl.legato": 1
+ }
+}

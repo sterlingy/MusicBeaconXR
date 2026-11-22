@@ -1,0 +1,14 @@
+{
+ "format": 1,
+ "instrument": "Driftwood",
+ "name": "Kalimba",
+ "description": "Thumb piano tines.",
+ "author": "AudioSyncMaster",
+ "order": 5,
+ "params": {
+  "model.type": 3,
+  "model.decay": 1.5,
+  "model.brightness": 6,
+  "body.amount": 3
+ }
+}

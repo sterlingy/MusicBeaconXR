@@ -1,0 +1,15 @@
+{
+ "format": 1,
+ "instrument": "Driftwood",
+ "name": "Glass Drops",
+ "description": "Hard mallet on glass.",
+ "author": "AudioSyncMaster",
+ "order": 7,
+ "params": {
+  "model.type": 5,
+  "model.decay": 3,
+  "model.brightness": 9,
+  "model.hardness": 9,
+  "reverb.mix": 5
+ }
+}

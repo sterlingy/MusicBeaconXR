@@ -1,0 +1,20 @@
+{
+ "format": 1,
+ "instrument": "Undertow",
+ "name": "Acid Tide",
+ "description": "Squelchy single saw with glide.",
+ "author": "AudioSyncMaster",
+ "order": 3,
+ "params": {
+  "mix.osc2_on": 0,
+  "mix.osc3_on": 0,
+  "filter.cutoff": 330,
+  "filter.emphasis": 8,
+  "filter.contour": 7,
+  "fenv.decay": 0.25,
+  "fenv.sustain": 0,
+  "ctrl.glide": 0.08,
+  "ctrl.legato": 1,
+  "lenv.sustain": 7
+ }
+}

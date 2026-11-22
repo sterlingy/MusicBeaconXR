@@ -1,0 +1,14 @@
+{
+ "format": 1,
+ "instrument": "Driftwood",
+ "name": "Vibes",
+ "description": "Metal bars with the motor on.",
+ "author": "AudioSyncMaster",
+ "order": 4,
+ "params": {
+  "model.type": 2,
+  "model.decay": 4,
+  "perf.tremolo": 5,
+  "reverb.mix": 3
+ }
+}
