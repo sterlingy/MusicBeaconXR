@@ -33,7 +33,6 @@ Transport.start()
 
 ## Known gaps
 
-- The C++ engine source isn't on this PC, so SynthKit ships prebuilt binaries (Windows, Android arm64).
+- SynthKit is shared with AudioSyncMaster. Its home on this PC is `D:\SynthKit` (engine source, build scripts, binaries, scripts, presets). Change the instruments there, then run `powershell -ExecutionPolicy Bypass -File tools\sync_synthkit.ps1`; don't edit `addons/synthkit` here. Building the engine needs its third-party libraries and VS 2022 (see SynthKit's README).
 - The browser synths are ports of the instrument designs, not the C++ engine.
 - The Godot player doesn't follow song forms or automation yet, and the local grid is browser-only.
-- AudioSyncMaster (`C:\ASM\project`) is untouched. Everything here is a copy.

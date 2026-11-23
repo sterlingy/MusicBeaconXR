@@ -1,9 +1,13 @@
 class_name InstrumentRig
 extends Node
-## One playable instrument: a JamSynth, the player that sounds it, its step
-## sequencer, and the wiring from MIDI / keyboard / on-screen input. Every note
-## or control the player makes goes out through `played`, so apps can add
-## loopers, networking or recording on top.
+## One playable instrument: a JamSynth, the player that sounds it, and the
+## wiring from MIDI / keyboard / on-screen input. Every note or control the
+## player makes goes out through `played`, so apps can add loopers, networking
+## or recording on top. Part of the SynthKit addon.
+##
+## Loopers: set InstrumentRig.looper_factory (a Callable taking the rig and
+## returning an object with capture(event), poll(), schedule(from_beat, to_beat)
+## and transport_stopped()) before rigs are created; each rig then makes one.
 ##
 ## MIDI learn: call learn(param_id), then move a knob on the controller.
 
@@ -29,12 +33,19 @@ const MAP_PATH := "user://midi_map.cfg"
 @export var local_input := true
 ## Play through an AudioStreamPlayer3D at this node's parent (XR), or flat.
 @export var spatial := false
-## Driven by code or the network only: no local input, no recording.
+## Driven from outside (e.g. another player's instrument mirrored over a
+## network): no local input, no recording.
 var remote := false
 
 var synth := JamSynth.new()
 var player: Node
+var clip_player: Node # plays audio loops (created on first use)
+var _clips: JamSynth
 var sequencer: StepSequencer
+## Made by looper_factory when an app sets one (null otherwise).
+var looper: Object
+## func(rig: InstrumentRig) -> Object: see the class notes. Empty = no looper.
+static var looper_factory := Callable()
 var _patterns := {} # instrument type -> sequencer dict (each instrument keeps its own pattern)
 var _seq_loaded := false
 var _live_shift := {} # note -> frames a live-quantized note was delayed by
@@ -57,13 +68,16 @@ func _ready() -> void:
 		player = p
 	add_child(player)
 	sequencer = StepSequencer.new(self)
+	if looper_factory.is_valid():
+		looper = looper_factory.call(self)
+		played.connect(looper.capture)
 	Transport.register(self)
 	# Methods, not lambdas: Godot drops these connections when the rig is freed.
 	Transport.tempo_changed.connect(_on_tempo)
 	synth.tempo = Transport.bpm
 	set_instrument(instrument)
 	player.play()
-	if local_input and not remote:
+	if local_input:
 		Midi.note_on.connect(_on_midi_note_on)
 		Midi.note_off.connect(release_note.bind(-1))
 		Midi.control_change.connect(_on_cc)
@@ -73,6 +87,8 @@ func _ready() -> void:
 
 func _on_tempo(bpm: float) -> void:
 	synth.tempo = bpm
+	if _clips:
+		_clips.tempo = bpm
 
 
 func _on_midi_note_on(note: int, velocity: int) -> void:
@@ -88,8 +104,36 @@ func _exit_tree() -> void:
 	Transport.unregister(self)
 
 
+func _process(_delta: float) -> void:
+	if looper:
+		looper.poll()
+
+
+## The Clips synth that plays this player's audio loops (made on first use).
+func clip_synth() -> JamSynth:
+	if _clips == null:
+		_clips = JamSynth.new()
+		_clips.instrument = "Clips"
+		if is_inside_tree():
+			var p: Node = AudioStreamPlayer3D.new() if spatial else AudioStreamPlayer.new()
+			p.stream = _clips
+			add_child(p)
+			p.play()
+			clip_player = p
+			if player:
+				p.volume_db = player.volume_db
+	return _clips
+
+
+func has_clips() -> bool:
+	return _clips != null
+
+
+## Volume for everything this player makes here (instrument and audio loops).
 func set_volume_db(db: float) -> void:
 	player.volume_db = db
+	if clip_player:
+		clip_player.volume_db = db
 
 
 func set_instrument(type: String) -> void:
@@ -157,13 +201,17 @@ func release_note(note: int, frame := -1) -> void:
 # ---- Transport client
 
 func schedule(from_beat: float, to_beat: float) -> void:
-	# Keep Tangle's clock modules locked to the session (cheap: one event per frame).
+	# Keep Tangle's clock modules locked to the shared clock (cheap: one event per frame).
 	synth.sync_transport(from_beat, Transport.frame_for(synth, from_beat))
 	sequencer.schedule(from_beat, to_beat)
+	if looper:
+		looper.schedule(from_beat, to_beat)
 
 
 func transport_stopped() -> void:
 	sequencer.transport_stopped()
+	if looper:
+		looper.transport_stopped()
 
 
 func bend(value: float) -> void:

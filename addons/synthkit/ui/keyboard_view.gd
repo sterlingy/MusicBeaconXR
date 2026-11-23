@@ -1,7 +1,8 @@
 class_name KeyboardView
 extends Control
-## On-screen piano (or drum pads for Pulsar). Click/drag to play; shows held
-## notes from any source. Sends notes through the Midi autoload so the rest of
+## On-screen piano (or drum pads for Pulsar). Click/drag or touch to play (each
+## finger is its own note, so chords work on touch screens); shows held notes
+## from any source. Sends notes through the Midi autoload so the rest of
 ## the app treats them like any other input.
 
 const DRUM_PADS := [
@@ -18,6 +19,8 @@ var drum_mode := false:
 		queue_redraw()
 
 var _mouse_note := -1
+var _touch_notes := {} # finger index -> note
+const MIN_WHITE_KEY := 36.0 # px; fewer octaves are shown rather than keys too narrow to hit
 var _flash := {} # note -> time remaining (drum pads)
 
 
@@ -25,6 +28,20 @@ func _ready() -> void:
 	custom_minimum_size = Vector2(0, 120)
 	Midi.note_on.connect(_on_note_on)
 	Midi.note_off.connect(queue_redraw.unbind(1))
+	resized.connect(_fit_octaves)
+
+
+func _exit_tree() -> void:
+	if Midi.note_on.is_connected(_on_note_on):
+		Midi.note_on.disconnect(_on_note_on)
+
+
+## As many octaves (1-4) as fit with keys wide enough for a fingertip.
+func _fit_octaves() -> void:
+	var fit := clampi(int((size.x / MIN_WHITE_KEY - 1.0) / 7.0), 1, 4)
+	if fit != octaves:
+		octaves = fit
+		queue_redraw()
 
 
 func _on_note_on(note: int, _velocity: int) -> void:
@@ -72,12 +89,38 @@ func note_at(pos: Vector2) -> int:
 	return whites[clampi(int(pos.x / ww), 0, whites.size() - 1)]
 
 
+func _velocity_at(pos: Vector2) -> int:
+	return int(clampf(40.0 + 87.0 * (pos.y / size.y), 1.0, 127.0))
+
+
 func _gui_input(event: InputEvent) -> void:
+	# Touch: one note per finger. Godot also turns the first finger into mouse
+	# events (marked as emulated); those are skipped so a touch plays once.
+	if event is InputEventScreenTouch:
+		if event.pressed:
+			var n := note_at(event.position)
+			_touch_notes[event.index] = n
+			Midi.inject_note_on(n, _velocity_at(event.position))
+		elif _touch_notes.has(event.index):
+			Midi.inject_note_off(_touch_notes[event.index])
+			_touch_notes.erase(event.index)
+		accept_event()
+		return
+	if event is InputEventScreenDrag:
+		if _touch_notes.has(event.index) and not drum_mode:
+			var n := note_at(event.position)
+			if n != _touch_notes[event.index]:
+				Midi.inject_note_off(_touch_notes[event.index])
+				_touch_notes[event.index] = n
+				Midi.inject_note_on(n, 100)
+		accept_event()
+		return
+	if event is InputEventMouse and event.device == InputEvent.DEVICE_ID_EMULATION:
+		return
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
 		if event.pressed:
 			_mouse_note = note_at(event.position)
-			var vel := int(clampf(40.0 + 87.0 * (event.position.y / size.y), 1.0, 127.0))
-			Midi.inject_note_on(_mouse_note, vel)
+			Midi.inject_note_on(_mouse_note, _velocity_at(event.position))
 		elif _mouse_note >= 0:
 			Midi.inject_note_off(_mouse_note)
 			_mouse_note = -1

@@ -61,6 +61,22 @@ func _from_t(t: float) -> float:
 
 
 func _gui_input(event: InputEvent) -> void:
+	# Touch (phones, tablets, the XR panel's fingertip and laser): drag up/down.
+	if event is InputEventScreenTouch:
+		_dragging = event.pressed
+		_drag_t = _to_t(value)
+		if event.pressed and event.double_tap:
+			_set_and_emit(default_value)
+		accept_event()
+		return
+	if event is InputEventScreenDrag:
+		if _dragging:
+			_drag_t = clampf(_drag_t - event.relative.y * 0.006, 0.0, 1.0)
+			_set_and_emit(_from_t(_drag_t))
+		accept_event()
+		return
+	if event is InputEventMouse and event.device == InputEvent.DEVICE_ID_EMULATION:
+		return # the same touch, turned into mouse events by Godot
 	if event is InputEventMouseButton:
 		var mb := event as InputEventMouseButton
 		if mb.button_index == MOUSE_BUTTON_LEFT:
