@@ -6,7 +6,7 @@ Generative music driven by where you are. Beacons are placed in a space (a 100 m
 
 | Folder | What it is | Run / test |
 |---|---|---|
-| `web/` | **Beacon Field**, the browser playfield: grid and globe, Web Audio synths, song editor, shared songs. See [web/README.md](web/README.md). | `python web/serve.py`, then http://127.0.0.1:8765 · `node --test web/tests` |
+| `web/` | **Beacon Field**, the browser playfield: test grid, globe, and a 50 × 50 mile local grid that follows your location, Web Audio synths, song editor, shared songs. See [web/README.md](web/README.md). | `python web/serve.py`, then http://127.0.0.1:8765 · `node --test web/tests` |
 | `addons/synthkit/` | **SynthKit**, the AudioSyncMaster instruments as a Godot addon (engine, panels, presets, sequencer, clock). See [addons/synthkit/README.md](addons/synthkit/README.md). | `godot --headless --path . res://tests/synthkit_check.tscn` |
 | `scripts/beacon/` | The Godot beacon player: the same fields, weights and blending as the browser, playing on SynthKit's engine. | `godot --headless --path . res://tests/beacon_check.tscn` |
 | `scenes/beacon_field.tscn` | **3D test grid** (main scene): pillars per beacon, a listener to walk, blend lines, HUD. WASD walk, click to go, T auto-walk, Space play, G globe. | F5 in Godot |

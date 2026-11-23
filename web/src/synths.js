@@ -8,6 +8,8 @@
 // Instruments read their current parameters (`this.p`) when a note starts;
 // channel-level parameters (sends, chorus, drive) follow continuously.
 
+import { automate, ROLE_OF } from "./params.js";
+
 export const mtof = (m) => 440 * Math.pow(2, (m - 69) / 12);
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
@@ -103,8 +105,8 @@ export class Channel {
     this._drive = -1;
   }
 
-  set(param, value, tc = 0.15) {
-    const t = this.ctx.currentTime;
+  set(param, value, tc = 0.15, at = 0) {
+    const t = Math.max(this.ctx.currentTime, at || 0);
     if (param === "level") this.level.gain.setTargetAtTime(value, t, tc);
     else if (param === "reverb") this.reverbSend.gain.setTargetAtTime(value, t, tc);
     else if (param === "delay") this.delaySend.gain.setTargetAtTime(value, t, tc);
@@ -126,60 +128,91 @@ export class Channel {
 
 // ---------------------------------------------------------------- instruments
 
+/**
+ * Shared by all six. Params come from `this.p` (set by the mixer or the
+ * Synths page); `at(id, def, t)` is a param's value at audio time t with its
+ * automation applied, and `follow()` makes an AudioParam track an automated
+ * param over a note, so a held pad's cutoff keeps moving.
+ */
 class Instrument {
-  constructor(bus, channel) {
+  constructor(bus, channel, name) {
     this.bus = bus;
     this.ctx = bus.ctx;
     this.out = channel.input;
     this.channel = channel;
+    this.name = name;
     this.p = {};
+    this.auto = null;
+    this.clock = null; // audio time -> beats, for automation
   }
   setParams(p) { this.p = p; }
+  /** Automation map ({param id: {shape, bars, depth, phase}}) and the clock it runs on. */
+  setAutomation(auto, clock) {
+    this.auto = auto && Object.keys(auto).length ? auto : null;
+    this.clock = clock || null;
+  }
   get(id, def) { const v = this.p[id]; return v === undefined ? def : v; }
+  at(id, def, t) {
+    const v = this.get(id, def), a = this.auto?.[id];
+    return a && this.clock ? automate(this.name, id, v, a, this.clock(t)) : v;
+  }
+  follow(param, id, def, t0, t1, f = (x) => x) {
+    param.setValueAtTime(f(this.at(id, def, t0)), t0);
+    if (!this.auto?.[id] || !this.clock || t1 <= t0) return;
+    const n = Math.min(32, Math.max(2, Math.ceil((t1 - t0) / 0.04)));
+    for (let i = 1; i <= n; i++) {
+      const t = t0 + ((t1 - t0) * i) / n;
+      param.linearRampToValueAtTime(f(this.at(id, def, t)), t);
+    }
+  }
+  /** Sends, chorus and drive, which act on the whole channel (called every step while playing). */
+  applyChannel(t, tc = 0.05) {
+    const ch = this.channel, role = ROLE_OF[this.name];
+    ch.set("reverb", this.at("reverb.send", role === "drums" ? 0.08 : role === "bass" ? 0.04 : 0.2, t), tc, t);
+    ch.set("delay", this.at("delay.send", 0, t), tc, t);
+    if (role === "keys") ch.set("chorus", this.at("chorus.mix", 0.3, t), tc, t);
+    if (role === "drums") ch.set("drive", this.at("master.drive", 0, t), tc, t);
+    if (role === "bass" || role === "lead") ch.set("drive", this.at("drive", 0, t), tc, t);
+  }
 }
 
 /** Pulsar: analog-style drums built from oscillators, noise and envelopes. */
 export class Pulsar extends Instrument {
   hit(voice, t, vel) {
     const ctx = this.ctx;
-    const g = ctx.createGain();
-    g.connect(this.out);
     if (voice === "kick") {
       const o = ctx.createOscillator();
-      const f = this.get("kick.tune", 50);
-      const dec = this.get("kick.decay", 0.45);
-      o.frequency.setValueAtTime(f * 4, t);
-      o.frequency.exponentialRampToValueAtTime(f, t + 0.06);
+      const g = ctx.createGain();
+      const f = this.at("kick.tune", 50, t), punch = this.at("kick.punch", 0.6, t), dec = this.at("kick.decay", 0.45, t);
+      o.frequency.setValueAtTime(f * (1 + punch * 5), t);
+      o.frequency.exponentialRampToValueAtTime(f, t + 0.02 + punch * 0.06);
       g.gain.setValueAtTime(vel * 1.1, t);
       g.gain.exponentialRampToValueAtTime(0.001, t + dec);
-      o.connect(g);
+      o.connect(g).connect(this.out);
       o.start(t);
       o.stop(t + dec + 0.05);
-      const click = this._noise(t, 0.008, 0.25 * vel, "highpass", 3000);
-      click.connect(this.out);
+      this._noise(t, 0.008, (0.1 + 0.3 * punch) * vel, "highpass", 3000).connect(this.out);
     } else if (voice === "snare") {
-      const dec = this.get("snare.decay", 0.18);
+      const dec = this.at("snare.decay", 0.18, t), tone = this.at("snare.tone", 200, t), snap = this.at("snare.snap", 0.55, t);
       const o = ctx.createOscillator();
       o.type = "triangle";
-      o.frequency.setValueAtTime(this.get("snare.tone", 200) * 1.5, t);
-      o.frequency.exponentialRampToValueAtTime(this.get("snare.tone", 200), t + 0.03);
+      o.frequency.setValueAtTime(tone * 1.5, t);
+      o.frequency.exponentialRampToValueAtTime(tone, t + 0.03);
       const og = ctx.createGain();
-      og.gain.setValueAtTime(vel * 0.5, t);
+      og.gain.setValueAtTime(vel * (0.65 - 0.35 * snap), t);
       og.gain.exponentialRampToValueAtTime(0.001, t + dec * 0.6);
       o.connect(og).connect(this.out);
       o.start(t);
       o.stop(t + dec);
-      this._noise(t, dec, vel * 0.55, "highpass", 1500).connect(this.out);
-      g.disconnect();
+      this._noise(t, dec, vel * (0.15 + 0.75 * snap), "highpass", 1200 + 1200 * snap).connect(this.out);
     } else if (voice === "hat" || voice === "open") {
-      const dec = this.get("hat.decay", 0.06) * (voice === "open" ? 5 : 1);
-      this._noise(t, dec, vel * 0.32, "highpass", this.get("hat.tone", 8000)).connect(this.out);
-      g.disconnect();
+      const dec = this.at("hat.decay", 0.06, t) * (voice === "open" ? 5 : 1);
+      this._noise(t, dec, vel * 0.32, "highpass", this.at("hat.tone", 8000, t)).connect(this.out);
     } else if (voice === "clap") {
+      const tone = this.at("clap.tone", 1200, t), tail = this.at("clap.decay", 0.18, t);
       for (const [dt, a] of [[0, 0.5], [0.011, 0.45], [0.023, 0.6]]) {
-        this._noise(t + dt, dt === 0.023 ? 0.18 : 0.012, vel * a, "bandpass", 1200).connect(this.out);
+        this._noise(t + dt, dt === 0.023 ? tail : 0.012, vel * a, "bandpass", tone).connect(this.out);
       }
-      g.disconnect();
     }
   }
 
@@ -204,9 +237,13 @@ export class Pulsar extends Instrument {
 
 /** Shared mono-synth voice handling: one voice at a time, with glide. */
 class MonoSynth extends Instrument {
-  constructor(bus, channel) {
-    super(bus, channel);
-    this.last = null; // {nodes, gain, end, midi}
+  constructor(bus, channel, name) {
+    super(bus, channel, name);
+    this.last = null; // {oscs, gain, end, midi}
+  }
+  /** The note to glide from: the last one, if it's still sounding (or just ended). */
+  _from(midi, t, glide) {
+    return glide > 0 && this.last && this.last.end > t - 0.05 ? this.last.midi : midi;
   }
   _steal(t) {
     const v = this.last;
@@ -223,14 +260,14 @@ export class Undertow extends MonoSynth {
   note(midi, t, dur, vel) {
     const ctx = this.ctx;
     const glide = this.get("glide", 0);
-    const fromMidi = glide > 0 && this.last && this.last.end > t - 0.05 ? this.last.midi : midi;
+    const fromMidi = this._from(midi, t, glide);
     this._steal(t);
     const wave = this.get("osc.wave", "sawtooth");
-    const det = this.get("osc.detune", 6);
+    const det = this.at("osc.detune", 6, t);
     const f = mtof(midi), f0 = mtof(fromMidi);
     const mix = ctx.createGain();
     const oscs = [];
-    for (const [type, ratio, cents, amp] of [[wave, 1, -det, 0.35], [wave, 1, det, 0.35], ["square", 0.5, 0, this.get("sub.level", 0.4) * 0.45]]) {
+    for (const [type, ratio, cents, amp] of [[wave, 1, -det, 0.35], [wave, 1, det, 0.35], [this.get("sub.wave", "square"), 0.5, 0, this.at("sub.level", 0.4, t) * 0.45]]) {
       const o = ctx.createOscillator();
       o.type = type;
       o.detune.value = cents;
@@ -241,51 +278,55 @@ export class Undertow extends MonoSynth {
       o.connect(a).connect(mix);
       oscs.push(o);
     }
-    const cutoff = this.get("filter.cutoff", 500);
-    const q = 0.5 + this.get("filter.emphasis", 3) * 0.9;
-    const amt = this.get("fenv.amount", 1200) * (0.5 + vel * 0.5);
-    const fdec = this.get("fenv.decay", 0.25);
+    const rel = this.at("aenv.release", 0.12, t), atk = this.at("aenv.attack", 0.004, t);
+    const end = t + dur + rel * 2 + 0.05;
+    const cutoff = this.at("filter.cutoff", 500, t);
+    const q = 0.5 + this.at("filter.emphasis", 3, t) * 0.9;
+    const amt = this.at("fenv.amount", 1200, t) * (0.5 + vel * 0.5);
+    const envCents = 1200 * Math.log2(Math.min(16000, cutoff + amt) / Math.max(40, cutoff));
+    const fdec = this.at("fenv.decay", 0.25, t);
     let node = mix;
     for (let i = 0; i < 2; i++) {
       const lp = ctx.createBiquadFilter();
       lp.type = "lowpass";
       lp.Q.value = i === 0 ? q : 0.7;
-      lp.frequency.setValueAtTime(clamp(cutoff + amt, 40, 16000), t);
-      lp.frequency.setTargetAtTime(clamp(cutoff, 40, 16000), t + 0.005, fdec / 3);
+      this.follow(lp.frequency, "filter.cutoff", 500, t, end, (v) => clamp(v, 40, 16000));
+      lp.detune.setValueAtTime(envCents, t);
+      lp.detune.setTargetAtTime(0, t + 0.005, fdec / 3);
       node.connect(lp);
       node = lp;
     }
     const g = ctx.createGain();
-    const rel = this.get("aenv.release", 0.12);
     g.gain.setValueAtTime(0, t);
-    g.gain.linearRampToValueAtTime(vel * 0.8, t + 0.004);
-    g.gain.setValueAtTime(vel * 0.8, t + dur);
-    g.gain.setTargetAtTime(0, t + dur, rel / 3);
+    g.gain.linearRampToValueAtTime(vel * 0.8, t + Math.max(0.002, atk));
+    g.gain.setValueAtTime(vel * 0.8, t + Math.max(dur, atk));
+    g.gain.setTargetAtTime(0, t + Math.max(dur, atk), rel / 3);
     node.connect(g).connect(this.out);
-    const end = t + dur + rel * 2 + 0.05;
     for (const o of oscs) { o.start(t); o.stop(end); }
     this.last = { oscs, gain: g, end, midi };
   }
 }
 
-/** Comet: cutting mono lead with a second oscillator, vibrato and delay. */
+/** Comet: cutting mono lead with a second oscillator, filter envelope, vibrato and glide. */
 export class Comet extends MonoSynth {
   note(midi, t, dur, vel) {
     const ctx = this.ctx;
     const port = this.get("portamento", 0);
-    const fromMidi = port > 0 && this.last && this.last.end > t - 0.05 ? this.last.midi : midi;
+    const fromMidi = this._from(midi, t, port);
     this._steal(t);
     const f = mtof(midi), f0 = mtof(fromMidi);
     const lfo = ctx.createOscillator();
-    lfo.frequency.value = this.get("vibrato.rate", 5.5);
+    lfo.frequency.value = this.at("vibrato.rate", 5.5, t);
     const depth = ctx.createGain();
     depth.gain.setValueAtTime(0, t);
-    depth.gain.linearRampToValueAtTime(this.get("vibrato.depth", 10), t + 0.35); // vibrato fades in
+    depth.gain.linearRampToValueAtTime(this.at("vibrato.depth", 10, t), t + 0.35); // vibrato fades in
     lfo.connect(depth);
     const mix = ctx.createGain();
     const oscs = [lfo];
     const semis = this.get("osc2.semis", 7);
-    for (const [type, mult, amp] of [[this.get("osc.wave", "sawtooth"), 1, 0.4], ["square", Math.pow(2, semis / 12), 0.22]]) {
+    const lvl2 = this.at("osc2.level", 0.55, t);
+    for (const [type, mult, amp] of [[this.get("osc.wave", "sawtooth"), 1, 0.4], [this.get("osc2.wave", "square"), Math.pow(2, semis / 12), 0.4 * lvl2]]) {
+      if (amp <= 0) continue;
       const o = ctx.createOscillator();
       o.type = type;
       o.frequency.setValueAtTime(f0 * mult, t);
@@ -296,115 +337,162 @@ export class Comet extends MonoSynth {
       o.connect(a).connect(mix);
       oscs.push(o);
     }
+    const rel = this.at("aenv.release", 0.2, t), atk = this.at("aenv.attack", 0.01, t);
+    const end = t + Math.max(dur, atk) + rel * 2 + 0.05;
     const lp = ctx.createBiquadFilter();
     lp.type = "lowpass";
-    lp.Q.value = 0.5 + this.get("filter.resonance", 2);
-    const cut = this.get("filter.cutoff", 3000);
-    lp.frequency.setValueAtTime(clamp(cut * 1.8, 60, 16000), t);
-    lp.frequency.setTargetAtTime(clamp(cut, 60, 16000), t + 0.01, 0.08);
+    lp.Q.value = 0.5 + this.at("filter.resonance", 2, t);
+    this.follow(lp.frequency, "filter.cutoff", 3000, t, end, (v) => clamp(v, 60, 16000));
+    lp.detune.setValueAtTime(1200 * this.at("fenv.amount", 0.85, t), t);
+    lp.detune.setTargetAtTime(0, t + 0.01, 0.08);
     const g = ctx.createGain();
-    const rel = this.get("aenv.release", 0.2);
     g.gain.setValueAtTime(0, t);
-    g.gain.linearRampToValueAtTime(vel * 0.6, t + 0.01);
-    g.gain.setValueAtTime(vel * 0.6, t + dur);
-    g.gain.setTargetAtTime(0, t + dur, rel / 3);
+    g.gain.linearRampToValueAtTime(vel * 0.6, t + Math.max(0.002, atk));
+    g.gain.setValueAtTime(vel * 0.6, t + Math.max(dur, atk));
+    g.gain.setTargetAtTime(0, t + Math.max(dur, atk), rel / 3);
     mix.connect(lp).connect(g).connect(this.out);
-    const end = t + dur + rel * 2 + 0.05;
     for (const o of oscs) { o.start(t); o.stop(end); }
     this.last = { oscs, gain: g, end, midi };
   }
 }
 
-/** Lumen: polyphonic keys and pads with drift, chorus and reverb. */
+/** Lumen: polyphonic keys and pads with drift, a filter envelope, chord glide, chorus and reverb. */
 export class Lumen extends Instrument {
   chord(notes, t, dur, vel) {
     const ctx = this.ctx;
+    const atk = this.at("aenv.attack", 0.02, t);
+    const rel = this.at("aenv.release", 1, t);
+    const end = t + Math.max(dur, atk) + rel * 2.5 + 0.05;
     const lp = ctx.createBiquadFilter();
     lp.type = "lowpass";
-    lp.frequency.value = clamp(this.get("filter.cutoff", 2000), 80, 16000);
-    lp.Q.value = 0.5 + this.get("filter.resonance", 1);
+    this.follow(lp.frequency, "filter.cutoff", 2000, t, end, (v) => clamp(v, 80, 16000));
+    lp.Q.value = 0.5 + this.at("filter.resonance", 1, t);
+    const fenv = this.at("fenv.amount", 0, t);
+    if (fenv > 0) {
+      lp.detune.setValueAtTime(1200 * fenv, t);
+      lp.detune.setTargetAtTime(0, t + 0.005, this.at("fenv.decay", 0.8, t) / 3);
+    }
     const g = ctx.createGain();
-    const atk = this.get("aenv.attack", 0.02);
-    const rel = this.get("aenv.release", 1);
     const amp = vel * 0.32 / Math.sqrt(notes.length);
     g.gain.setValueAtTime(0, t);
     g.gain.linearRampToValueAtTime(amp, t + Math.max(0.003, atk));
     g.gain.setValueAtTime(amp, t + Math.max(dur, atk));
     g.gain.setTargetAtTime(0, t + Math.max(dur, atk), rel / 3);
     lp.connect(g).connect(this.out);
-    const end = t + Math.max(dur, atk) + rel * 2.5 + 0.05;
-    const det = this.get("osc.detune", 8);
-    const wave = this.get("osc.wave", "sawtooth");
-    for (const m of notes) {
-      for (const sign of [-1, 1]) {
+    const det = this.at("osc.detune", 8, t);
+    const waves = [this.get("osc.wave", "sawtooth"), this.get("osc2.wave", this.get("osc.wave", "sawtooth"))];
+    const oct2 = Math.pow(2, Math.round(this.get("osc2.octave", 0)));
+    // Chord glide: each voice slides from the matching note of the chord before, if it's still sounding.
+    const glide = this.get("glide", 0);
+    const prev = glide > 0 && this.lastChord && this.lastChord.end > t - 0.05 ? this.lastChord.notes : null;
+    notes.forEach((m, i) => {
+      const from = prev ? prev[Math.min(i, prev.length - 1)] : m;
+      [-1, 1].forEach((sign, k) => {
         const o = ctx.createOscillator();
-        o.type = wave;
-        o.frequency.value = mtof(m);
+        o.type = waves[k];
+        const mult = k === 1 ? oct2 : 1;
+        o.frequency.setValueAtTime(mtof(from) * mult, t);
+        if (from !== m) o.frequency.exponentialRampToValueAtTime(mtof(m) * mult, t + glide);
         o.detune.value = sign * det + (Math.random() - 0.5) * 6; // a little analog drift per voice
         o.connect(lp);
         o.start(t);
         o.stop(end);
-      }
-    }
+      });
+    });
+    this.lastChord = { notes: notes.slice(), end: t + Math.max(dur, atk) + rel };
   }
 }
 
-/** Driftwood: physical modeling. Karplus-Strong string, or modal mallets. */
+/** Driftwood: physical modeling. Karplus-Strong strings, or modal mallets and bells, through a body filter. */
 export class Driftwood extends Instrument {
-  constructor(bus, channel) {
-    super(bus, channel);
+  constructor(bus, channel, name) {
+    super(bus, channel, name);
     this.cache = new Map();
   }
 
   note(midi, t, dur, vel) {
     const model = this.get("model", "string");
-    const bright = Math.round(this.get("brightness", 0.6) * 10) / 10;
-    const decay = Math.round(this.get("decay", 1.2) * 4) / 4;
+    const bright = Math.round(this.at("brightness", 0.6, t) * 10) / 10;
+    const decay = Math.round(this.at("decay", 1.2, t) * 4) / 4;
     const key = `${model}|${midi}|${bright}|${decay}`;
     let buf = this.cache.get(key);
     if (!buf) {
-      buf = model === "string" ? renderString(this.ctx, midi, bright, decay) : renderModal(this.ctx, midi, model, bright, decay);
+      buf = STRINGS[model] ? renderString(this.ctx, midi, bright, decay, STRINGS[model]) : renderModal(this.ctx, midi, model, bright, decay);
       if (this.cache.size > 300) this.cache.delete(this.cache.keys().next().value);
       this.cache.set(key, buf);
     }
     const src = this.ctx.createBufferSource();
     src.buffer = buf;
+    const body = this.ctx.createBiquadFilter();
+    body.type = "lowpass";
+    body.Q.value = 0.5 + this.at("body.resonance", 0.7, t);
+    this.follow(body.frequency, "body.cutoff", 12000, t, t + buf.duration, (v) => clamp(v, 100, 16000));
     const g = this.ctx.createGain();
     g.gain.value = vel * 0.7;
-    src.connect(g).connect(this.out);
+    src.connect(body).connect(g).connect(this.out);
     src.start(t);
+    const click = this.at("click", 0.15, t);
+    if (click > 0.01) {
+      const n = this.ctx.createBufferSource();
+      n.buffer = this.bus.noise;
+      const hp = this.ctx.createBiquadFilter();
+      hp.type = "bandpass";
+      hp.frequency.value = Math.min(9000, mtof(midi) * 6);
+      const ng = this.ctx.createGain();
+      ng.gain.setValueAtTime(click * vel * 0.5, t);
+      ng.gain.exponentialRampToValueAtTime(0.001, t + 0.012);
+      n.connect(hp).connect(ng).connect(this.out);
+      n.start(t, Math.random());
+      n.stop(t + 0.03);
+    }
   }
 }
 
-/** Tangle: the modular, here as a self-modulating FM texture patch. */
+/** Tangle: the modular, as a carrier with two FM modulators, an LFO on the depth, glide and a resonant low-pass. */
 export class Tangle extends Instrument {
   note(midi, t, dur, vel) {
     const ctx = this.ctx;
-    const f = mtof(midi);
+    const glide = this.get("glide", 0);
+    const fromMidi = glide > 0 && this.last && this.last.end > t - 0.05 ? this.last.midi : midi;
+    const f = mtof(midi), f0 = mtof(fromMidi);
+    const slide = (param, mult) => {
+      param.setValueAtTime(f0 * mult, t);
+      if (fromMidi !== midi) param.exponentialRampToValueAtTime(f * mult, t + glide);
+    };
     const car = ctx.createOscillator();
-    car.frequency.value = f;
-    const mod = ctx.createOscillator();
-    mod.frequency.value = f * this.get("ratio", 2);
-    const index = ctx.createGain();
-    index.gain.value = this.get("fm.index", 2) * f * 0.5;
+    car.type = this.get("car.wave", "sine");
+    slide(car.frequency, 1);
+    const idx1 = this.at("fm.index", 2, t), idx2 = this.at("fm2.index", 0, t);
+    const mods = [];
+    for (const [ratio, idx] of [[this.get("ratio", 2), idx1], [this.get("ratio2", 3), idx2]]) {
+      if (idx <= 0) continue;
+      const mod = ctx.createOscillator();
+      slide(mod.frequency, ratio);
+      const gain = ctx.createGain();
+      gain.gain.value = idx * f * 0.5;
+      mod.connect(gain).connect(car.frequency);
+      mods.push([mod, gain, idx]);
+    }
     const lfo = ctx.createOscillator();
-    lfo.frequency.value = this.get("lfo.rate", 0.2);
+    lfo.frequency.value = this.at("lfo.rate", 0.2, t);
     const lfoAmt = ctx.createGain();
-    lfoAmt.gain.value = this.get("lfo.depth", 0.5) * this.get("fm.index", 2) * f * 0.5;
-    lfo.connect(lfoAmt).connect(index.gain);
-    mod.connect(index).connect(car.frequency);
+    lfoAmt.gain.value = this.at("lfo.depth", 0.5, t) * idx1 * f * 0.5;
+    if (mods[0]) lfo.connect(lfoAmt).connect(mods[0][1].gain);
+    const atk = Math.min(this.at("aenv.attack", 0.6, t), Math.max(0.01, dur * 0.8));
+    const rel = this.at("aenv.release", 1.8, t);
+    const end = t + dur + rel * 2.5;
     const lp = ctx.createBiquadFilter();
     lp.type = "lowpass";
-    lp.frequency.value = clamp(this.get("filter.cutoff", 1500), 80, 12000);
+    lp.Q.value = 0.5 + this.at("filter.resonance", 0.7, t);
+    this.follow(lp.frequency, "filter.cutoff", 1500, t, end, (v) => clamp(v, 80, 12000));
     const g = ctx.createGain();
-    const atk = Math.min(1.5, dur * 0.4);
     g.gain.setValueAtTime(0, t);
     g.gain.linearRampToValueAtTime(vel * 0.22, t + atk);
-    g.gain.setValueAtTime(vel * 0.22, t + dur);
-    g.gain.setTargetAtTime(0, t + dur, 0.6);
+    g.gain.setValueAtTime(vel * 0.22, t + Math.max(dur, atk));
+    g.gain.setTargetAtTime(0, t + Math.max(dur, atk), rel / 3);
     car.connect(lp).connect(g).connect(this.out);
-    const end = t + dur + 3;
-    for (const o of [car, mod, lfo]) { o.start(t); o.stop(end); }
+    for (const o of [car, lfo, ...mods.map((m) => m[0])]) { o.start(t); o.stop(end); }
+    this.last = { midi, end: t + dur };
   }
 }
 
@@ -441,7 +529,12 @@ function driveCurve(amount) {
   return c;
 }
 
-function renderString(ctx, midi, brightness, decay) {
+/** String variants: how bright the pluck is and how fast the highs die away. */
+const STRINGS = { string: { bright: 0, damp: 0, len: 1 }, steel: { bright: 0.25, damp: -0.12, len: 1.3 }, nylon: { bright: -0.25, damp: 0.1, len: 0.75 } };
+
+function renderString(ctx, midi, brightness, decay, variant = STRINGS.string) {
+  brightness = clamp(brightness + variant.bright, 0, 1);
+  decay *= variant.len;
   const sr = ctx.sampleRate;
   const f = mtof(midi);
   const N = Math.max(2, Math.round(sr / f));
@@ -457,7 +550,7 @@ function renderString(ctx, midi, brightness, decay) {
     s = s + lpCoef * ((Math.random() * 2 - 1) - s);
     y[i] = s;
   }
-  const damp = 0.35 + 0.15 * brightness;
+  const damp = clamp(0.35 + 0.15 * brightness + variant.damp, 0.15, 0.5);
   for (let i = N; i < len; i++) {
     y[i] = g * ((1 - damp) * y[i - N] + damp * y[i - N - 1 < 0 ? 0 : i - N - 1]);
   }
@@ -469,6 +562,8 @@ const MODAL = {
   marimba: [[1, 1], [3.99, 0.35], [10.65, 0.12]],
   kalimba: [[1, 1], [5.4, 0.3], [11.6, 0.1]],
   bell: [[1, 1], [2.76, 0.6], [5.4, 0.4], [8.93, 0.25]],
+  vibes: [[1, 1], [4.0, 0.25], [10.0, 0.06]],
+  glass: [[1, 1], [2.32, 0.5], [4.25, 0.3], [6.63, 0.18]],
 };
 
 function renderModal(ctx, midi, model, brightness, decay) {
@@ -487,8 +582,7 @@ function renderModal(ctx, midi, model, brightness, decay) {
     const w = 2 * Math.PI * fk / sr;
     for (let i = 0; i < len; i++) y[i] += a * Math.sin(w * i) * Math.exp(-i / sr / tau);
   });
-  // Mallet attack: a short soft click.
-  for (let i = 0; i < Math.min(len, 96); i++) y[i] += (Math.random() * 2 - 1) * 0.15 * brightness * (1 - i / 96);
+  // (The mallet click is played live, see Driftwood's "click".)
   let peak = 0;
   for (const v of y) peak = Math.max(peak, Math.abs(v));
   if (peak > 0) for (let i = 0; i < len; i++) y[i] *= 0.8 / peak;
@@ -504,19 +598,19 @@ function fadeOut(y, sr) {
 export function makeInstruments(bus) {
   const ch = {
     drums: new Channel(bus, { drive: true }),
-    bass: new Channel(bus),
+    bass: new Channel(bus, { drive: true }),
     keys: new Channel(bus, { chorus: true }),
-    lead: new Channel(bus),
+    lead: new Channel(bus, { drive: true }),
     pluck: new Channel(bus),
     texture: new Channel(bus),
   };
   return {
     channels: ch,
-    drums: new Pulsar(bus, ch.drums),
-    bass: new Undertow(bus, ch.bass),
-    keys: new Lumen(bus, ch.keys),
-    lead: new Comet(bus, ch.lead),
-    pluck: new Driftwood(bus, ch.pluck),
-    texture: new Tangle(bus, ch.texture),
+    drums: new Pulsar(bus, ch.drums, "Pulsar"),
+    bass: new Undertow(bus, ch.bass, "Undertow"),
+    keys: new Lumen(bus, ch.keys, "Lumen"),
+    lead: new Comet(bus, ch.lead, "Comet"),
+    pluck: new Driftwood(bus, ch.pluck, "Driftwood"),
+    texture: new Tangle(bus, ch.texture, "Tangle"),
   };
 }

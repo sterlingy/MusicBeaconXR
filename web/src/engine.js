@@ -6,6 +6,10 @@ import { weigh } from "./beacons.js";
 import { generateSong, ROLES } from "./song.js";
 import { blend, Harmony, stepEvents, targetTempo } from "./mixer.js";
 import { Bus, makeInstruments } from "./synths.js";
+import { songPosition } from "./form.js";
+
+/** Wall-clock seconds: the shared clock every beacon's song runs on. */
+const wallNow = () => Date.now() / 1000;
 
 export class BeaconEngine {
   constructor(field) {
@@ -24,14 +28,26 @@ export class BeaconEngine {
     this.listeners = new Set();
     this.recent = []; // recently played events, for the UI
     this.stepLog = [];
+    this.clockT = null; // song-clock time sampled at the last bar line (while playing)
+    this.anchor = { t: 0, beat: 0, bpm: 108 }; // audio time -> beats, for automation
+    this.beatAt = (t) => this.anchor.beat + ((t - this.anchor.t) * this.anchor.bpm) / 60;
     this.setField(field);
   }
 
-  setField(field) {
+  /**
+   * Switches fields. With `keep`, the field is a re-centered copy of the same
+   * kind (a local grid following the listener): songs, harmony and position
+   * carry over, so the music doesn't jump.
+   */
+  setField(field, { keep = false } = {}) {
+    const same = keep && this.field?.kind === field.kind;
     this.field = field;
-    this.songCache.clear();
-    this.harmony = new Harmony({ hysteresis: this.harmony.hysteresis, phraseBars: this.harmony.phraseBars });
-    this.pos = field.kind === "grid" ? { x: 0, y: 0 } : { lat: 0, lon: 0 };
+    if (!same) {
+      this.songCache.clear();
+      this.harmony = new Harmony({ hysteresis: this.harmony.hysteresis, phraseBars: this.harmony.phraseBars });
+      this.pos = field.kind === "grid" ? { x: 0, y: 0 } : { ...(field.center || { lat: 0, lon: 0 }) };
+    }
+    this.pos = field.clamp(this.pos);
     this.refresh();
   }
 
@@ -56,10 +72,21 @@ export class BeaconEngine {
     this.refresh();
   }
 
+  /**
+   * Where each active song is. While playing, songs move on at bar lines
+   * (sampled mid-bar, see _playStep), so walking around never jumps a song
+   * to a different bar in the middle of one.
+   */
+  _position(t = this.running && this.clockT != null ? this.clockT : wallNow()) {
+    for (const a of this.active) a.pos = songPosition(a.song, t);
+    if (this.harmony.song) this.harmony.pos = this.active.find((a) => a.id === this.harmony.id)?.pos || songPosition(this.harmony.song, t);
+  }
+
   /** Recomputes weights and the blended mix for the current position. */
   refresh() {
     this.weights = weigh(this.field, this.pos, this.opts);
     this.active = this.weights.map((n) => ({ id: n.id, w: n.w, d: n.d, beacon: n.beacon, song: this.songFor(n.beacon) }));
+    this._position();
     this.mix = blend(this.active);
     if (this.harmony.id === null) this.harmony.update(this.active, 0);
     if (this.running) this._applyMix();
@@ -76,11 +103,31 @@ export class BeaconEngine {
     this.running = true;
     this.step = 0;
     this.nextTime = this.ctx.currentTime + 0.1;
+    this.clockT = null;
+    this.refresh();
     this.bpm = targetTempo(this.active);
     this.bus.setTempo(this.bpm);
     this._applyMix(0.01);
     this._timer = setInterval(() => this._tick(), 25);
     this._emit();
+  }
+
+  /**
+   * Picks the audio back up after the system paused it (screen lock, a phone
+   * call, another app taking audio). Safe to call any time.
+   */
+  async resume() {
+    if (!this.running || !this.ctx || this.ctx.state === "running") return;
+    try { await this.ctx.resume(); } catch { return; }
+    this.nextTime = this.ctx.currentTime + 0.05;
+  }
+
+  /**
+   * While the page is hidden, browsers slow timers to as little as once a
+   * second, so schedule further ahead then (moves still apply, a little later).
+   */
+  setBackground(hidden) {
+    this.lookahead = hidden ? 1.5 : 0.12;
   }
 
   stop() {
@@ -98,13 +145,11 @@ export class BeaconEngine {
   _applyMix(tc = 0.15) {
     for (const role of ROLES) {
       const m = this.mix.roles[role];
-      const ch = this.inst.channels[role];
-      this.inst[role].setParams(m.params);
-      ch.set("level", m.gain, tc);
-      ch.set("reverb", m.params["reverb.send"] ?? (role === "drums" ? 0.08 : role === "bass" ? 0.04 : 0.2), tc);
-      ch.set("delay", m.params["delay.send"] ?? 0, tc);
-      if (role === "keys") ch.set("chorus", m.params["chorus.mix"] ?? 0.3, tc);
-      if (role === "drums") ch.set("drive", m.params["master.drive"] ?? 0, tc);
+      const inst = this.inst[role];
+      inst.setParams(m.params);
+      inst.setAutomation(m.automation, this.beatAt);
+      this.inst.channels[role].set("level", m.gain, tc);
+      inst.applyChannel(this.ctx.currentTime, tc);
     }
   }
 
@@ -122,13 +167,26 @@ export class BeaconEngine {
   _playStep(n, t) {
     const bar = Math.floor(n / 16), s = n % 16;
     if (s === 0) {
+      // Move every song to the bar it's on at the middle of this bar, then
+      // re-blend: sections change layers, brightness and chords on bar lines.
+      this.clockT = wallNow() + (t - this.ctx.currentTime) + 120 / this.bpm;
+      this._position();
+      this.mix = blend(this.active);
+      this._applyMix(0.25);
       if (this.harmony.update(this.active, bar)) this._note("harmony", this.harmony.describe(bar));
+      this.harmony.pos = this.active.find((a) => a.id === this.harmony.id)?.pos || songPosition(this.harmony.song, this.clockT);
       const target = targetTempo(this.active);
       this.bpm += (target - this.bpm) * this.tempoGlide;
       if (Math.abs(target - this.bpm) < 0.05) this.bpm = target;
       this.bus.setTempo(this.bpm);
     }
     const stepDur = 60 / this.bpm / 4;
+    this.anchor = { t, beat: n / 4, bpm: this.bpm };
+    // Automated sends, chorus and drive move continuously, so update them every step.
+    for (const role of ROLES) {
+      const a = this.mix.roles[role].automation;
+      if (a && (a["reverb.send"] || a["delay.send"] || a["chorus.mix"] || a["master.drive"] || a.drive)) this.inst[role].applyChannel(t, 0.03);
+    }
     for (const ev of stepEvents(this.active, this.mix, this.harmony, bar, s)) {
       const inst = this.inst[ev.role];
       const dur = ev.gate * stepDur * 0.95;

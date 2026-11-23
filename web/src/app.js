@@ -1,7 +1,8 @@
 // Beacon Field UI: the map, the listener, and the readouts.
 
-import { makeGridField, makeGlobeField, weigh, normalizeLatLon } from "./beacons.js";
+import { makeGridField, makeGlobeField, makeLocalGridField, localGridShape, MAX_LOCAL_STEPS, KM_M, weigh, normalizeLatLon } from "./beacons.js";
 import { generateSong, validateSong, chordName, keyName, ROLES, ROLE_INSTRUMENT } from "./song.js";
+import { songPosition, sectionName, clock, hasForm, totalBars, lengthSeconds, SECTION_LABEL, SECTION_COLOR, sectionSpec } from "./form.js";
 import { BeaconEngine } from "./engine.js";
 import { SongEditor } from "./editor.js";
 
@@ -15,7 +16,22 @@ const CITIES = [
   ["Mumbai", 19.076, 72.878], ["Honolulu", 21.307, -157.858], ["North Pole", 89.9, 0], ["Date line, equator", 0.5, 179.6],
 ];
 
-const fields = { grid: makeGridField(5, 100), globe: null };
+const fields = { grid: makeGridField(5, 100), globe: null, local: null };
+const LOCAL_SIZES = [1, 5, 10, 50, 100]; // local grid presets, km on each side
+const MAX_SPACING_KM = 100;
+/** Meters from the middle (east-west or north-south) at which a local grid re-centers: 40% of its side, at least 0.6 of a spacing. */
+const recenterM = (f) => Math.max(0.6 * f.spacing, 0.4 * f.sideM);
+function savedLocalKm() {
+  try { const v = +localStorage.getItem("beacon.localKm"); return LOCAL_SIZES.includes(v) ? v : 50; } catch { return 50; }
+}
+const MIN_SPACING_KM = 0.01;
+const cleanSpacing = (v) => Number.isFinite(v) && v > 0 ? Math.max(MIN_SPACING_KM, Math.min(MAX_SPACING_KM, Math.round(v * 1000) / 1000)) : 1;
+function savedSpacingKm() {
+  try { const v = localStorage.getItem("beacon.localSpacingKm"); return v === null ? 1 : cleanSpacing(+v); } catch { return 1; }
+}
+/** A distance in meters, as meters under 1 km, else km. */
+const fmtDist = (m) => m < 1000 ? `${Math.round(m)} m` : `${+(m / 1000).toFixed(m < 10000 ? 2 : 1)} km`;
+const fmtKmVal = (km) => `${+km.toFixed(3)} km`;
 const engine = new BeaconEngine(fields.grid);
 const canvas = $("field");
 const g = canvas.getContext("2d");
@@ -38,6 +54,10 @@ const ui = {
   harmonyFlash: 0,
   colors: {},
   lastPanel: 0,
+  follow: false, // local grid: the listener follows the device's location
+  localKm: savedLocalKm(), // local grid length of each side, km
+  spacingKm: savedSpacingKm(), // local grid: km between neighbouring beacons
+  watchId: null,
 };
 
 // ------------------------------------------------------------------ setup
@@ -85,6 +105,19 @@ function view() {
       scale: s,
     };
   }
+  if (ui.mode === "local") {
+    const f = engine.field;
+    const whole = ui.zoom === "world";
+    const c = whole ? { x: 0, y: 0 } : f.toXY(engine.pos);
+    const spanM = whole ? f.sideM + 2 * f.spacing : Math.min(8 * f.spacing, f.sideM + 2 * f.spacing);
+    const s = Math.min(W, H) / spanM;
+    return {
+      center: c, spanM,
+      toScreen: (p) => { const q = f.toXY(p); return [W / 2 + (q.x - c.x) * s, H / 2 - (q.y - c.y) * s]; },
+      toWorld: (x, y) => f.fromXY({ x: c.x + (x - W / 2) / s, y: c.y - (y - H / 2) / s }),
+      scale: s,
+    };
+  }
   const span = ui.zoom === "world" ? { lon: 360, lat: 180 } : { lon: 90, lat: 45 };
   const c = ui.zoom === "world" ? { lat: 0, lon: 0 } : { lat: Math.max(-90 + span.lat / 2, Math.min(90 - span.lat / 2, engine.pos.lat)), lon: engine.pos.lon };
   const sx = W / span.lon, sy = H / span.lat;
@@ -105,9 +138,11 @@ function hexToRgb(h) {
 }
 
 function zoneImage(v) {
-  const res = ui.mode === "grid" ? [110, 110] : [140, 70];
+  const big = Math.max(canvas.width, canvas.height) || 1;
+  const res = ui.mode === "globe" ? [140, 70] : ui.mode === "local" ? [Math.round(120 * canvas.width / big), Math.round(120 * canvas.height / big)] : [110, 110];
   const key = [ui.mode, ui.zoom, engine.opts.sharpness, canvas.width, canvas.height, engine.overrides.size, engine.songRev || 0,
-    ui.mode === "globe" && ui.zoom === "local" ? `${Math.round(v.center.lat / 3)},${Math.round(v.center.lon / 3)}` : ""].join("|");
+    ui.mode === "globe" && ui.zoom === "local" ? `${Math.round(v.center.lat / 3)},${Math.round(v.center.lon / 3)}` : "",
+    ui.mode === "local" ? `${engine.field.center.lat},${engine.field.center.lon},${Math.round(v.center.x / (v.spanM / 80))},${Math.round(v.center.y / (v.spanM / 80))}` : ""].join("|");
   if (key === ui.zoneKey && ui.zoneImg) return ui.zoneImg;
   const [w, h] = res;
   const off = document.createElement("canvas");
@@ -177,8 +212,11 @@ function draw(now) {
 
   // Beacons.
   const isGrid = ui.mode === "grid";
+  const isLocal = ui.mode === "local";
   const local = isGrid || ui.zoom === "local";
-  const baseR = (isGrid ? 11 : local ? 6 : 2.6) * d;
+  // Beacon spacing on screen, in CSS pixels (labels and sizes shrink to fit).
+  const gap = isGrid || isLocal ? engine.field.spacing * v.scale / d : 999;
+  const baseR = (isGrid ? 11 : isLocal ? Math.max(1.6, Math.min(7, gap / 9)) : local ? 6 : 2.6) * d;
   for (const b of engine.field.beacons) {
     const [x, y] = v.toScreen(b.pos);
     if (x < -20 || y < -20 || x > W + 20 || y > H + 20) continue;
@@ -195,7 +233,7 @@ function draw(now) {
       g.globalAlpha = 1;
     }
     g.fillStyle = col;
-    g.globalAlpha = w > 0 ? 1 : isGrid ? 0.75 : 0.55;
+    g.globalAlpha = w > 0 ? 1 : isGrid || (isLocal && gap > 40) ? 0.75 : 0.55;
     g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill();
     g.globalAlpha = 1;
     if (b.id === harmonyId) {
@@ -207,11 +245,10 @@ function draw(now) {
       g.beginPath(); g.arc(x, y, r + 10 * d, 0, Math.PI * 2); g.stroke();
       g.setLineDash([]);
     }
-    if (isGrid || (local && w > 0)) {
-      // Beacon spacing on screen, in CSS pixels: drop song titles when they would collide.
-      const gap = isGrid ? engine.field.spacing * v.scale / d : 999;
-      label(b.label, x, y + r + 12 * d, Math.min(11, gap / 7) * d, C.muted, null);
-      if (isGrid && gap > 120) label(song.title, x, y + r + 25 * d, 10 * d, C.muted, null, 0.75);
+    if (isGrid || (isLocal && (gap > 50 || w > 0 || b.label === "Center")) || (!isLocal && local && w > 0)) {
+      // Drop song titles when they would collide.
+      label(b.label, x, y + r + 12 * d, Math.min(11, Math.max(9, gap / 7)) * d, C.muted, isLocal ? C.field : null);
+      if ((isGrid || isLocal) && gap > 120) label(song.title, x, y + r + 25 * d, 10 * d, C.muted, null, 0.75);
     }
   }
 
@@ -249,6 +286,35 @@ function drawGraticule(v, d) {
     g.stroke();
     const [sx] = v.toScreen({ x: 0, y: 0 }), [sx2] = v.toScreen({ x: 100, y: 0 });
     label("100 m", (sx + sx2) / 2, canvas.height - 12 * d, 10 * d, C.muted, null);
+    return;
+  }
+  if (ui.mode === "local") {
+    const f = engine.field, m = f.sideM / 2, sp = f.spacing;
+    const fine = v.spanM < 20 * sp;
+    const strong = [];
+    for (let e = 0; e <= f.steps; e++) {
+      const k = (e - f.steps / 2) * sp; // meters from the middle; every 5th line from the west and south edges is drawn stronger
+      if (!fine && e % 5 !== 0) continue;
+      const segs = [[{ x: k, y: -m }, { x: k, y: m }], [{ x: -m, y: k }, { x: m, y: k }]];
+      if (e % 5 === 0) { strong.push(...segs); continue; }
+      for (const [a, b] of segs) {
+        const [x1, y1] = v.toScreen(f.fromXY(a)), [x2, y2] = v.toScreen(f.fromXY(b));
+        g.moveTo(x1, y1); g.lineTo(x2, y2);
+      }
+    }
+    g.stroke();
+    g.strokeStyle = C.line;
+    g.beginPath();
+    for (const [a, b] of strong) {
+      const [x1, y1] = v.toScreen(f.fromXY(a)), [x2, y2] = v.toScreen(f.fromXY(b));
+      g.moveTo(x1, y1); g.lineTo(x2, y2);
+    }
+    g.stroke();
+    const len = sp * v.scale * (fine ? 1 : 5);
+    const x0 = canvas.width - 20 * d - len, y0 = canvas.height - 14 * d;
+    g.strokeStyle = C.muted;
+    g.beginPath(); g.moveTo(x0, y0); g.lineTo(x0 + len, y0); g.stroke();
+    label(fmtDist(sp * (fine ? 1 : 5)), x0 + len / 2, y0 - 9 * d, 10 * d, C.muted, null);
     return;
   }
   const step = 10;
@@ -296,6 +362,10 @@ function label(text, x, y, size, color, halo, alpha = 1) {
 
 function speedPerSec() {
   if (ui.mode === "grid") return 55 * ui.speed; // meters per second
+  if (ui.mode === "local") { // meters per second: half a spacing nearby, a 25th of the grid on the whole-grid view
+    const f = engine.field;
+    return (ui.zoom === "world" ? Math.max(0.5 * f.spacing, f.sideM / 25) : 0.5 * f.spacing) * ui.speed;
+  }
   return (ui.zoom === "world" ? 18 : 5) * ui.speed; // degrees per second
 }
 
@@ -310,6 +380,7 @@ function step(dt) {
   let next = null;
   if (dx || dy) {
     ui.target = null;
+    stopFollow("Walking by hand, so the map stopped following your location.");
     const n = Math.hypot(dx, dy);
     next = move(p, (dx / n) * sp, (dy / n) * sp);
   } else if (ui.target) {
@@ -320,10 +391,12 @@ function step(dt) {
   } else if (ui.wander) {
     ui.heading += (Math.random() - 0.5) * 2.2 * dt;
     next = move(p, Math.cos(ui.heading) * sp * 0.6, Math.sin(ui.heading) * sp * 0.6);
-    if (ui.mode === "grid") {
-      const lim = ((engine.field.n - 1) / 2) * engine.field.spacing + 30;
-      if (Math.abs(next.x) > lim) ui.heading = Math.PI - ui.heading;
-      if (Math.abs(next.y) > lim) ui.heading = -ui.heading;
+    if (ui.mode === "grid" || ui.mode === "local") {
+      const f = engine.field;
+      const q = ui.mode === "grid" ? next : f.toXY(next);
+      const lim = ((f.n - 1) / 2) * f.spacing + f.spacing * 0.3;
+      if (Math.abs(q.x) > lim) ui.heading = Math.PI - ui.heading;
+      if (Math.abs(q.y) > lim) ui.heading = -ui.heading;
     } else if (Math.abs(next.lat) > 84) ui.heading = -ui.heading;
   }
   if (next) engine.setPosition(next);
@@ -332,11 +405,13 @@ function step(dt) {
 /** Screen-direction offset between two positions (x right, y down). */
 function delta(a, b) {
   if (ui.mode === "grid") return [b.x - a.x, b.y - a.y];
+  if (ui.mode === "local") { const p = engine.field.toXY(a), q = engine.field.toXY(b); return [q.x - p.x, -(q.y - p.y)]; }
   return [((b.lon - a.lon + 540) % 360) - 180, -(b.lat - a.lat)];
 }
 
 function move(p, dx, dy) {
   if (ui.mode === "grid") return { x: p.x + dx, y: p.y + dy };
+  if (ui.mode === "local") { const q = engine.field.toXY(p); return engine.field.fromXY({ x: q.x + dx, y: q.y - dy }); }
   // Degrees of longitude get shorter toward the poles; keep walking speed even.
   const k = 1 / Math.max(0.15, Math.cos(p.lat * Math.PI / 180));
   return normalizeLatLon({ lat: p.lat - dy, lon: p.lon + dx * Math.min(k, 4) });
@@ -365,6 +440,7 @@ canvas.addEventListener("pointerdown", (e) => {
   const [x, y] = canvasPoint(e);
   ui.dragging = true;
   ui.downAt = [x, y];
+  stopFollow("Moved by hand, so the map stopped following your location.");
   ui.target = view().toWorld(x, y);
 });
 canvas.addEventListener("pointermove", (e) => {
@@ -401,35 +477,114 @@ async function togglePlay() {
   }
   $("startcard").hidden = true;
   $("play").textContent = engine.running ? "■ Stop" : "▶ Start";
+  if (engine.running) keepAwake(); else letSleep();
 }
+
+// ------------------------------------------------------------------ keep playing on phones
+
+// Phones pause web audio when the screen turns off, so while music plays the
+// page asks to keep the screen on (Screen Wake Lock: Chrome on Android, Safari
+// on iOS 16.4+, HTTPS or localhost only). The lock drops whenever the page is
+// hidden, so it's asked for again each time the page comes back.
+// Only phones and tablets get the warning: a computer's screen saver doesn't stop the music.
+let wakeLock = null, wakeWarned = !matchMedia("(pointer: coarse)").matches;
+async function keepAwake() {
+  if (!engine.running || document.visibilityState !== "visible" || wakeLock) return;
+  if (!("wakeLock" in navigator)) {
+    if (!wakeWarned) setMsg("fieldMsg", "This browser can't keep the screen on, so the music may stop when the screen turns off. Turn up the screen timeout in the phone's settings to keep it going.");
+    wakeWarned = true;
+    return;
+  }
+  try {
+    wakeLock = await navigator.wakeLock.request("screen");
+    wakeLock.addEventListener("release", () => { wakeLock = null; });
+    devLog("wake-lock", { ok: true });
+  } catch (err) {
+    devLog("wake-lock", { ok: false, message: err.message });
+    if (!wakeWarned) setMsg("fieldMsg", "Couldn't keep the screen on (" + err.message + "), so the music may stop when the screen turns off.");
+    wakeWarned = true;
+  }
+}
+function letSleep() {
+  if (wakeLock) wakeLock.release().catch(() => {});
+  wakeLock = null;
+}
+document.addEventListener("visibilitychange", () => {
+  const hidden = document.visibilityState !== "visible";
+  engine.setBackground(hidden);
+  if (!hidden) { engine.resume(); keepAwake(); }
+});
+// iOS can pause audio without hiding the page (a call, Siri, another app's sound).
+window.addEventListener("pageshow", () => engine.resume());
+window.addEventListener("focus", () => engine.resume());
 $("play").addEventListener("click", togglePlay);
 $("play2").addEventListener("click", togglePlay);
 $("vol").addEventListener("input", (e) => engine.setVolume(+e.target.value));
-$("wander").addEventListener("change", (e) => { ui.wander = e.target.checked; });
+$("wander").addEventListener("change", (e) => { ui.wander = e.target.checked; if (ui.wander) stopFollow("Auto-walk is on, so the map stopped following your location."); });
 $("speed").addEventListener("input", (e) => { ui.speed = +e.target.value; });
 $("zones").addEventListener("change", (e) => { ui.zones = e.target.checked; });
 
+const MODE_HINT = {
+  grid: "25 beacons, 100 m apart. Drag, tap or use WASD to walk.",
+  globe: "614 beacons, one every 10° of latitude and longitude. Starting in London.",
+  local: () => {
+    const s = localGridShape(ui.localKm, ui.spacingKm), n = (s.steps + 1) ** 2, side = fmtKmVal(s.sizeKm);
+    return `${n.toLocaleString()} beacons, one every ${fmtDist(s.unit)} over ${side} × ${side}, centered on you.`;
+  },
+};
+
 function setMode(mode) {
   if (mode === ui.mode) return;
+  const from = ui.mode !== "grid" ? { ...engine.pos } : null;
   ui.mode = mode;
+  if (mode !== "local") stopFollow();
   if (mode === "globe" && !fields.globe) fields.globe = makeGlobeField(10);
+  if (mode === "local" && !fields.local) fields.local = makeLocalGridField(from || { lat: 51.507, lon: -0.128 }, ui.localKm, ui.spacingKm);
   engine.setField(fields[mode]);
-  if (mode === "globe") engine.setPosition({ lat: 51.507, lon: -0.128 });
+  if (mode === "globe") engine.setPosition(from || { lat: 51.507, lon: -0.128 });
   ui.target = null;
   closeEditor();
   ui.selected = null;
   ui.zoneKey = "";
   $("modeGrid").setAttribute("aria-pressed", mode === "grid");
   $("modeGlobe").setAttribute("aria-pressed", mode === "globe");
-  $("globeTools").hidden = mode !== "globe";
+  $("modeLocal").setAttribute("aria-pressed", mode === "local");
+  $("globeTools").hidden = mode === "grid";
+  $("followWrap").hidden = mode !== "local";
+  $("zoomLocal").textContent = mode === "local" ? "Nearby" : "Local";
+  $("zoomWorld").textContent = mode === "local" ? "Whole grid" : "World";
+  $("geo").textContent = mode === "local" ? "Center on me" : "My location";
   $("fieldwrap").classList.toggle("globe", mode === "globe");
-  $("modeHint").textContent = mode === "grid"
-    ? "25 beacons, 100 m apart. Drag, tap or use WASD to walk."
-    : "614 beacons, one every 10° of latitude and longitude. Starting in London.";
+  $("modeHint").textContent = typeof MODE_HINT[mode] === "function" ? MODE_HINT[mode]() : MODE_HINT[mode];
+  setMsg("fieldMsg", "");
   applyShared();
+  if (mode === "local") startFollow();
 }
 $("modeGrid").addEventListener("click", () => setMode("grid"));
 $("modeGlobe").addEventListener("click", () => setMode("globe"));
+$("modeLocal").addEventListener("click", () => setMode("local"));
+$("localSize").value = String(ui.localKm);
+$("localSpacing").value = String(ui.spacingKm);
+function localGridChanged() {
+  if (ui.mode !== "local") return;
+  // Rebuild around the listener; beacons both grids share keep their songs.
+  centerLocal({ ...engine.pos });
+  $("modeHint").textContent = MODE_HINT.local();
+  const f = engine.field;
+  setMsg("fieldMsg", `Local grid is now ${fmtKmVal(f.sizeKm)} × ${fmtKmVal(f.sizeKm)}, a beacon every ${fmtDist(f.spacing)}.` +
+    (f.capped ? ` That spacing allows at most ${MAX_LOCAL_STEPS} beacons along a side, so the grid is smaller than ${ui.localKm} km.` : ""));
+}
+$("localSize").addEventListener("change", (e) => {
+  ui.localKm = +e.target.value;
+  try { localStorage.setItem("beacon.localKm", String(ui.localKm)); } catch {}
+  localGridChanged();
+});
+$("localSpacing").addEventListener("change", (e) => {
+  ui.spacingKm = cleanSpacing(parseFloat(e.target.value));
+  e.target.value = String(ui.spacingKm);
+  try { localStorage.setItem("beacon.localSpacingKm", String(ui.spacingKm)); } catch {}
+  localGridChanged();
+});
 
 function setZoom(z) {
   ui.zoom = z;
@@ -441,9 +596,107 @@ $("zoomWorld").addEventListener("click", () => setZoom("world"));
 
 function jumpTo(lat, lon, how) {
   ui.target = null;
+  if (ui.mode === "local") {
+    stopFollow();
+    centerLocal({ lat, lon });
+    setMsg("fieldMsg", `Grid centered on ${how === "Moved to" ? `${lat.toFixed(3)}, ${lon.toFixed(3)}` : how}.`);
+    return;
+  }
   engine.setPosition({ lat, lon });
   setMsg("fieldMsg", `${how}: ${lat.toFixed(2)}, ${lon.toFixed(2)}`);
 }
+
+// ------------------------------------------------------------------ local grid and location
+
+/**
+ * Re-centers the local grid on `p` (snapped to the lattice) and puts the
+ * listener there. With `keepIfClose`, only re-centers once `p` is far from the
+ * current center; beacon ids are shared between grids, so the music carries on.
+ */
+function centerLocal(p, { keepIfClose = false } = {}) {
+  const f = engine.field;
+  if (keepIfClose && f.kind === "local") {
+    const q = f.toXY(p), lim = recenterM(f);
+    if (Math.abs(q.x) < lim && Math.abs(q.y) < lim) { engine.setPosition(p); return; }
+  }
+  // Keep the music going only when the new grid overlaps the old one; a jump
+  // to somewhere else entirely starts fresh, like switching fields.
+  const overlaps = f.kind === "local" && Math.hypot(f.toXY(p).x, f.toXY(p).y) < f.sideM;
+  fields.local = makeLocalGridField(p, ui.localKm, ui.spacingKm);
+  engine.pos = { ...p };
+  engine.setField(fields.local, { keep: overlaps });
+  engine.setPosition(p);
+  ui.zoneKey = "";
+  applyShared();
+}
+
+const NO_GPS = "Your location isn't available here, so the grid is centered on London. Pick a city or type coordinates to move it.";
+
+/**
+ * When the page comes from web/serve.py, location results are reported back
+ * to that server's console (never the coordinates), so problems on a phone
+ * can be read on the PC.
+ */
+function devLog(event, extra = {}) {
+  if (!window.BEACON_DEV_LOG) return;
+  const body = JSON.stringify({ event, secure: window.isSecureContext, geo: !!navigator.geolocation, ua: navigator.userAgent, ...extra });
+  fetch("/__log", { method: "POST", body, headers: { "Content-Type": "application/json" } }).catch(() => {});
+}
+
+const GEO_BLOCKED = "Location is blocked for this page. On iPhone or iPad: Settings › Privacy & Security › Location Services must be on, with Safari Websites set to Ask or While Using; then in Safari tap aA › Website Settings › Location › Ask, and reload. Or pick a city or type coordinates.";
+
+function startFollow() {
+  if (ui.watchId !== null) return;
+  if (!navigator.geolocation || !window.isSecureContext) {
+    devLog("no-geolocation");
+    return setMsg("fieldMsg", window.isSecureContext ? NO_GPS : "This page isn't secure (HTTPS), so the browser won't share your location. " + NO_GPS, true);
+  }
+  setMsg("fieldMsg", "Finding you… (allow location if your browser asks)");
+  navigator.permissions?.query({ name: "geolocation" }).then((s) => devLog("permission-state", { state: s.state }), () => devLog("permission-state", { state: "query failed" }));
+  devLog("watch-start");
+  let first = true;
+  ui.watchId = navigator.geolocation.watchPosition(
+    (pos) => {
+      if (ui.mode !== "local") return;
+      const p = { lat: pos.coords.latitude, lon: pos.coords.longitude };
+      const acc = Math.round(pos.coords.accuracy || 0);
+      centerLocal(p, { keepIfClose: !first });
+      ui.target = null;
+      if (first) {
+        setMsg("fieldMsg", `Centered on you (accurate to ${acc < 1000 ? acc + " m" : (acc / KM_M).toFixed(1) + " km"}). Following your location.`);
+        devLog("position", { accuracy: acc });
+      }
+      first = false;
+    },
+    (err) => {
+      devLog("error", { code: err.code, message: err.message });
+      if (err.code !== 1) {
+        // Timeout (3) or a momentary "position unavailable" (2, e.g. iOS kCLErrorLocationUnknown):
+        // keep listening, the device usually finds a fix again within seconds.
+        if (first) setMsg("fieldMsg", "Still looking for your location…");
+        return;
+      }
+      stopFollow();
+      setMsg("fieldMsg", err.code === 1 ? GEO_BLOCKED : `${NO_GPS} (${err.message || "position unavailable"})`, true);
+    },
+    { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 },
+  );
+  ui.follow = true;
+  $("follow").checked = true;
+}
+
+function stopFollow(why) {
+  if (ui.watchId === null) return;
+  navigator.geolocation.clearWatch(ui.watchId);
+  ui.watchId = null;
+  ui.follow = false;
+  $("follow").checked = false;
+  if (why) setMsg("fieldMsg", why);
+}
+$("follow").addEventListener("change", (e) => {
+  if (e.target.checked) { ui.wander = false; $("wander").checked = false; startFollow(); }
+  else stopFollow("Stopped following your location.");
+});
 $("city").addEventListener("change", (e) => {
   if (!e.target.value) return;
   const [lat, lon] = e.target.value.split(",").map(Number);
@@ -456,6 +709,7 @@ $("goLatLon").addEventListener("click", () => {
   jumpTo(+m[1], +m[2], "Moved to");
 });
 $("geo").addEventListener("click", () => {
+  if (ui.mode === "local") { stopFollow(); return startFollow(); }
   if (!navigator.geolocation) return setMsg("fieldMsg", "Location isn't available here. Pick a city or type coordinates.", true);
   setMsg("fieldMsg", "Finding you…");
   navigator.geolocation.getCurrentPosition(
@@ -498,8 +752,16 @@ function renderInspector() {
   if (!id) return;
   const b = engine.field.beacons.find((x) => x.id === id);
   const s = engine.songFor(b);
-  const chords = s.progression.map((d) => chordName(s.key, d)).join(" – ");
-  const tracks = ROLES.filter((r) => s.tracks[r]?.level > 0).map((r) => `<span class="chip">${ROLE_LABEL[r]} <b>${Math.round(s.tracks[r].level * 100)}</b></span>`).join("");
+  const chordsOf = (p) => p.map((d) => chordName(s.key, d)).join(" – ");
+  const chords = chordsOf(s.progression);
+  const used = hasForm(s) ? [...new Set(s.form.map((f) => f.section))] : [];
+  const sectionChords = used.filter((t) => sectionSpec(s, t).progression && sectionSpec(s, t).progression.join() !== s.progression.join())
+    .map((t) => `<span class="chip">${SECTION_LABEL[t]} <b>${esc(chordsOf(sectionSpec(s, t).progression))}</b></span>`).join("");
+  const tracks = ROLES.filter((r) => s.tracks[r]?.level > 0).map((r) => {
+    const t = s.tracks[r], moving = Object.keys(t.automation || {});
+    const tip = moving.length ? ` title="Animated: ${esc(moving.join(", "))}"` : "";
+    return `<span class="chip"${tip}>${ROLE_LABEL[r]} <b>${Math.round(t.level * 100)}</b>${t.preset ? ` · ${esc(t.preset)}` : ""}${moving.length ? ` <b>∿${moving.length}</b>` : ""}</span>`;
+  }).join("");
   const own = engine.overrides.has(id) ? `<span class="chip"><b>edited</b></span>` : "";
   $("insp").innerHTML = `
     <div class="title"><strong>${esc(s.title)}</strong><span class="hint">${esc(b.label)} · ${ui.selected ? "selected" : "closest"}</span></div>
@@ -507,10 +769,16 @@ function renderInspector() {
       <span class="chip" style="border-color:${MOOD_COLOR[s.mood] || "var(--line)"}">${esc(s.mood || "Custom")}</span>
       <span class="chip">Key <b>${esc(keyName(s.key))}</b></span>
       <span class="chip"><b>${s.bpm}</b> BPM</span>
-      <span class="chip">${esc(chords)}</span>${own}
+      <span class="chip">${hasForm(s) ? "Verse " : ""}<b>${esc(chords)}</b></span>${sectionChords}${own}
     </div>
+    <div class="chips">
+      <span class="chip">Length <b>${clock(lengthSeconds(s))}</b></span>
+      <span class="chip"><b>${totalBars(s)}</b> bars</span>
+      <span class="chip">${hasForm(s) ? `<b>${s.form.length}</b> sections` : "<b>one loop</b> (no form)"}</span>
+    </div>
+    <div class="formview" id="inspForm" data-id="${esc(id)}"></div>
     <div class="chips">${tracks}</div>`;
-  ui.inspectedShown = id + "|" + (engine.overrides.has(id) ? s.title : "");
+  ui.inspectedShown = inspectorKey(id);
   updateShareButtons();
 }
 
@@ -520,6 +788,7 @@ const editor = new SongEditor($("editor"), {
     engine.setSong(editorId, song);
     engine.songRev = (engine.songRev || 0) + 1;
     $("editorTitle").textContent = `Editing ${song.title} (${beaconLabel(editorId)})`;
+    renderInspector();
   },
 });
 function openEditor(id) {
@@ -653,20 +922,33 @@ function renderPanels() {
   $("nChord").textContent = h ? `${h.chord}` : "–";
   $("nChord").title = h ? h.roman : "";
   $("nBpm").textContent = st.running ? `${Math.round(st.bpm)}` : `${Math.round(st.targetBpm)}`;
-  $("nBar").textContent = heard ? `${heard.bar + 1}.${Math.floor(heard.step / 4) + 1}` : "–";
+  const now = Date.now() / 1000;
+  const hp = h ? songPosition(engine.harmony.song, now) : null;
+  $("nBar").textContent = hp ? sectionName(hp) : "–";
+  $("nBar").title = hp ? `Bar ${hp.barInSection + 1} of ${hp.bars}` : "";
+  $("nBarSub").textContent = hp ? `bar ${hp.barInSection + 1}/${hp.bars}` : "";
   [...$("beat").children].forEach((c, i) => c.classList.toggle("on", !!heard && heard.step === i));
-  if (h && !$("songline").innerHTML.includes(esc(h.title))) $("songline").innerHTML = `Harmony from <b>${esc(h.title)}</b> (${esc(beaconLabel(h.id))})`;
+  if (h) {
+    const line = `Harmony from <b>${esc(h.title)}</b> (${esc(beaconLabel(h.id))}) · ${clock(hp.seconds)} / ${clock(hp.totalSeconds)}${hp.shaped ? ` · next: ${esc(SECTION_LABEL[hp.next] || hp.next)}` : ""}`;
+    if ($("songline").innerHTML !== line) $("songline").innerHTML = line;
+  }
 
   // Blend rows.
   $("blend").innerHTML = st.active.map((a) => {
     const col = MOOD_COLOR[a.song.mood] || "#888";
-    const dist = ui.mode === "grid" ? `${Math.round(a.d)} m` : `${Math.round(a.d).toLocaleString()} km`;
+    const dist = ui.mode === "grid" ? `${Math.round(a.d)} m` : ui.mode === "local" ? fmtDist(a.d) : `${Math.round(a.d).toLocaleString()} km`;
     return `<div class="brow${a.id === engine.harmony.id ? " harm" : ""}" data-id="${a.id}">
-      <span class="tag" style="background:${col}">${esc(a.beacon.label.split(" ")[0])}</span>
+      <span class="tag" style="background:${col}">${esc(ui.mode === "globe" ? a.beacon.label.split(" ")[0] : a.beacon.label)}</span>
       <div class="name"><div>${esc(a.song.title)}</div><small>${esc(keyName(a.song.key))} · ${a.song.bpm} BPM · ${dist}</small>
-        <div class="wbar"><i style="width:${(a.w * 100).toFixed(1)}%;background:${col}"></i></div></div>
+        <small class="sec">${sectionLine(a.song, now)}</small>
+        <div class="wbar"><i style="width:${(a.w * 100).toFixed(1)}%;background:${col}"></i></div>
+        ${formStrip(a.song, now, false)}</div>
       <span class="pct">${Math.round(a.w * 100)}%</span></div>`;
   }).join("");
+
+  // Inspector's form view (live playhead).
+  const fv = $("inspForm");
+  if (fv) fv.innerHTML = formStrip(engine.songFor(fv.dataset.id), now, true);
 
   // Instrument rows.
   const rows = ROLES.map((r) => {
@@ -676,7 +958,7 @@ function renderPanels() {
       const a = st.active.find((x) => x.id === s.id);
       return `<i style="width:${(s.share * 100).toFixed(1)}%;background:${MOOD_COLOR[a?.song.mood] || "#888"}"></i>`;
     }).join("");
-    return `<div class="trow"><div class="inst">${ROLE_LABEL[r]}<small>${ROLE_INSTRUMENT[r]}</small></div>
+    return `<div class="trow"><div class="inst" data-role="${r}" role="link" tabindex="0" title="Open ${ROLE_INSTRUMENT[r]} on the Synths page with this sound">${ROLE_LABEL[r]}<small>${ROLE_INSTRUMENT[r]} ↗</small></div>
       <div class="meter" title="Level ${Math.round(m.gain * 100)}%; the strip under it shows which beacons this part comes from">
         <i class="lvl" style="width:${(m.gain * 100).toFixed(1)}%;background:${ROLE_COLOR[r]}"></i>
         <i class="pk" style="width:${(pk * 100).toFixed(1)}%;background:${ROLE_COLOR[r]}"></i>
@@ -694,12 +976,13 @@ function renderPanels() {
 
   // Overlay.
   const p = engine.pos;
+  const off = ui.mode === "local" ? engine.field.toXY(p) : null;
   const where = ui.mode === "grid" ? `x <b>${p.x.toFixed(0)}</b> m · y <b>${(-p.y).toFixed(0)}</b> m`
+    : ui.mode === "local" ? `<b>${p.lat.toFixed(4)}, ${p.lon.toFixed(4)}</b> · ${fmtDist(Math.abs(off.y))} ${off.y >= 0 ? "N" : "S"}, ${fmtDist(Math.abs(off.x))} ${off.x >= 0 ? "E" : "W"} of center${ui.follow ? " · following you" : ""}`
     : `<b>${Math.abs(p.lat).toFixed(2)}°${p.lat < 0 ? "S" : "N"}</b> <b>${Math.abs(p.lon).toFixed(2)}°${p.lon < 0 ? "W" : "E"}</b>`;
   $("overlay").innerHTML = `<span>${where}</span>`;
 
-  const shown = inspectedId() + "|" + (engine.overrides.has(inspectedId()) ? engine.songFor(inspectedId()).title : "");
-  if (shown !== ui.inspectedShown) renderInspector();
+  if (inspectorKey(inspectedId()) !== ui.inspectedShown) renderInspector();
 }
 
 $("blend").addEventListener("click", (e) => {
@@ -729,4 +1012,69 @@ requestAnimationFrame(frame);
 connectShared();
 
 // For debugging and automated checks.
-window.beaconField = { engine, ui, setMode, select };
+window.beaconField = { engine, ui, setMode, select, centerLocal };
+
+// ------------------------------------------------------------------ synths page
+
+/**
+ * Opens an instrument on the Synths page with the sound it's playing now.
+ * The panel re-renders several times a second, so the press is caught on
+ * pointerdown (the row can be replaced before a click would arrive).
+ */
+function openSynth(role) {
+  const st = engine.state();
+  const params = {};
+  for (const [k, v] of Object.entries(st.mix.roles[role]?.params || {})) params[k] = typeof v === "number" ? +v.toPrecision(4) : v;
+  const lead = st.active[0];
+  try {
+    localStorage.setItem("beacon.synthHandoff", JSON.stringify({
+      instrument: ROLE_INSTRUMENT[role], params, automation: st.mix.roles[role]?.automation || {}, at: Date.now(),
+      from: lead ? `the blend nearest ${lead.beacon.label}` : "",
+    }));
+  } catch {}
+  window.open(`synths.html#${ROLE_INSTRUMENT[role]}`, "_blank", "noopener");
+}
+$("tracks").addEventListener("pointerdown", (e) => {
+  const el = e.target.closest(".inst[data-role]");
+  if (el && e.button === 0) { e.preventDefault(); openSynth(el.dataset.role); }
+});
+$("tracks").addEventListener("keydown", (e) => {
+  const el = e.target.closest(".inst[data-role]");
+  if (el && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); openSynth(el.dataset.role); }
+});
+
+// ------------------------------------------------------------------ song form readouts
+
+/** "Chorus 2 · bar 5/8 · 1:42 / 3:36 · energy 82%" */
+function sectionLine(song, t) {
+  const p = songPosition(song, t);
+  const e = p.shaped ? ` · energy ${Math.round(p.energy * 100)}%` : "";
+  return `<b>${esc(sectionName(p))}</b> · bar ${p.barInSection + 1}/${p.bars} · ${clock(p.seconds)} / ${clock(p.totalSeconds)}${e}`;
+}
+
+/** The song's sections as a strip, widths by length, with a playhead. */
+function formStrip(song, t, labels) {
+  if (!song) return "";
+  const p = songPosition(song, t);
+  const form = hasForm(song) ? song.form : [{ section: "loop", bars: totalBars(song) }];
+  const L = totalBars(song);
+  const counts = {}, seen = {};
+  for (const f of form) counts[f.section] = (counts[f.section] || 0) + 1;
+  const cells = form.map((f, i) => {
+    seen[f.section] = (seen[f.section] || 0) + 1;
+    const name = (SECTION_LABEL[f.section] || f.section) + (counts[f.section] > 1 ? ` ${seen[f.section]}` : "");
+    const short = { intro: "In", verse: "V", pre: "Pre", chorus: "C", bridge: "Br", break: "Bk", outro: "Out", loop: "Loop" }[f.section] || f.section;
+    return `<i class="${i === p.index ? "cur" : ""}" style="flex:${f.bars};background:${SECTION_COLOR[f.section] || "#888"}" title="${esc(name)} · ${f.bars} bars">${labels ? `<span>${esc(short)}${counts[f.section] > 1 ? seen[f.section] : ""}</span>` : ""}</i>`;
+  }).join("");
+  return `<div class="fstrip${labels ? " big" : ""}" role="img" aria-label="Song form; now in ${esc(sectionName(p))}">${cells}<b class="head" style="left:${((p.seconds / p.totalSeconds) * 100).toFixed(2)}%"></b></div>`
+    + (labels ? `<div class="fnow">${sectionLine(song, t)}${p.shaped ? ` · playing: ${playing(song, p)}` : ""}</div>` : "");
+}
+
+/** Changes whenever the inspector should redraw: another beacon, or an edit to its song. */
+function inspectorKey(id) { return `${id}|${engine.overrides.has(id) ? `${engine.songFor(id).title}|${engine.songRev || 0}` : ""}`; }
+
+/** The parts sounding in a song's current section, e.g. "drums, keys, texture". */
+function playing(song, p) {
+  const on = ROLES.filter((r) => (song.tracks[r]?.level || 0) * (p.layers[r] ?? 1) > 0.01);
+  return on.length ? on.map((r) => ROLE_LABEL[r].toLowerCase()).join(", ") : "nothing yet";
+}

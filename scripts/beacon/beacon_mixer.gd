@@ -48,8 +48,9 @@ static func validate(s) -> PackedStringArray:
 		return PackedStringArray(["not an object"])
 	if s.get("format") != "beacon-song":
 		errs.append("format must be beacon-song")
-	if int(s.get("version", 0)) != 1:
-		errs.append("version must be 1")
+	# Version 2 adds a song form (sections); this player plays its verse material as a loop.
+	if not int(s.get("version", 0)) in [1, 2]:
+		errs.append("version must be 1 or 2")
 	var key = s.get("key")
 	if typeof(key) != TYPE_DICTIONARY or not MODES.has(key.get("mode", "")) or int(key.get("root", -1)) < 0 or int(key.get("root", -1)) > 11:
 		errs.append("bad key")

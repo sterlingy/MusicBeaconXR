@@ -1,9 +1,9 @@
 // Beacon songs: the portable song format, music theory helpers and a seeded
 // generator that gives every beacon its own song.
 //
-// Song format (version 1), JSON:
+// Song format (version 2), JSON:
 // {
-//   format: "beacon-song", version: 1,
+//   format: "beacon-song", version: 2,
 //   title, author,
 //   key: { root: 0-11 (0 = C), mode: "major" | "minor" | "dorian" | ... },
 //   bpm, bars: 4, steps: 16 (per bar),
@@ -12,18 +12,32 @@
 //     <role>: {
 //       instrument: "Pulsar" | "Undertow" | "Comet" | "Lumen" | "Driftwood" | "Tangle",
 //       level: 0..1 (0 = this song leaves the role out),
-//       params: { <param id>: value },   // the instrument's sound (preset)
+//       params: { <param id>: value },   // the instrument's sound (see params.js)
+//       automation?: { <param id>: { shape, bars, depth, phase } },  // params that move over time
+//       preset?: "name",                  // the factory preset the sound started from
 //       pattern: [...]                    // see below
 //     }
 //   },
 //   morph: { <role>: { <param id>: [min, max] } }  // how far blending may push each param
+//   form: [{ section: "intro" | "verse" | "pre" | "chorus" | "bridge" | "break" | "outro", bars }],
+//   sections: { <section>: { progression?, energy?, layers?: { <role>: 0..1 }, material?: "A" | "B", feel?: "half" } }
 // }
+//
+// Version 2 adds `form`, `sections` and each track's optional `patternB`
+// (the chorus material; `pattern` is the verse material). Without a form a
+// song is one 4-bar loop (that's all a version 1 song is). See form.js for
+// how sections shape the arrangement.
 //
 // Patterns are scale-relative so any song can play over any harmony:
 //   drums:  { kick: [16 velocities], snare: [...], hat: [...], open: [...], clap: [...] }
 //   others: one bar (16 steps) per entry; a step is null (rest) or
 //           { d: scale degree above the chord root, o: octave offset, v: velocity, g: gate in steps }
 //   keys:   steps are { v, g } (the whole chord plays)
+
+export const SONG_SECTIONS = ["intro", "verse", "pre", "chorus", "bridge", "break", "outro"];
+
+import { PRESETS, presetSound } from "./presets.js";
+import { controls, isChoice, automatable, checkAutomation, SHAPES } from "./params.js";
 
 export const ROLES = ["drums", "bass", "keys", "lead", "pluck", "texture"];
 export const ROLE_INSTRUMENT = {
@@ -129,6 +143,49 @@ const PROGRESSIONS = {
   harmonicMinor: [[0, 3, 4, 0], [0, 5, 4, 4], [0, 3, 5, 4]],
 };
 
+const PRE_PROGRESSIONS = [[3, 4, 3, 4], [1, 3, 4, 4], [5, 3, 4, 4], [3, 3, 4, 4]];
+const BRIDGE_PROGRESSIONS = [[3, 4, 5, 4], [5, 3, 1, 4], [3, 0, 4, 4], [5, 4, 3, 4], [1, 5, 3, 4]];
+
+// Song forms. Lengths are fitted to a target duration of 2.5 to 4.5 minutes.
+const FORMS = [
+  ["intro", "verse", "chorus", "verse", "chorus", "bridge", "chorus", "outro"],
+  ["intro", "verse", "pre", "chorus", "verse", "pre", "chorus", "bridge", "chorus", "chorus", "outro"],
+  ["intro", "verse", "verse", "chorus", "verse", "chorus", "break", "chorus", "outro"],
+  ["intro", "verse", "chorus", "verse", "chorus", "break", "bridge", "chorus", "chorus", "outro"],
+];
+const SECTION_SIZES = { intro: [4, 8], verse: [8, 16], pre: [4, 8], chorus: [8, 16], bridge: [8, 16], break: [4, 8], outro: [4, 8, 16] };
+export const MIN_SONG_SECONDS = 120, MAX_SONG_SECONDS = 300;
+
+/** A form for `bpm` close to `targetSec` long, always within 2 to 5 minutes. */
+function fitForm(r, sections, bpm, targetSec) {
+  const spb = 240 / bpm;
+  const want = targetSec / spb;
+  const form = sections.map((t) => ({ section: t, bars: t === "verse" ? 16 : SECTION_SIZES[t][0] }));
+  const total = () => form.reduce((n, f) => n + f.bars, 0);
+  const step = (dir) => {
+    // Grow (or shrink) a random section that can still change, verses and choruses first.
+    const order = form.map((f, i) => i).sort((a, b) => (["verse", "chorus"].includes(form[b].section) - ["verse", "chorus"].includes(form[a].section)) || r() - 0.5);
+    for (const i of order) {
+      const sizes = SECTION_SIZES[form[i].section], k = sizes.indexOf(form[i].bars);
+      if (dir > 0 && k < sizes.length - 1) { form[i].bars = sizes[k + 1]; return true; }
+      if (dir < 0 && k > 0) { form[i].bars = sizes[k - 1]; return true; }
+    }
+    return false;
+  };
+  for (let n = 0; n < 40 && total() < want - 4; n++) if (!step(1)) break;
+  for (let n = 0; n < 40 && total() > want + 4; n++) if (!step(-1)) break;
+  // Hard limits: add a chorus before the outro, or drop sections from the middle.
+  const lastBeforeOutro = () => form.length - (form[form.length - 1].section === "outro" ? 1 : 0);
+  while (total() * spb < MIN_SONG_SECONDS) form.splice(lastBeforeOutro(), 0, { section: "chorus", bars: 8 });
+  while (total() * spb > MAX_SONG_SECONDS) {
+    const i = form.findIndex((f, k) => k > 1 && k < form.length - 2 && f.section !== "chorus");
+    if (i < 0) break;
+    form.splice(i, 1);
+  }
+  while (total() * spb > MAX_SONG_SECONDS && step(-1));
+  return form;
+}
+
 const MOODS = [
   { name: "Drift", energy: 0.25, bpm: [72, 90], modes: ["lydian", "major", "dorian"] },
   { name: "Glow", energy: 0.4, bpm: [84, 100], modes: ["major", "mixolydian", "lydian"] },
@@ -151,7 +208,7 @@ export function generateSong(seedString, hint = {}) {
   const e = Math.min(1, Math.max(0, mood.energy + range(r, -0.1, 0.1)));
   const song = {
     format: "beacon-song",
-    version: 1,
+    version: 2,
     title: `${pick(r, NAME_A)} ${pick(r, NAME_B)}`,
     author: "generator",
     mood: mood.name,
@@ -170,8 +227,126 @@ export function generateSong(seedString, hint = {}) {
   song.tracks.lead = genLead(r, e);
   song.tracks.pluck = genPluck(r, e);
   song.tracks.texture = genTexture(r, e);
+  for (const role of ROLES) dressTrack(r, song.tracks[role], role, e);
   for (const role of ROLES) song.morph[role] = defaultMorph(role);
+  addStructure(r, song, e);
   return song;
+}
+
+/**
+ * Gives a track its sound: a factory preset that suits the song's energy,
+ * nudged so no two beacons sound quite alike, plus the preset's automation and
+ * sometimes one or two more animated params.
+ */
+function dressTrack(r, t, role, e) {
+  const n = ROLE_INSTRUMENT[role];
+  const fits = PRESETS[n].filter((p) => Math.abs(p.energy - e) <= 0.3);
+  const preset = pick(r, fits.length ? fits : PRESETS[n]);
+  const base = presetSound(n, preset);
+  const params = {};
+  for (const c of controls(n)) {
+    const v = base.params[c[0]];
+    if (isChoice(c)) params[c[0]] = r() < 0.12 ? pick(r, c[2]) : v;
+    else if (c[6]?.auto === false) params[c[0]] = v; // ratios, semitones, glide: keep the preset's
+    else {
+      // Up to ±12% of the control's range (in octaves for log controls).
+      const [lo, hi, stepv] = [c[2], c[3], c[4]];
+      let x = c[6]?.log ? v * Math.pow(2, range(r, -0.12, 0.12) * Math.log2(hi / lo)) : v + range(r, -0.12, 0.12) * (hi - lo);
+      x = Math.round(Math.max(lo, Math.min(hi, x)) / stepv) * stepv;
+      params[c[0]] = +x.toFixed(4);
+    }
+  }
+  const keep = role === "keys" ? { voicing: t.params.voicing, octave: t.params.octave } : {};
+  t.params = { ...params, ...keep };
+  t.preset = preset.name;
+  const auto = base.automation;
+  const free = automatable(n).filter((id) => !auto[id] && !/send|mix$/.test(id));
+  let extra = r() < 0.3 + e * 0.4 ? (r() < 0.35 ? 2 : 1) : 0;
+  while (extra-- > 0 && free.length) {
+    const id = free.splice(Math.floor(r() * free.length), 1)[0];
+    auto[id] = { shape: pick(r, SHAPES), bars: pick(r, [1, 2, 4, 8, 16]), depth: round(range(r, 0.1, 0.4)), phase: round(r()) };
+  }
+  if (Object.keys(auto).length) t.automation = auto;
+}
+
+/** How likely each part is to play in a kind of section (the generator's tendencies, not rules). */
+const PLAY_ODDS = { verse: 0.7, pre: 0.8, chorus: 0.9, bridge: 0.55, break: 0.4 };
+
+/**
+ * Chooses which instruments play where. A song uses its own palette (2 to 6
+ * of the parts; the rest stay silent all song), and every section, every
+ * repeat included, gets its own lineup from that palette: an intro can open
+ * with one instrument or all of them, a chorus can be stripped back, a
+ * breakdown can be one part alone. Repeats usually echo the earlier section
+ * with a change, and sometimes a part enters partway through a section.
+ */
+function arrange(r, song) {
+  const count = pick(r, [2, 3, 3, 4, 4, 4, 5, 5, 5, 6, 6, 6]);
+  const melodic = ["keys", "lead", "pluck", "texture"];
+  const palette = [pick(r, melodic)]; // something to carry the harmony or tune
+  for (const role of shuffle(r, ROLES.filter((x) => x !== palette[0]))) if (palette.length < count) palette.push(role);
+  for (const role of ROLES) {
+    if (!palette.includes(role)) song.tracks[role].level = 0;
+    else if (song.tracks[role].level < 0.3) song.tracks[role].level = round(range(r, 0.35, 0.7));
+  }
+  const some = (k) => shuffle(r, palette.slice()).slice(0, k);
+  const lineup = (on) => Object.fromEntries(ROLES.map((x) => [x, on.includes(x) ? round(range(r, 0.7, 1)) : 0]));
+  const seen = {};
+  song.form.forEach((f, i) => {
+    let on;
+    const before = seen[f.section];
+    if (f.section === "intro" || f.section === "outro") on = some(1 + Math.floor(r() * palette.length)); // any number, any parts
+    else if (before && r() < 0.6) {
+      // Echo the earlier one, with one part swapped in or out.
+      on = before.slice();
+      const off = palette.filter((x) => !on.includes(x));
+      if (off.length && (r() < 0.6 || on.length < 2)) on.push(pick(r, off));
+      else if (on.length > 1) on.splice(Math.floor(r() * on.length), 1);
+    } else {
+      on = palette.filter(() => r() < PLAY_ODDS[f.section]);
+      if (!on.length) on = some(1);
+    }
+    const last = song.form.findLastIndex((g) => g.section === "chorus");
+    if (i === last && r() < 0.7) on = palette.slice(); // usually everything in the last chorus
+    seen[f.section] = on;
+    f.layers = lineup(on);
+    // Sometimes a part comes in partway through (a build).
+    if (on.length > 1 && f.bars >= 8 && r() < 0.35) f.enter = { [pick(r, on)]: pick(r, [0.25, 0.5, 0.75]) };
+  });
+}
+
+/**
+ * Gives a song its form: section order and lengths (2 to 5 minutes), chorus,
+ * pre-chorus and bridge chords, chorus material (busier drums, a lead hook,
+ * more rhythmic keys) and a few seeded arrangement choices.
+ */
+function addStructure(r, song, e) {
+  const mode = song.key.mode;
+  const options = (PROGRESSIONS[mode] || PROGRESSIONS.major).filter((p) => p.join() !== song.progression.join());
+  const chorus = options.length ? pick(r, options).slice() : [...song.progression.slice(2), ...song.progression.slice(0, 2)];
+  song.form = fitForm(r, pick(r, FORMS), song.bpm, range(r, 150, 270));
+  song.sections = {
+    chorus: { progression: chorus },
+    pre: { progression: pick(r, PRE_PROGRESSIONS).slice() },
+    bridge: { progression: pick(r, BRIDGE_PROGRESSIONS).slice() },
+  };
+  arrange(r, song);
+  if (r() < 0.3) song.sections.outro = { fade: false }; // some songs just stop at the end of the outro
+
+  // Chorus material ("B"): the same instruments, busier and brighter.
+  const up = (x) => Math.min(1, e + x);
+  song.tracks.drums.patternB = genDrums(r, up(0.2)).pattern;
+  song.tracks.bass.patternB = genBass(r, up(0.15)).pattern;
+  song.tracks.keys.patternB = genKeys(r, up(0.3)).pattern;
+  const hook = genLead(r, up(0.2)).pattern;
+  const notes = hook.filter((b) => b.some(Boolean));
+  song.tracks.lead.patternB = hook.map((b, i) => (b.some(Boolean) ? b : notes[i % notes.length] || b)); // the hook plays every bar
+  song.tracks.pluck.patternB = genPluck(r, up(0.2)).pattern;
+  const pad = Array(16).fill(null);
+  pad[0] = { d: 0, o: 0, v: 0.6, g: 8 };
+  pad[8] = { d: pick(r, [2, 4]), o: 0, v: 0.55, g: 8 };
+  song.tracks.texture.patternB = [pad, pad, pad, pad];
+  song.bars = 4;
 }
 
 function genDrums(r, e) {
@@ -265,7 +440,7 @@ function genLead(r, e) {
   const rest = Array(16).fill(null);
   return {
     instrument: "Comet",
-    level: round(r() < 0.25 ? 0 : range(r, 0.35, 0.7)),
+    level: round(range(r, 0.35, 0.7)),
     params: {
       "osc.wave": pick(r, ["sawtooth", "square", "triangle"]), "osc2.semis": pick(r, [0, 7, 12, -12]),
       "filter.cutoff": round(range(r, 1200, 6000), 0), "filter.resonance": round(range(r, 0.5, 6)),
@@ -328,16 +503,11 @@ function shuffle(r, a) {
   return a;
 }
 
-/** Parameters the engine blends between songs, with the default allowed range. */
+/** Parameters the engine blends between songs, with the allowed range (each control's whole range). */
 export function defaultMorph(role) {
-  return {
-    drums: { "kick.tune": [36, 70], "kick.decay": [0.15, 0.9], "snare.tone": [120, 320], "hat.decay": [0.02, 0.2], "hat.tone": [4000, 12000], "master.drive": [0, 0.8] },
-    bass: { "filter.cutoff": [120, 3000], "filter.emphasis": [0, 12], "fenv.amount": [0, 3000], "fenv.decay": [0.04, 0.8], "osc.detune": [0, 20], "sub.level": [0, 1] },
-    keys: { "filter.cutoff": [300, 8000], "filter.resonance": [0, 8], "aenv.attack": [0.002, 2], "aenv.release": [0.1, 4], "chorus.mix": [0, 1], "reverb.send": [0, 1], "osc.detune": [0, 25] },
-    lead: { "filter.cutoff": [500, 9000], "filter.resonance": [0, 10], "vibrato.depth": [0, 40], "delay.send": [0, 0.8], "aenv.release": [0.03, 1] },
-    pluck: { brightness: [0.1, 1], decay: [0.1, 4], "reverb.send": [0, 1] },
-    texture: { "fm.index": [0, 10], "lfo.rate": [0.02, 2], "lfo.depth": [0, 1], "filter.cutoff": [200, 6000], "reverb.send": [0, 1] },
-  }[role];
+  const out = {};
+  for (const c of controls(ROLE_INSTRUMENT[role])) if (!isChoice(c)) out[c[0]] = [c[2], c[3]];
+  return out;
 }
 
 /** Checks a song (e.g. one a contributor uploads). Returns a list of problems, empty if OK. */
@@ -345,7 +515,7 @@ export function validateSong(s) {
   const errs = [];
   if (!s || typeof s !== "object") return ["not an object"];
   if (s.format !== "beacon-song") errs.push('format must be "beacon-song"');
-  if (s.version !== 1) errs.push("version must be 1");
+  if (s.version !== 1 && s.version !== 2) errs.push("version must be 1 or 2");
   if (!s.key || !(s.key.root >= 0 && s.key.root <= 11) || !MODES[s.key.mode]) errs.push("key needs root 0-11 and a known mode");
   if (!(s.bpm >= 40 && s.bpm <= 220)) errs.push("bpm must be 40-220");
   if (!Array.isArray(s.progression) || s.progression.length < 1) errs.push("progression must be a non-empty array");
@@ -354,6 +524,27 @@ export function validateSong(s) {
     if (!ROLES.includes(role)) errs.push(`unknown role ${role}`);
     else if (!(t.level >= 0 && t.level <= 1)) errs.push(`${role}.level must be 0-1`);
     else if (role === "drums" ? typeof t.pattern !== "object" : !Array.isArray(t.pattern)) errs.push(`${role}.pattern has the wrong shape`);
+    else if (t.patternB != null && (role === "drums" ? typeof t.patternB !== "object" : !Array.isArray(t.patternB) || !t.patternB.length)) errs.push(`${role}.patternB has the wrong shape`);
+    else for (const e of checkAutomation(ROLE_INSTRUMENT[role], t.automation)) errs.push(`${role}: ${e}`);
+  }
+  if (s.form != null) {
+    if (!Array.isArray(s.form) || !s.form.length) errs.push("form must be a non-empty array");
+    else s.form.forEach((f, i) => {
+      if (!f || !SONG_SECTIONS.includes(f.section)) errs.push(`form[${i}].section must be one of ${SONG_SECTIONS.join(", ")}`);
+      if (!(Number.isInteger(f?.bars) && f.bars >= 1 && f.bars <= 64)) errs.push(`form[${i}].bars must be a whole number 1-64`);
+      for (const [k, obj] of [["layers", f?.layers], ["enter", f?.enter]]) {
+        if (obj == null) continue;
+        if (typeof obj !== "object") errs.push(`form[${i}].${k} must be an object`);
+        else for (const [role, v] of Object.entries(obj)) if (!ROLES.includes(role) || !(v >= 0 && v <= 1)) errs.push(`form[${i}].${k}.${role} must be a part with a value 0-1`);
+      }
+    });
+  }
+  if (s.sections != null) {
+    if (typeof s.sections !== "object") errs.push("sections must be an object");
+    else for (const [k, v] of Object.entries(s.sections)) {
+      if (!SONG_SECTIONS.includes(k)) errs.push(`unknown section ${k}`);
+      else if (v.progression != null && (!Array.isArray(v.progression) || !v.progression.length)) errs.push(`sections.${k}.progression must be a non-empty array`);
+    }
   }
   return errs;
 }

@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Synths</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Synths: one instrument at a time, like a hardware front panel. Same look as Beacon Field. */
+:root {
+  --bg: #0e131a; --panel: #151c25; --raise: #1c2531; --line: #2a3644; --fg: #e6ebf1; --muted: #8d9aab; --accent: #ffb547;
+  --key-w: #e9edf2; --key-b: #1a2029;
+  --f-display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --f-body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --f-mono: "IBM Plex Mono", Consolas, ui-monospace, monospace;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #eef1f5; --panel: #ffffff; --raise: #f4f6f9; --line: #d5dce5; --fg: #17202b; --muted: #5b6878; --accent: #c46f00;
+    --key-w: #ffffff; --key-b: #222a35; color-scheme: light;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #eef1f5; --panel: #ffffff; --raise: #f4f6f9; --line: #d5dce5; --fg: #17202b; --muted: #5b6878; --accent: #c46f00;
+  --key-w: #ffffff; --key-b: #222a35; color-scheme: light;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body {
+  margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.5 var(--f-body);
+  padding: 14px max(16px, env(safe-area-inset-right, 0px)) 28px max(16px, env(safe-area-inset-left, 0px));
+}
+button, input, select, textarea { font: inherit; color: inherit; }
+.app { max-width: 1100px; margin: 0 auto; display: grid; gap: 14px; }
+header { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+h1 { font: 800 26px/1 var(--f-display); margin: 0; letter-spacing: -0.01em; }
+h1 span { color: var(--accent); }
+.spacer { flex: 1; }
+.btn { background: var(--raise); border: 1px solid var(--line); border-radius: 8px; padding: 7px 12px; cursor: pointer; text-decoration: none; display: inline-block; }
+.btn:hover { border-color: var(--muted); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #1a1205; font-weight: 600; }
+.btn[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+:is(.btn, a, button, input, select, textarea):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+label.inline { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; }
+input[type="range"] { accent-color: var(--accent); }
+
+.tabs { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; }
+.tabs a { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; color: var(--muted); text-decoration: none; font-weight: 600; }
+.tabs a small { display: block; font-weight: 400; font-size: 11.5px; }
+.tabs a[aria-selected="true"] { color: var(--fg); border-color: var(--accent); box-shadow: inset 0 -3px 0 var(--accent); }
+@media (max-width: 640px) { .tabs { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+
+.unit { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
+.top { display: grid; grid-template-columns: minmax(0, 1fr) 240px; gap: 16px; align-items: start; }
+@media (max-width: 720px) { .top { grid-template-columns: 1fr; } }
+h2 { font: 800 30px/1 var(--f-display); margin: 0 0 4px; }
+.blurb { color: var(--muted); margin: 0; max-width: 60ch; }
+#scope { width: 100%; height: 72px; background: var(--raise); border-radius: 8px; display: block; }
+
+.groups { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); gap: 12px; margin-top: 14px; }
+fieldset { border: 1px solid var(--line); border-radius: 10px; margin: 0; padding: 8px 12px 10px; min-width: 0; }
+legend { font: 500 11px var(--f-mono); text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); padding: 0 4px; }
+.ctl { display: grid; grid-template-columns: 84px minmax(0, 1fr) 64px 26px; gap: 8px; align-items: center; min-height: 32px; position: relative; }
+.ctl.animated input[type="range"] { background: linear-gradient(90deg, transparent calc(var(--live, -10%) - 1px), var(--accent) calc(var(--live, -10%) - 1px), var(--accent) calc(var(--live, -10%) + 1px), transparent calc(var(--live, -10%) + 1px)); border-radius: 4px; }
+.ctl.animated output { color: var(--accent); }
+.auto { width: 26px; height: 24px; border-radius: 6px; border: 1px solid var(--line); background: transparent; color: var(--muted); cursor: pointer; font-size: 14px; line-height: 1; padding: 0; }
+.auto[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #1a1205; }
+.auto[aria-expanded="true"] { outline: 1px solid var(--accent); }
+.autorow { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; padding: 8px 10px; margin: 2px 0 6px; background: var(--raise); border-radius: 8px; font-size: 12.5px; color: var(--muted); }
+.autorow label { display: inline-flex; align-items: center; gap: 6px; }
+.autorow label.grow { flex: 1 1 100%; }
+.autorow label.grow input { flex: 1; min-width: 60px; width: auto; }
+.autorow .btn { margin-left: auto; }
+.autorow select { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 2px 4px; }
+.autorow b { font: 12px var(--f-mono); color: var(--fg); min-width: 3em; }
+.btn.small { padding: 3px 10px; font-size: 12.5px; }
+.presets { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 12px; }
+.presets select { background: var(--raise); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; min-width: 0; flex: 1 1 200px; max-width: 320px; font-weight: 600; }
+.presets .count { font: 12px var(--f-mono); color: var(--muted); }
+.presets form { display: flex; gap: 6px; flex: 1 1 260px; }
+.presets form input { flex: 1; min-width: 0; background: var(--raise); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; }
+.ctl span { font-size: 13px; }
+.ctl input[type="range"] { width: 100%; }
+.ctl select { width: 100%; background: var(--raise); border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; }
+.ctl output { font: 12px var(--f-mono); color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
+
+.play { display: grid; gap: 10px; }
+.bar { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; }
+.hint { color: var(--muted); font-size: 13px; }
+.steps { display: inline-grid; grid-template-columns: repeat(16, 8px); gap: 3px; }
+.steps i { height: 8px; border-radius: 2px; background: var(--line); }
+.steps i.beat { background: color-mix(in srgb, var(--muted) 55%, var(--line)); }
+.steps i.on { background: var(--accent); }
+
+.keyboard { --kw: calc(100% / var(--whites, 15)); --bw: calc(var(--kw) * 0.62); position: relative; height: 150px; display: flex; user-select: none; touch-action: none; }
+.key { border: 0; padding: 0; cursor: pointer; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 2px; padding-bottom: 6px; }
+.key.white { flex: 1; background: var(--key-w); border: 1px solid var(--line); border-radius: 0 0 6px 6px; color: #5b6878; }
+.key.black { position: absolute; top: 0; width: var(--bw); height: 60%; background: var(--key-b); border-radius: 0 0 5px 5px; color: #aab4c2; z-index: 1; }
+.key.on, .key:active { background: var(--accent) !important; color: #1a1205; }
+.key kbd { font: 10px var(--f-mono); opacity: 0.8; }
+.key em { font: normal 10px var(--f-mono); color: #8d9aab; }
+@media (hover: none) { .key kbd { display: none; } }
+.pads { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; touch-action: none; }
+.pad { height: 110px; border-radius: 12px; border: 1px solid var(--line); background: var(--raise); cursor: pointer; font-weight: 600; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; user-select: none; }
+.pad kbd { font: 11px var(--f-mono); color: var(--muted); }
+.pad.on, .pad:active { background: var(--accent); color: #1a1205; border-color: var(--accent); }
+@media (max-width: 520px) { .pads { grid-template-columns: repeat(3, minmax(0, 1fr)); } .pad { height: 84px; } }
+
+.tools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+textarea { width: 100%; min-height: 120px; background: var(--raise); border: 1px solid var(--line); border-radius: 8px; padding: 8px; font: 12px var(--f-mono); }
+.msg { color: var(--accent); font-size: 13px; min-height: 1.5em; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>Beacon <span>Synths</span></h1>
+    <span class="hint">The six instruments Beacon Field plays. Shape a sound, play it, copy it into a song.</span>
+    <div class="spacer"></div>
+    <label class="inline" for="vol">Volume <input id="vol" type="range" min="0" max="1" step="0.01" value="0.8" style="width:100px"></label>
+    <a class="btn" href="./">← Beacon Field</a>
+  </header>
+
+  <nav class="tabs" id="tabs" role="tablist" aria-label="Instruments"></nav>
+
+  <section class="unit">
+    <div class="top">
+      <div>
+        <h2 id="name">Lumen</h2>
+        <p class="blurb" id="blurb"></p>
+        <div class="presets" role="group" aria-label="Presets">
+          <button class="btn" id="presetPrev" aria-label="Previous preset">◀</button>
+          <select id="preset" aria-label="Preset"></select>
+          <button class="btn" id="presetNext" aria-label="Next preset">▶</button>
+          <span class="count" id="presetCount"></span>
+          <button class="btn" id="presetSave">Save as…</button>
+          <button class="btn" id="presetDelete" hidden>Delete</button>
+          <span class="count" id="autoCount"></span>
+          <form id="saveRow" hidden><input id="saveName" maxlength="40" placeholder="Name your preset" aria-label="Preset name"><button class="btn primary">Save</button></form>
+        </div>
+      </div>
+      <canvas id="scope" aria-label="Output waveform"></canvas>
+    </div>
+    <div class="groups" id="groups"></div>
+  </section>
+
+  <section class="unit play">
+    <div class="bar">
+      <button class="btn primary" id="loop" aria-pressed="false">▶ Play loop</button>
+      <label class="inline" for="bpm">Tempo <input id="bpm" type="range" min="60" max="170" step="1" value="100" style="width:100px"> <b id="bpmOut">100</b></label>
+      <span class="steps" id="steps" aria-hidden="true"></span>
+      <div class="spacer"></div>
+      <span id="octWrap" class="inline"><button class="btn" id="octDown" aria-label="Octave down">−</button><b id="octOut">C4</b><button class="btn" id="octUp" aria-label="Octave up">+</button></span>
+      <span id="chordWrap"><button class="btn" id="chord" aria-pressed="false" title="Each key plays a minor triad">Chord</button></span>
+      <label class="inline" id="noteLenWrap" for="noteLen">Note length <input id="noteLen" type="range" min="0.05" max="4" step="0.05" value="1" style="width:90px"> <b id="noteLenOut"></b></label>
+    </div>
+    <div class="keyboard" id="keyboard"></div>
+    <div class="pads" id="pads" hidden></div>
+    <span class="hint" id="playHint"></span>
+  </section>
+
+  <section class="unit">
+    <div class="tools">
+      <button class="btn" id="reset">Reset</button>
+      <button class="btn" id="random">Random</button>
+      <button class="btn" id="copy">Copy JSON</button>
+      <button class="btn" id="paste">Paste JSON</button>
+      <button class="btn primary" id="applyJson" hidden>Apply</button>
+      <span class="msg" id="msg" role="status"></span>
+    </div>
+    <textarea id="json" hidden spellcheck="false" aria-label="Sound as JSON"></textarea>
+    <p class="hint" style="margin:8px 0 0">Press ∿ next to a control to animate it: pick a shape, how many bars one sweep takes, and how far it swings. Animations run in time with the tempo. Your changes and saved presets are kept in this browser. In Beacon Field, click an instrument's name under <b>Instruments</b> to open it here with the sound it's playing right now.</p>
+  </section>
+</div>
+<script type="module" src="src/synthpage.js"></script>
+</body>
+</html>

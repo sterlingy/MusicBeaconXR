@@ -93,6 +93,112 @@ export function makeGlobeField(step = 10) {
   };
 }
 
+export const MILE_M = 1609.344;
+export const KM_M = 1000;
+/** Most spacings along one side of a local grid (so at most 151 x 151 beacons). */
+export const MAX_LOCAL_STEPS = 150;
+const M_PER_DEG = (EARTH_RADIUS_KM * 1000 * Math.PI) / 180;
+
+/**
+ * The shape a local grid takes for a requested side and spacing: spacing
+ * rounded to the meter (at least 10 m), the side rounded to a whole number of
+ * spacings (at least one, at most MAX_LOCAL_STEPS).
+ */
+export function localGridShape(sizeKm, spacingKm) {
+  const unit = Math.max(10, Math.round((+spacingKm || 1) * KM_M)); // meters between beacons
+  const want = Math.max(1, Math.round((sizeKm * KM_M) / unit));
+  const steps = Math.min(MAX_LOCAL_STEPS, want);
+  return { unit, spacingKm: unit / KM_M, steps, sizeKm: (steps * unit) / KM_M, capped: want > steps };
+}
+
+/**
+ * Local grid: `sizeKm` x `sizeKm` around `center`, with a beacon every
+ * `spacingKm` (any distance, rounded to the meter, at least 10 m). Defaults:
+ * 50 km a side, a beacon every km, so 51 x 51 = 2,601 beacons. See
+ * localGridShape for how the side is rounded and capped.
+ *
+ * All local grids sit on one worldwide 1 m lattice: rows are a meter of
+ * latitude apart, and columns a meter of longitude apart as measured at the
+ * whole degree of latitude nearest the center (the "band"). A grid uses every
+ * spacing-th lattice point, so beacons keep the same ids across spacings
+ * that line up (every 2 km beacon is also a 1 km beacon). The grid is the block of lattice squares best
+ * centered on `center`, so the same place always has the same beacon ids (and
+ * so the same songs, generated or shared), whatever the size or spacing, and
+ * re-centering as someone travels keeps every beacon they're near. With an
+ * even number of spacings the middle is a lattice point; with an odd number,
+ * it's the middle of a lattice square.
+ *
+ * Positions are {lat, lon}; distances are meters on a flat map of the band,
+ * where neighbouring beacons are exactly `spacingKm` apart. Over 40 km the
+ * flat-map error is well under 1%.
+ */
+export function makeLocalGridField(center, sizeKm = 50, spacingKm = 1) {
+  const shape = localGridShape(sizeKm, spacingKm);
+  const { unit, steps } = shape; // unit: meters between beacons; steps: spacings per side
+  const half = steps / 2;
+  const n = steps + 1;
+  const sp = unit;
+  const band = Math.max(-85, Math.min(85, Math.round(center.lat)));
+  const cosB = Math.cos((band * Math.PI) / 180);
+  const mLat = 1 / M_PER_DEG, mLon = mLat / cosB; // one meter, in degrees
+  const dLat = unit * mLat;
+  const dLon = unit * mLon;
+  // Lowest row and column of the block (in spacings), chosen so the block is centered on `center`.
+  const iLo = Math.round(center.lat / dLat - half);
+  const jLo = Math.round(center.lon / dLon - half);
+  const iHi = iLo + steps;
+  // Labels count kilometers from the lattice point nearest the grid's middle.
+  const i0 = iLo + Math.floor(half), j0 = jLo + Math.floor(half);
+  const c = { lat: (iLo + half) * unit * mLat, lon: (jLo + half) * unit * mLon };
+  const km = (v) => +(Math.abs(v) / KM_M).toFixed(3);
+  const beacons = [];
+  for (let r = 0; r < n; r++) {
+    for (let k = 0; k < n; k++) {
+      const i = iHi - r, j = jLo + k; // rows run north to south, columns west to east
+      const di = (i - i0) * unit, dj = (j - j0) * unit; // meters from the middle
+      const I = i * unit, J = j * unit; // index on the 1 m lattice
+      beacons.push({
+        id: `g${band}_${I}_${J}`,
+        label: di === 0 && dj === 0 ? "Center" : [di ? `${km(di)}${di > 0 ? "N" : "S"}` : "", dj ? `${km(dj)}${dj > 0 ? "E" : "W"}` : ""].filter(Boolean).join(" "),
+        pos: { lat: I * mLat, lon: J * mLon },
+        row: r, col: k,
+      });
+    }
+  }
+  const wrapLon = (lon) => c.lon + ((((lon - c.lon) % 360) + 540) % 360) - 180;
+  /** Meters east (x) and north (y) of the grid's middle. */
+  const toXY = (p) => ({ x: (wrapLon(p.lon) - c.lon) * cosB * M_PER_DEG, y: (p.lat - c.lat) * M_PER_DEG });
+  const fromXY = (q) => normalizeLatLon({ lat: c.lat + q.y / M_PER_DEG, lon: c.lon + q.x / (cosB * M_PER_DEG) });
+  const edge = (half + 0.5) * sp;
+  return {
+    kind: "local",
+    n, steps, band, center: c,
+    spacing: sp, spacingKm: shape.spacingKm,
+    sideM: steps * sp, sizeKm: shape.sizeKm, capped: shape.capped,
+    beacons,
+    toXY, fromXY,
+    distance: (a, b) => {
+      const p = toXY(a), q = toXY(b);
+      return Math.hypot(p.x - q.x, p.y - q.y);
+    },
+    /** Keeps the listener within half a spacing of the grid's edge. */
+    clamp: (p) => {
+      const q = toXY(p);
+      return fromXY({ x: Math.max(-edge, Math.min(edge, q.x)), y: Math.max(-edge, Math.min(edge, q.y)) });
+    },
+    // The 4 nearest beacons on a square lattice are within 2 rows and columns.
+    candidates: (p) => {
+      const q = toXY(p);
+      const r = Math.max(0, Math.min(n - 1, Math.round(half - q.y / sp)));
+      const k = Math.max(0, Math.min(n - 1, Math.round(half + q.x / sp)));
+      const out = [];
+      for (let a = Math.max(0, r - 2); a <= Math.min(n - 1, r + 2); a++)
+        for (let b = Math.max(0, k - 2); b <= Math.min(n - 1, k + 2); b++) out.push(beacons[a * n + b]);
+      return out;
+    },
+  };
+}
+
 function fmtLat(v) { return `${Math.abs(v)}°${v < 0 ? "S" : v > 0 ? "N" : ""}`; }
 function fmtLon(v) { return `${Math.abs(v)}°${v < 0 ? "W" : v > 0 ? "E" : ""}`; }
 
