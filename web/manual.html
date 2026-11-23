@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Beacon Field User Manual</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root {
+  --bg: #0e131a; --panel: #151c25; --raise: #1c2531; --line: #2a3644;
+  --fg: #e6ebf1; --muted: #8d9aab; --accent: #ffb547;
+  --f-display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --f-body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --f-mono: "IBM Plex Mono", Consolas, ui-monospace, monospace;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #eef1f5; --panel: #ffffff; --raise: #f4f6f9; --line: #d5dce5; --fg: #17202b; --muted: #5b6878;
+    --accent: #c46f00; color-scheme: light;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #eef1f5; --panel: #ffffff; --raise: #f4f6f9; --line: #d5dce5; --fg: #17202b; --muted: #5b6878;
+  --accent: #c46f00; color-scheme: light;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.6 var(--f-body);
+  padding: 0 max(16px, env(safe-area-inset-right, 0px)) 64px max(16px, env(safe-area-inset-left, 0px));
+}
+.wrap { max-width: 860px; margin: 0 auto; }
+header { padding: 28px 0 8px; border-bottom: 1px solid var(--line); }
+header .back { font-size: 14px; color: var(--muted); text-decoration: none; }
+header .back:hover { color: var(--accent); }
+h1 { font: 800 clamp(28px, 6vw, 40px)/1.1 var(--f-display); margin: 10px 0 4px; letter-spacing: -0.01em; }
+.updated { color: var(--muted); font-size: 14px; margin: 0 0 14px; }
+nav { display: flex; flex-wrap: wrap; gap: 6px; padding: 14px 0; }
+nav a {
+  font-size: 13px; color: var(--fg); text-decoration: none; background: var(--raise);
+  border: 1px solid var(--line); border-radius: 999px; padding: 3px 11px;
+}
+nav a:hover { border-color: var(--accent); color: var(--accent); }
+h2 { font: 700 24px/1.2 var(--f-display); margin: 40px 0 10px; scroll-margin-top: 16px; }
+h3 { font: 600 18px/1.3 var(--f-display); margin: 26px 0 8px; }
+p, li { max-width: 70ch; }
+strong { font-weight: 600; }
+code { font: 14px var(--f-mono); background: var(--raise); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; }
+ol, ul { padding-left: 1.4em; }
+li { margin: 4px 0; }
+.tw { overflow-x: auto; margin: 12px 0 18px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+th, td { text-align: left; vertical-align: top; padding: 8px 12px; border-bottom: 1px solid var(--line); }
+th { background: var(--raise); font-weight: 600; white-space: nowrap; }
+tr:last-child td { border-bottom: 0; }
+td:first-child { font-weight: 500; }
+a { color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+<a class="back" href="./">← Back to Beacon Field</a>
+<h1>Beacon Field User Manual</h1>
+<p class="updated">Updated Nov 22, 2026</p>
+</header>
+<nav aria-label="Sections"><a href="#quick-start">Quick start</a><a href="#how-the-music-works">How the music works</a><a href="#song-structure">Song structure</a><a href="#the-three-fields">The three fields</a><a href="#local-grid">Local grid</a><a href="#controls">Controls</a><a href="#songs">Songs</a><a href="#synths-page">Synths page</a><a href="#phones-and-tablets">Phones and tablets</a><a href="#troubleshooting">Troubleshooting</a></nav>
+<main>
+<p>Beacon Field is a music map: walk a listener between beacons, and the three closest beacons&#x27; songs blend into one live track.</p>
+<h2 id="quick-start">Quick start</h2>
+<p>You hear music within a minute: open the page, press Start, and move the listener.</p>
+<ol><li>Open the page. On the PC, run <code>python web/serve.py</code> in the project folder and open http://127.0.0.1:8765. On a phone or tablet, see <strong>Phones and tablets</strong> below.</li><li>Pick a field at the top: <strong>Test grid</strong>, <strong>Globe</strong> or <strong>Local grid</strong>. For Local grid, <strong>set its side length and beacon spacing</strong> first.</li><li>Press <strong>▶ Start the music</strong> (or <strong>▶ Start</strong> at the top). Headphones are recommended.</li><li>Move the listener: drag or tap on the map, or use the arrow keys or WASD. In Local grid, the listener follows your real location instead.</li><li>Watch <strong>The blend</strong> panel: it shows the three beacons you hear and how much of each.</li></ol>
+<h2 id="how-the-music-works">How the music works</h2>
+<p>Every beacon has its own song, and you always hear the three beacons closest to you, mixed by distance.</p>
+<ul><li><strong>Closer means louder.</strong> The nearest beacon gets the biggest share. Standing on a beacon plays its song alone (100%).</li><li><strong>No jumps.</strong> As a fourth beacon becomes one of the three closest, the one it replaces has already faded to 0%, so the music changes smoothly.</li><li><strong>One key at a time.</strong> The strongest song sets the key, chords and phrase. The key only changes on a bar line, and only when another song clearly leads (by the <strong>Key change margin</strong>, 8% by default).</li><li><strong>Tempo glides.</strong> The tempo moves toward the average of the three songs, a little each bar.</li><li><strong>Six instruments.</strong> Drums, bass, keys, lead, pluck and texture. Each instrument&#x27;s level and sound are blended from the three songs; each beat, every part takes its notes from one song, chosen by its share.</li></ul>
+<p>The songs are generated from each beacon&#x27;s ID, so a beacon always plays the same song, on every device, unless someone edits or shares a different one.</p>
+<h2 id="song-structure">Song structure</h2>
+<p>Every beacon plays a full song, 2 to 5 minutes long, built from sections like a pop song: for example intro, verse, chorus, verse, chorus, bridge, chorus, outro. Some songs add a pre-chorus, a breakdown or a double last chorus.</p>
+<div class="tw"><table><thead><tr><th>Section</th><th>What it does</th></tr></thead><tbody><tr><td>Intro</td><td>Opens the song, with anywhere from one instrument to all of them</td></tr><tr><td>Verse</td><td>Steady; later verses usually echo the first with one part swapped</td></tr><tr><td>Pre-chorus</td><td>Builds tension into the chorus</td></tr><tr><td>Chorus</td><td>The high point: its own chords, busier drums, a lead hook, brighter sound; the last chorus is the biggest</td></tr><tr><td>Bridge</td><td>Contrast: new chords, often half-time drums or none</td></tr><tr><td>Breakdown</td><td>Pared right back, sometimes one instrument alone</td></tr><tr><td>Outro</td><td>Winds down; most fade out, some just stop</td></tr></tbody></table></div>
+<ul><li><strong>Instruments change by section.</strong> Each song uses its own set of 2 to 6 instruments, and each section, every repeat included, picks its own lineup from them. Sometimes an instrument comes in partway through a section.</li><li><strong>The sound moves with the song.</strong> Filters open up in a chorus and close down in quiet sections, the drums thin out or fill in, and a snare fill leads into a bigger section.</li><li><strong>Songs keep playing while you&#x27;re away.</strong> Each beacon broadcasts its song on a shared clock, so everyone at a beacon hears the same section at the same moment.</li><li><strong>Where to see it.</strong> <strong>Now playing</strong> shows the leading song&#x27;s section and bar. Each row of <strong>The blend</strong> shows its song&#x27;s section, time (for example 1:42 / 3:36), energy and a strip of its sections with a playhead. The <strong>Beacon song</strong> panel shows the length, each section&#x27;s chords, the instruments playing now, and each instrument&#x27;s preset.</li></ul>
+<h2 id="the-three-fields">The three fields</h2>
+<p>A field is a layout of beacons; pick one with the buttons at the top of the page.</p>
+<div class="tw"><table><thead><tr><th>Field</th><th>Beacons</th><th>Spacing</th><th>Use it for</th></tr></thead><tbody><tr><td>Test grid</td><td>25 (5 × 5)</td><td>100 m</td><td>Trying blends up close; starts here</td></tr><tr><td>Globe</td><td>614</td><td>10° of latitude and longitude</td><td>Hearing the whole world; starts in London</td></tr><tr><td>Local grid</td><td>4 to 22,801</td><td>1 km by default; any spacing from 0.01 km (10 m) to 100 km</td><td>Walking or driving with music where you are; centers on your location</td></tr></tbody></table></div>
+<p>On the Globe and Local grid, <strong>Jump to…</strong> picks a city and the <strong>lat, lon</strong> box with <strong>Go</strong> moves you to exact coordinates. The map zoom buttons switch between a close view and the whole field (<strong>Local</strong> / <strong>World</strong> on the Globe, <strong>Nearby</strong> / <strong>Whole grid</strong> on the Local grid).</p>
+<h2 id="local-grid">Local grid</h2>
+<p>The Local grid is a square of beacons centered on you, a kilometer apart by default, and it moves the listener as you move.</p>
+<p><strong>Choosing a size.</strong> Before you tap <strong>Local grid</strong>, or any time after, set two things in the top bar. The page remembers both.</p>
+<ul><li><strong>Local grid, each side</strong>: the length of each side of the square, 1, 5, 10, 50 (the default) or 100 km.</li><li><strong>Beacon every … km</strong>: the spacing between beacons, any number from 0.01 km (10 m) to 100 km; decimals are fine. The default is 1 km.</li></ul>
+<div class="tw"><table><thead><tr><th>Side</th><th>Beacon every</th><th>Beacons</th><th>Re-centers after</th></tr></thead><tbody><tr><td>1 km</td><td>1 km</td><td>4</td><td>0.6 km</td></tr><tr><td>1 km</td><td>0.1 km</td><td>121</td><td>0.4 km</td></tr><tr><td>10 km</td><td>1 km</td><td>121</td><td>4 km</td></tr><tr><td>50 km</td><td>1 km</td><td>2,601</td><td>20 km</td></tr><tr><td>100 km</td><td>1 km</td><td>10,201</td><td>40 km</td></tr><tr><td>100 km</td><td>5 km</td><td>441</td><td>40 km</td></tr></tbody></table></div>
+<p>The side is rounded to a whole number of spacings. A side holds at most 150 spacings (22,801 beacons), so a very fine spacing shrinks the grid and the page tells you: a beacon every 10 m gives a 1.5 km grid. With an odd number of spacings per side you stand inside a square of beacons rather than on a center beacon.</p>
+<p><strong>Following you.</strong> When you tap <strong>Local grid</strong>, the page asks for your location, centers the grid on you and ticks <strong>Follow me</strong>. The listener then moves with you.</p>
+<ul><li>Walking by hand, dragging, or turning on <strong>Auto-walk</strong> stops following.</li><li><strong>Center on me</strong> (or ticking <strong>Follow me</strong> again) starts it again.</li><li>If location isn&#x27;t available, the grid starts in London; use <strong>Jump to…</strong> or the <strong>lat, lon</strong> box to move it.</li></ul>
+<p><strong>Re-centering.</strong> When you travel 40% of the side from the grid&#x27;s middle (at least 0.6 of a spacing), the grid re-centers on you. Every grid sits on one worldwide lattice of points 1 m apart, so the beacons around you keep their songs and the music carries on. A jump to somewhere the old grid didn&#x27;t cover starts fresh.</p>
+<p><strong>Same place, same songs.</strong> A given street corner has the same beacon and the same song for everyone, at every grid size. Spacings that line up share beacons too: every 2 km beacon is also a 1 km beacon.</p>
+<h2 id="controls">Controls</h2>
+<p>The top bar holds the field, Local grid size and spacing, volume, the Synths and Manual buttons and Start; the bar under the map holds movement and location; <strong>Blend settings</strong> tunes how songs mix.</p>
+<div class="tw"><table><thead><tr><th>Control</th><th>Where</th><th>What it does</th></tr></thead><tbody><tr><td>Test grid / Globe / Local grid</td><td>Top bar</td><td>Switches the field</td></tr><tr><td>Local grid, each side</td><td>Top bar</td><td>Sets the length of each side of the Local grid: 1, 5, 10, 50 or 100 km</td></tr><tr><td>Beacon every … km</td><td>Top bar</td><td>Spacing between Local grid beacons, 0.01 to 100 km (default 1 km)</td></tr><tr><td>Synths ↗</td><td>Top bar</td><td>Opens the Synths page in a new tab (see Synths page below)</td></tr><tr><td>Manual ↗</td><td>Top bar</td><td>Opens this manual</td></tr><tr><td>Volume</td><td>Top bar</td><td>Overall loudness</td></tr><tr><td>▶ Start / ■ Stop</td><td>Top bar</td><td>Starts or stops the music</td></tr><tr><td>Map</td><td>Middle</td><td>Drag or tap to move the listener; arrow keys or WASD walk</td></tr><tr><td>Auto-walk</td><td>Under the map</td><td>The listener wanders on its own</td></tr><tr><td>Speed</td><td>Under the map</td><td>Walking speed for keys and Auto-walk</td></tr><tr><td>Zones</td><td>Under the map</td><td>Colours the map by which beacon leads at each spot</td></tr><tr><td>Jump to… / lat, lon + Go</td><td>Under the map (Globe, Local grid)</td><td>Moves to a city or to exact coordinates</td></tr><tr><td>My location / Center on me</td><td>Under the map (Globe, Local grid)</td><td>Moves to your real location</td></tr><tr><td>Follow me</td><td>Under the map (Local grid)</td><td>Keeps the listener on your location as you move</td></tr><tr><td>Local / World, Nearby / Whole grid</td><td>Under the map</td><td>Close view or the whole field</td></tr><tr><td>Instrument names (Drums, Bass …)</td><td>Instruments panel</td><td>Opens that instrument on the Synths page with the sound it&#x27;s playing right now</td></tr><tr><td>Zone sharpness</td><td>Blend settings</td><td>Higher makes the nearest beacon dominate more; lower blends more evenly (default 1.5)</td></tr><tr><td>Key change margin</td><td>Blend settings</td><td>How far another song must lead before the key changes (default 8%)</td></tr><tr><td>Key changes on</td><td>Blend settings</td><td>Allows a key change every bar, every 2 bars or every 4 bars</td></tr><tr><td>Tempo glide</td><td>Blend settings</td><td>How much of the way to the new tempo each bar covers (default 35%)</td></tr></tbody></table></div>
+<h2 id="songs">Songs</h2>
+<p>Tap a beacon on the map, or a row in <strong>The blend</strong>, to open its song in the <strong>Beacon song</strong> panel.</p>
+<div class="tw"><table><thead><tr><th>Button</th><th>What it does</th></tr></thead><tbody><tr><td>Walk here</td><td>Walks the listener to that beacon</td></tr><tr><td>Edit song</td><td>Opens the editor: title, mood, key, mode and tempo; the Form (the list of sections, such as intro 8, verse 16, chorus 8); the Arrangement grid (click to choose which instruments play in each section); the chords for each section; and for each instrument its level, a few sound controls and a 16-step pattern per bar, for verse and chorus separately. Changes play right away; <strong>Done</strong> closes it.</td></tr><tr><td>New song</td><td>Replaces the beacon&#x27;s song with a fresh generated one</td></tr><tr><td>Copy JSON</td><td>Copies the song as text, to save or send</td></tr><tr><td>Paste JSON</td><td>Opens a box to paste a song&#x27;s text; <strong>Load onto this beacon</strong> checks it and puts it on the beacon</td></tr><tr><td>Share with everyone</td><td>Published page only: saves the song so everyone who opens the page hears it on that beacon</td></tr><tr><td>Remove shared song</td><td>Puts a shared beacon back to its generated song</td></tr></tbody></table></div>
+<p>Edits, new songs and pasted songs last until you reload the page. To keep a song, use <strong>Copy JSON</strong> and save the text somewhere, or share it from the published page.</p>
+<h2 id="synths-page">Synths page</h2>
+<p>The Synths page lets you play and shape each of the six instruments on its own; open it with <strong>Synths ↗</strong> in the top bar, or click an instrument&#x27;s name under <strong>Instruments</strong> to bring over the sound it&#x27;s playing right now.</p>
+<div class="tw"><table><thead><tr><th>Instrument</th><th>Part</th><th>Character</th></tr></thead><tbody><tr><td>Pulsar</td><td>Drums</td><td>Kick, snare, hats and clap from oscillators and noise</td></tr><tr><td>Undertow</td><td>Bass</td><td>Two detuned oscillators and a sub through a low-pass filter</td></tr><tr><td>Lumen</td><td>Keys</td><td>Chords and pads with two oscillators per note</td></tr><tr><td>Comet</td><td>Lead</td><td>A two-oscillator lead with vibrato and delay</td></tr><tr><td>Driftwood</td><td>Pluck</td><td>Plucked strings, mallets and bells</td></tr><tr><td>Tangle</td><td>Texture</td><td>FM drones and evolving textures</td></tr></tbody></table></div>
+<ul><li><strong>Play.</strong> Tap the on-screen keys, or use the computer keys A W S E D F T G Y H U J K (Z and X change octave); Pulsar has drum pads on A S D F G. <strong>Play loop</strong> runs a 4-bar demo at the <strong>Tempo</strong> you set; <strong>Chord</strong> plays a chord per key and <strong>Note length</strong> sets how long notes ring.</li><li><strong>Presets.</strong> Each instrument has 20 factory presets in the picker under its name; ◀ ▶ step through them. <strong>Save as…</strong> keeps your own sound under &quot;Yours&quot;, and <strong>Delete</strong> removes one of yours. Any change shows the sound as &quot;(edited)&quot;.</li><li><strong>Animate a control.</strong> Press ∿ beside a control, then choose a <strong>Shape</strong> (sine, triangle, saw up, saw down, square, random steps or drift), how long one sweep takes (<strong>Every</strong> 1/4 bar to 32 bars) and how far it swings (<strong>Depth</strong>). An animated control shows its moving value in orange. Filters, resonance, envelopes, levels, FM depth, drum tune and decay, and the effect sends can all be animated.</li><li><strong>Glide.</strong> The bass and lead slide from note to note; Lumen slides each note of a chord into the next chord; Tangle slides its drone. Set it with each instrument&#x27;s <strong>Glide</strong> control.</li><li><strong>Reset, Random, Copy and Paste.</strong> <strong>Reset</strong> returns to the plain default sound; <strong>Random</strong> starts from a preset and pushes it somewhere new; <strong>Copy JSON</strong> and <strong>Paste JSON</strong> move a sound in and out as text.</li></ul>
+<p>Your sounds and saved presets are kept in that browser. Generated songs use these same presets, so the sounds you hear on the map are ones you can open and change here.</p>
+<h2 id="phones-and-tablets">Phones and tablets</h2>
+<p>Phones only share location with secure (HTTPS) pages, so run the PC server in HTTPS mode and open it from the phone over home Wi-Fi or ZeroTier.</p>
+<p><strong>On the PC</strong></p>
+<ol><li>In the project folder, run <code>python web/serve.py --https</code>.</li><li>It prints the addresses to open, for example https://10.0.0.12:8443 (home network) and https://10.241.70.124:8443 (ZeroTier). Leave it running.</li></ol>
+<p><strong>On the phone</strong></p>
+<ol><li>Join the same network: home Wi-Fi, or the ZeroTier app with <strong>shivoo_vpn</strong> switched on.</li><li>Open the https address in the browser. Type the <strong>https://</strong> part; without it the browser may try plain http and fail.</li><li>At the certificate warning, tap <strong>Advanced</strong>, then <strong>Proceed</strong> (Chrome) or <strong>Show Details → visit this website</strong> (Safari). The page uses its own certificate, so this warning is expected, once per device.</li><li><strong>Set the Local grid&#x27;s side length and spacing</strong>, tap <strong>Local grid</strong>, and allow location when asked.</li><li>Tap <strong>▶ Start the music</strong>.</li></ol>
+<p><strong>Pixel and other Android phones</strong> need three things set once:</p>
+<ul><li>ZeroTier: in its <strong>Settings</strong>, turn on <strong>Allow mobile data</strong>, and have the phone authorized on the network at my.zerotier.com.</li><li>Chrome: <strong>Settings → Apps → Chrome → Permissions → Nearby devices → Allow</strong>. Without it Chrome can&#x27;t reach the PC and shows ERR_TOO_MANY_RETRIES.</li><li>Turn off any other VPN, such as <strong>VPN by Google</strong>, while you use ZeroTier: Android runs one VPN at a time.</li></ul>
+<p><strong>Screen and music.</strong> Phones pause web music when the screen turns off, so while music plays the page keeps the screen on. If the music stops anyway (a call, another app, locking the phone), it starts again when you come back to the page. Following your location also needs the page on screen.</p>
+<p><strong>Away from home.</strong> The phone can only reach the PC on the home network or ZeroTier. Elsewhere, the page would need to be hosted on a public HTTPS address.</p>
+<h2 id="troubleshooting">Troubleshooting</h2>
+<p>Most problems are a missing permission or the phone not reaching the PC; the PC server&#x27;s window logs every phone visit and location attempt (never your coordinates), which shows which one it is.</p>
+<div class="tw"><table><thead><tr><th>Problem</th><th>Fix</th></tr></thead><tbody><tr><td>No sound</td><td>Press <strong>▶ Start the music</strong>, check <strong>Volume</strong> and the device&#x27;s own volume and silent switch</td></tr><tr><td>An instrument drops out or comes in</td><td>Expected: each section has its own lineup. The Beacon song panel lists what&#x27;s playing now, and Edit song → Arrangement shows every section</td></tr><tr><td>The grid is smaller than the size I chose</td><td>A side holds at most 150 spacings; choose a wider Beacon every value to reach further</td></tr><tr><td>Page won&#x27;t open on the phone</td><td>Check the PC server is running with <code>--https</code>, the phone is on home Wi-Fi or ZeroTier, and the address starts with <strong>https://</strong></td></tr><tr><td>Chrome shows ERR_TOO_MANY_RETRIES</td><td>Allow <strong>Nearby devices</strong> for Chrome in the phone&#x27;s settings</td></tr><tr><td>ZeroTier says &quot;Not on Wi-Fi&quot;</td><td>Turn on <strong>Allow mobile data</strong> in ZeroTier&#x27;s Settings</td></tr><tr><td>ZeroTier says &quot;Access Denied&quot;</td><td>Authorize the phone&#x27;s node ID on the network at my.zerotier.com</td></tr><tr><td>No location prompt</td><td>Allow location for the browser in the phone&#x27;s settings, and for the site in the browser (the icon left of the address)</td></tr><tr><td>Grid starts in London</td><td>Location was blocked or unavailable; allow it and tap <strong>Center on me</strong>, or move with <strong>Jump to…</strong></td></tr><tr><td>The map stopped following me</td><td>Moving by hand or Auto-walk turns following off; tap <strong>Center on me</strong></td></tr><tr><td>Music stops when the screen turns off</td><td>Keep the page open while playing; if the phone refuses to keep the screen on, raise its screen timeout</td></tr><tr><td>Published page has no location</td><td>The published page can&#x27;t use GPS; use the PC server for location</td></tr></tbody></table></div>
+</main>
+</div>
+</body>
+</html>

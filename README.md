@@ -14,7 +14,7 @@ Generative music driven by where you are. Beacons are placed in a space: a 100 m
 | `scenes/studio.tscn` | SynthKit studio page, to try the instruments by hand. | open the scene, F6 |
 | `songs/` | Song packs (25 grid, 614 globe) exported from the browser generator, so both versions start from the same songs. | `node web/tools/export-songs.mjs` regenerates them |
 
-Published browser page (private until shared): https://claude.ai/artifact/FjUKz2qaULZhrvxKuq7EbN · User manual: https://claude.ai/artifact/1MCvFAJCSEtb4kNtWKFcrr
+Published browser page (private until shared): https://claude.ai/artifact/FjUKz2qaULZhrvxKuq7EbN · User manual: [web/manual.html](web/manual.html), served at /manual.html (built from the Claude Docs source, https://claude.ai/artifact/1MCvFAJCSEtb4kNtWKFcrr, with `web/tools/build-manual.py`)
 
 ## One song format, two players
 
