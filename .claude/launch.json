@@ -4,8 +4,21 @@
     {
       "name": "beacon-field",
       "runtimeExecutable": "python",
-      "runtimeArgs": ["web/serve.py", "8765"],
+      "runtimeArgs": [
+        "web/serve.py",
+        "8765"
+      ],
       "port": 8765
+    },
+    {
+      "name": "beacon-field-alt",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "web/serve.py",
+        "8777"
+      ],
+      "port": 8777,
+      "autoPort": false
     }
   ]
 }

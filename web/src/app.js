@@ -5,6 +5,7 @@ import { generateSong, validateSong, chordName, keyName, ROLES, ROLE_INSTRUMENT 
 import { songPosition, sectionName, clock, hasForm, totalBars, lengthSeconds, SECTION_LABEL, SECTION_COLOR, sectionSpec } from "./form.js";
 import { BeaconEngine } from "./engine.js";
 import { SongEditor } from "./editor.js";
+import { ListenerInput, planarSpace, geoSpace, localSpace, keyboardSource, pointerSource } from "./input/listener.js";
 
 const $ = (id) => document.getElementById(id);
 const MOOD_COLOR = { Drift: "#8fa7ff", Glow: "#f5c04a", Tide: "#2ec4b6", Pulse: "#ff4f9a", Rush: "#ff8a3d" };
@@ -39,12 +40,6 @@ const g = canvas.getContext("2d");
 const ui = {
   mode: "grid",
   zoom: "local",
-  target: null,
-  dragging: false,
-  downAt: null,
-  keys: new Set(),
-  wander: false,
-  heading: Math.random() * Math.PI * 2,
   speed: 1,
   zones: true,
   zoneImg: null,
@@ -253,8 +248,8 @@ function draw(now) {
   }
 
   // Target and listener.
-  if (ui.target) {
-    const [tx, ty] = v.toScreen(ui.target);
+  if (input.target) {
+    const [tx, ty] = v.toScreen(input.target);
     g.strokeStyle = C.accent; g.lineWidth = 1.5 * d;
     g.beginPath(); g.moveTo(tx - 6 * d, ty - 6 * d); g.lineTo(tx + 6 * d, ty + 6 * d); g.moveTo(tx + 6 * d, ty - 6 * d); g.lineTo(tx - 6 * d, ty + 6 * d); g.stroke();
   }
@@ -369,59 +364,33 @@ function speedPerSec() {
   return (ui.zoom === "world" ? 18 : 5) * ui.speed; // degrees per second
 }
 
-function step(dt) {
-  const p = engine.pos;
-  const sp = speedPerSec() * dt;
-  let dx = 0, dy = 0;
-  if (ui.keys.has("left")) dx -= 1;
-  if (ui.keys.has("right")) dx += 1;
-  if (ui.keys.has("up")) dy -= 1;
-  if (ui.keys.has("down")) dy += 1;
-  let next = null;
-  if (dx || dy) {
-    ui.target = null;
-    stopFollow("Walking by hand, so the map stopped following your location.");
-    const n = Math.hypot(dx, dy);
-    next = move(p, (dx / n) * sp, (dy / n) * sp);
-  } else if (ui.target) {
-    const [ex, ey] = delta(p, ui.target);
-    const dist = Math.hypot(ex, ey);
-    if (dist <= sp) { next = { ...ui.target }; if (!ui.dragging) ui.target = null; }
-    else next = move(p, (ex / dist) * sp, (ey / dist) * sp);
-  } else if (ui.wander) {
-    ui.heading += (Math.random() - 0.5) * 2.2 * dt;
-    next = move(p, Math.cos(ui.heading) * sp * 0.6, Math.sin(ui.heading) * sp * 0.6);
-    if (ui.mode === "grid" || ui.mode === "local") {
-      const f = engine.field;
-      const q = ui.mode === "grid" ? next : f.toXY(next);
-      const lim = ((f.n - 1) / 2) * f.spacing + f.spacing * 0.3;
-      if (Math.abs(q.x) > lim) ui.heading = Math.PI - ui.heading;
-      if (Math.abs(q.y) > lim) ui.heading = -ui.heading;
-    } else if (Math.abs(next.lat) > 84) ui.heading = -ui.heading;
+// Walking comes from ListenerKit (src/input/listener.js): keyboard and gamepad,
+// press / drag / tap on the map, auto-walk. This page only reacts to it.
+const localNow = () => localSpace(engine.field);
+const spaces = {
+  grid: planarSpace({ half: 250, margin: 20 }),
+  globe: geoSpace({ maxLat: 84 }),
+  // The local grid is rebuilt as you travel, so always ask the current one.
+  local: { kind: "local", clamp: (p) => localNow().clamp(p), step: (...a) => localNow().step(...a), toward: (...a) => localNow().toward(...a), bounce: (...a) => localNow().bounce(...a) },
+};
+const input = new ListenerInput({ space: spaces.grid, position: { x: -38, y: 27 }, speed: speedPerSec });
+input.add(keyboardSource(window));
+const pointer = input.add(pointerSource(canvas, (x, y) => view().toWorld(x, y)));
+input.on("moved", (p) => engine.setPosition(p));
+input.on("manual", (kind) => stopFollow(kind === "pointer" ? "Moved by hand, so the map stopped following your location." : "Walking by hand, so the map stopped following your location."));
+input.on("wander", (on) => { $("wander").checked = on; if (on) stopFollow("Auto-walk is on, so the map stopped following your location."); });
+input.on("action", (name, arg) => {
+  if (name === "toggle_play") togglePlay();
+  else if (name === "select") {
+    const b = beaconAt(arg.x, arg.y);
+    if (b) { select(b.id); input.setTarget({ ...b.pos }); }
   }
-  if (next) engine.setPosition(next);
-}
+});
 
-/** Screen-direction offset between two positions (x right, y down). */
-function delta(a, b) {
-  if (ui.mode === "grid") return [b.x - a.x, b.y - a.y];
-  if (ui.mode === "local") { const p = engine.field.toXY(a), q = engine.field.toXY(b); return [q.x - p.x, -(q.y - p.y)]; }
-  return [((b.lon - a.lon + 540) % 360) - 180, -(b.lat - a.lat)];
-}
-
-function move(p, dx, dy) {
-  if (ui.mode === "grid") return { x: p.x + dx, y: p.y + dy };
-  if (ui.mode === "local") { const q = engine.field.toXY(p); return engine.field.fromXY({ x: q.x + dx, y: q.y - dy }); }
-  // Degrees of longitude get shorter toward the poles; keep walking speed even.
-  const k = 1 / Math.max(0.15, Math.cos(p.lat * Math.PI / 180));
-  return normalizeLatLon({ lat: p.lat - dy, lon: p.lon + dx * Math.min(k, 4) });
-}
-
-// ------------------------------------------------------------------ input
-
-function canvasPoint(e) {
-  const r = canvas.getBoundingClientRect();
-  return [(e.clientX - r.left) * (canvas.width / r.width), (e.clientY - r.top) * (canvas.height / r.height)];
+function step(dt) {
+  input.space = spaces[ui.mode];
+  input.setPosition(engine.pos, false); // other code moves the listener too (jumps, re-centering)
+  input.tick(dt);
 }
 
 function beaconAt(x, y) {
@@ -434,39 +403,6 @@ function beaconAt(x, y) {
   }
   return best;
 }
-
-canvas.addEventListener("pointerdown", (e) => {
-  canvas.setPointerCapture(e.pointerId);
-  const [x, y] = canvasPoint(e);
-  ui.dragging = true;
-  ui.downAt = [x, y];
-  stopFollow("Moved by hand, so the map stopped following your location.");
-  ui.target = view().toWorld(x, y);
-});
-canvas.addEventListener("pointermove", (e) => {
-  if (!ui.dragging) return;
-  const [x, y] = canvasPoint(e);
-  ui.target = view().toWorld(x, y);
-});
-canvas.addEventListener("pointerup", (e) => {
-  const [x, y] = canvasPoint(e);
-  ui.dragging = false;
-  if (ui.downAt && Math.hypot(x - ui.downAt[0], y - ui.downAt[1]) < 8 * (ui.dpr || 1)) {
-    const b = beaconAt(x, y);
-    if (b) { select(b.id); ui.target = { ...b.pos }; }
-  }
-});
-canvas.addEventListener("pointercancel", () => { ui.dragging = false; });
-
-const KEYMAP = { ArrowLeft: "left", KeyA: "left", ArrowRight: "right", KeyD: "right", ArrowUp: "up", KeyW: "up", ArrowDown: "down", KeyS: "down" };
-window.addEventListener("keydown", (e) => {
-  if (e.target.closest("input, textarea, select")) return;
-  const k = KEYMAP[e.code];
-  if (k) { ui.keys.add(k); e.preventDefault(); }
-  if (e.code === "Space" && !e.target.closest("button")) { e.preventDefault(); togglePlay(); }
-});
-window.addEventListener("keyup", (e) => { const k = KEYMAP[e.code]; if (k) ui.keys.delete(k); });
-window.addEventListener("blur", () => ui.keys.clear());
 
 // ------------------------------------------------------------------ controls
 
@@ -520,7 +456,7 @@ window.addEventListener("focus", () => engine.resume());
 $("play").addEventListener("click", togglePlay);
 $("play2").addEventListener("click", togglePlay);
 $("vol").addEventListener("input", (e) => engine.setVolume(+e.target.value));
-$("wander").addEventListener("change", (e) => { ui.wander = e.target.checked; if (ui.wander) stopFollow("Auto-walk is on, so the map stopped following your location."); });
+$("wander").addEventListener("change", (e) => { input.wander = e.target.checked; });
 $("speed").addEventListener("input", (e) => { ui.speed = +e.target.value; });
 $("zones").addEventListener("change", (e) => { ui.zones = e.target.checked; });
 
@@ -542,7 +478,7 @@ function setMode(mode) {
   if (mode === "local" && !fields.local) fields.local = makeLocalGridField(from || { lat: 51.507, lon: -0.128 }, ui.localKm, ui.spacingKm);
   engine.setField(fields[mode]);
   if (mode === "globe") engine.setPosition(from || { lat: 51.507, lon: -0.128 });
-  ui.target = null;
+  input.target = null;
   closeEditor();
   ui.selected = null;
   ui.zoneKey = "";
@@ -595,7 +531,7 @@ $("zoomLocal").addEventListener("click", () => setZoom("local"));
 $("zoomWorld").addEventListener("click", () => setZoom("world"));
 
 function jumpTo(lat, lon, how) {
-  ui.target = null;
+  input.target = null;
   if (ui.mode === "local") {
     stopFollow();
     centerLocal({ lat, lon });
@@ -661,7 +597,7 @@ function startFollow() {
       const p = { lat: pos.coords.latitude, lon: pos.coords.longitude };
       const acc = Math.round(pos.coords.accuracy || 0);
       centerLocal(p, { keepIfClose: !first });
-      ui.target = null;
+      input.target = null;
       if (first) {
         setMsg("fieldMsg", `Centered on you (accurate to ${acc < 1000 ? acc + " m" : (acc / KM_M).toFixed(1) + " km"}). Following your location.`);
         devLog("position", { accuracy: acc });
@@ -694,7 +630,7 @@ function stopFollow(why) {
   if (why) setMsg("fieldMsg", why);
 }
 $("follow").addEventListener("change", (e) => {
-  if (e.target.checked) { ui.wander = false; $("wander").checked = false; startFollow(); }
+  if (e.target.checked) { input.wander = false; startFollow(); }
   else stopFollow("Stopped following your location.");
 });
 $("city").addEventListener("change", (e) => {
@@ -804,7 +740,7 @@ function closeEditor() { editorId = null; editor.close(); $("editorWrap").hidden
 $("editSong").addEventListener("click", () => openEditor(inspectedId()));
 $("closeEditor").addEventListener("click", closeEditor);
 
-$("goBeacon").addEventListener("click", () => { const id = inspectedId(); const b = engine.field.beacons.find((x) => x.id === id); if (b) ui.target = { ...b.pos }; });
+$("goBeacon").addEventListener("click", () => { const id = inspectedId(); const b = engine.field.beacons.find((x) => x.id === id); if (b) input.target = { ...b.pos }; });
 $("regen").addEventListener("click", () => {
   const id = inspectedId();
   const s = generateSong(`${engine.field.kind}:${id}:${Date.now()}`);
@@ -993,6 +929,9 @@ $("blend").addEventListener("click", (e) => {
 // ------------------------------------------------------------------ loop
 
 let last = performance.now();
+// Local dev server only (web/serve.py sets BEACON_DEV_LOG): a handle for poking at the page from devtools.
+if (window.BEACON_DEV_LOG) window.__beacon = { engine, input, ui, step, setMode };
+
 function frame(now) {
   const dt = Math.min(0.1, (now - last) / 1000);
   last = now;
