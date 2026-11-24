@@ -35,6 +35,46 @@ The test playfield for MusicBeaconXR. You walk a listener between music beacons;
 - WebXR needs a secure page: run `python web/serve.py --https` and open the https address on the phone or headset (localhost also counts as secure on the PC itself).
 - No libraries: a small WebGL renderer in `src/ar/gl.js`; placement math in `src/ar/placement.js`.
 
+## Instrument Table (MusicInputKit)
+
+`play.html` (the **Instruments ↗** button) is a table of 3D instruments you play with your hands instead of a piano keyboard. It is the browser twin of the Godot Instrument Table and of `addons/music_input_kit`: same objects, names, patches and rules.
+
+- **Notes:**
+  - chime bars (strike; sweep for a glissando)
+  - light strings (pluck, pull to bend, sweep to strum)
+  - the theremin orb (left to right is pitch; height and depth shape the sound)
+  - a pitch ribbon (slide)
+  - drum pads (the rim is brighter than the middle)
+  - chord blocks (hold a chord, lift to open it up)
+  - a music-box wheel (tap to place pegs, flick to spin)
+- **Shaping:**
+  - a twist dial
+  - a fader
+  - a spring lever (a whammy on the lead's pitch)
+  - an XY pad
+  - a flywheel (flick it; its speed drives tremolo)
+  - a tilt cube
+  - LOCK / KEY / SCALE buttons
+- **Keep notes in key:** the checkbox, `L`, or the LOCK button. On: everything snaps to the key and scale, and the orb and ribbon move in steps. Off: all 12 notes, and the orb and ribbon slide freely.
+- **Patches ▸** connects any moving part to any knob of any part (filter, resonance, vibrato, reverb, delay, tremolo, bend, volume...). Layout and scale are saved in the browser.
+- **Mouse and touch:**
+  - Click or tap to play, and drag to slide, bend and strum.
+  - The wheel turns dials and spins wheels.
+  - Drag empty space to look around; `R` resets the view.
+  - Several fingers play at once.
+  - Phones in portrait see the table from above, long side up the screen.
+- **VR / AR** (Quest Browser, Chrome on Android with a headset or AR):
+  - The table appears in front of you, at arm's length.
+  - Hit and touch the objects with your controllers or fingers (hand tracking). How fast you hit sets how loud the note is.
+  - Grip to hold and twist; the trigger plays objects out of reach.
+  - Right stick sets the table height; left stick press brings the table to you.
+  - Haptics where the controller has them.
+- **Code:**
+  - `src/play/kit.js`: the kit, with no audio and no DOM. Objects describe themselves as shapes, and drivers turn the mouse, touch and XR hands into touches.
+  - `src/play/sound.js`: plays the kit on the Web Audio synths. Strikes use Driftwood and Pulsar; held notes use a small live voice that bends and follows knobs while it sounds.
+  - `src/play.js`: the page.
+  - Tests: `web/tests/play.test.mjs`.
+
 ## ListenerKit (input)
 
 `src/input/listener.js` holds the listener position and every way to move it, with no audio or page code, so other web apps can use it. It mirrors the Godot kit in `addons/listener_kit` (same names and rules).
@@ -72,6 +112,7 @@ The test playfield for MusicBeaconXR. You walk a listener between music beacons;
 | Audio | `src/engine.js`, `src/synths.js` | A look-ahead scheduler (25 ms tick, 120 ms ahead) plays the steps sample-accurately on Web Audio versions of the six SynthKit instruments. |
 | UI | `index.html`, `src/app.js` | Map, listener, readouts, beacon song inspector, song import/export. |
 | Synths page | `synths.html`, `src/synthpage.js` | A front panel, keyboard and demo loop for each instrument. |
+| Instrument Table | `play.html`, `src/play.js`, `src/play/` | 3D instruments played by hand (mouse, touch, WebXR), patchable to any knob. |
 
 The browser instruments are ports of the SynthKit designs, not the C++ engine itself:
 

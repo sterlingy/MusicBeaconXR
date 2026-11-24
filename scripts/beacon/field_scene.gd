@@ -38,9 +38,42 @@ func _ready() -> void:
 	_build_beacons()
 	hud = BeaconHud.new(player)
 	add_child(hud)
+	_build_buttons()
 	_build_input()
 	input.jump_to(Vector2(-38, 27))
 	_parse_args()
+
+
+## Touch buttons (phones have no keys): play, globe, instruments. Top right.
+func _build_buttons() -> void:
+	var layer := CanvasLayer.new()
+	layer.name = "Buttons"
+	add_child(layer)
+	var row := HBoxContainer.new()
+	row.anchor_left = 1.0
+	row.anchor_right = 1.0
+	row.offset_left = -330
+	row.offset_right = -12
+	row.offset_top = 12
+	row.alignment = BoxContainer.ALIGNMENT_END
+	row.add_theme_constant_override("separation", 8)
+	layer.add_child(row)
+	for b in [["▶ Play", func(): Transport.toggle()], ["Globe", func(): get_tree().change_scene_to_file("res://scenes/globe_field.tscn")], ["Instruments", func(): get_tree().change_scene_to_file("res://scenes/instrument_table.tscn")]]:
+		var btn := Button.new()
+		btn.text = b[0]
+		btn.focus_mode = Control.FOCUS_NONE
+		btn.custom_minimum_size = Vector2(0, 40)
+		for state in ["normal", "hover", "pressed"]:
+			var sb := StyleBoxFlat.new()
+			sb.bg_color = Color(0.08, 0.11, 0.15, 0.88) if state != "pressed" else Color("2a3644")
+			sb.border_color = Color("ffb547") if state == "hover" else Color("2a3644")
+			sb.set_border_width_all(1)
+			sb.set_corner_radius_all(8)
+			sb.content_margin_left = 12
+			sb.content_margin_right = 12
+			btn.add_theme_stylebox_override(state, sb)
+		btn.pressed.connect(b[1])
+		row.add_child(btn)
 
 
 ## Walking comes from ListenerKit (keyboard / gamepad, click or tap, wander); this

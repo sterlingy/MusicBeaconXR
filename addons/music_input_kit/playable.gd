@@ -76,12 +76,18 @@ func drag_plane(hit: Vector3) -> Array:
 
 # ---- geometry
 
-## Distance along the ray to the box, or -1 if it misses.
+## What a pointer ray can hit (default: the whole box). Objects whose box
+## reaches above them for XR hands override this.
+func pick_box() -> AABB:
+	return box
+
+
+## Distance along the ray to the pick box, or -1 if it misses.
 func hit_ray(origin: Vector3, dir: Vector3) -> float:
 	var inv := global_transform.affine_inverse()
 	var o := inv * origin
 	var d := (inv.basis * dir)
-	var hit: Variant = box.intersects_ray(o, d)
+	var hit: Variant = pick_box().intersects_ray(o, d)
 	if hit == null:
 		return -1.0
 	return origin.distance_to(global_transform * (hit as Vector3))

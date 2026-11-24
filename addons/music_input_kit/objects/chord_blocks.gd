@@ -54,6 +54,11 @@ func chord_of(i: int) -> Array:
 	return kit.scale.chord(kit.base_note - 12, i, sevenths)
 
 
+## Pointers hit the blocks themselves; the reach above them is for XR hands.
+func pick_box() -> AABB:
+	return AABB(box.position, Vector3(box.size.x, block + 0.01, box.size.z))
+
+
 func block_at(local: Vector3) -> int:
 	return clampi(int(frac(local, 0) * count), 0, count - 1)
 

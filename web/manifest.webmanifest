@@ -9,5 +9,5 @@
   "background_color": "#0e131a",
   "theme_color": "#0e131a",
   "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }],
-  "shortcuts": [{ "name": "AR / VR", "url": "ar.html" }, { "name": "Synths", "url": "synths.html" }]
+  "shortcuts": [{ "name": "AR / VR", "url": "ar.html" }, { "name": "Instrument Table", "url": "play.html" }, { "name": "Synths", "url": "synths.html" }]
 }
