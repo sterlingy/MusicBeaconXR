@@ -13,10 +13,17 @@ extends Node
 const PARTS := {
 	"mallet": ["Driftwood", "Marimba"],
 	"harp": ["Driftwood", "Steel Harp"],
-	"lead": ["Comet", "Glass Sine"],
+	"lead": ["Prism", "Comet Tail"],
 	"bass": ["Undertow", "Deep Current"],
 	"drums": ["Pulsar", "Classic Eight"],
-	"keys": ["Lumen", "Soft Keys"],
+	"keys": ["Prism", "Prism Keys"],
+	"pad": ["Prism", "Aurora Pad"],
+}
+## Generic knob names the objects patch to by default (shared with the browser
+## twin), and what they mean on an instrument whose own ids differ.
+const ALIASES := {
+	"Prism": {"filter.cutoff": "f1.cutoff", "filter.resonance": "f1.resonance", "filter.emphasis": "f1.resonance",
+		"reverb.mix": "send.space", "delay.mix": "send.echo", "chorus.mix": "fx1.amount", "vibrato.depth": "lfo1.vibrato"},
 }
 const BEND_PARAMS := ["perf.bend_range", "ctrl.bend_range", "voice.bend_range"]
 
@@ -58,6 +65,9 @@ func _make_rig(part: String, instrument: String, preset_name: String) -> void:
 		info[p.id] = p
 	_info[part] = info
 	_bend_range[part] = 2.0
+	if instrument == "Prism":
+		rig.set_param("voice.quality", 0 if OS.has_feature("mobile") else 2)
+		rig.set_param("voice.budget", 12 if OS.has_feature("mobile") else 24)
 	for b in BEND_PARAMS:
 		if info.has(b):
 			# Continuous objects bend up to an octave either way.
@@ -81,6 +91,9 @@ func targets() -> Array:
 	for part in PARTS:
 		out.append([part, "@volume", "%s · volume" % part])
 		out.append([part, "@bend", "%s · pitch bend" % part])
+		var inst: String = PARTS[part][0]
+		for alias in ALIASES.get(inst, {}):
+			out.append([part, alias, "%s · %s" % [part, alias]])
 		for id in _info.get(part, {}):
 			out.append([part, id, "%s · %s" % [part, id]])
 	return out
@@ -122,6 +135,7 @@ func _on_control(part: String, param: String, value: float) -> void:
 		"@volume":
 			rig.set_volume_db(linear_to_db(maxf(value, 0.0001)))
 		_:
+			param = ALIASES.get(rig.instrument, {}).get(param, param)
 			var info: Dictionary = _info[part].get(param, {})
 			if info.is_empty():
 				return

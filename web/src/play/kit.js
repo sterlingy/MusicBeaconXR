@@ -585,6 +585,8 @@ export class ChordBlocks extends Playable {
     this.gap = 0.015;
     this.reach = 0.3;
     this.sevenths = false;
+    /** Another part that doubles every chord an octave lower (a pad under the keys); "" for none. */
+    this.layerPart = o.layerPart ?? "pad";
     const w = this.count * this.block + (this.count - 1) * this.gap;
     this.width = w;
     this.box = { min: [-w / 2, 0, -this.block / 2], max: [w / 2, this.block + this.reach, this.block / 2] };
@@ -601,7 +603,10 @@ export class ChordBlocks extends Playable {
     const l = this.localOf(h);
     if (h.isXR() && l[1] > this.block + 0.015) return;
     const i = this.blockAt(l), s = h.strikeStrength(this.worldDir([0, 1, 0]));
-    const voices = this.chordOf(i).map((n) => this.kit.startNote(this.part, n, 0.45 + 0.45 * s));
+    const voices = this.chordOf(i).flatMap((n) => [
+      this.kit.startNote(this.part, n, 0.45 + 0.45 * s),
+      ...(this.layerPart ? [this.kit.startNote(this.layerPart, n - 12, 0.6)] : []),
+    ]);
     this.holds.set(h.id, { i, voices, y0: l[1] });
     this.flash(i, 0.4);
     h.pulse(s * 0.5);
@@ -1107,7 +1112,7 @@ export function makeTable(kit, frame) {
     o(DrumPads, "Pads", [0.69, 0, -0.02]),
     o(PitchRibbon, "Ribbon", [-0.64, 0, 0.3], { length: 0.55 }),
     o(TwistDial, "Dial", [-0.22, 0, 0.3], { label: "Keys tone", toPart: "keys", toParam: "filter.cutoff", value: 0.6 }),
-    o(SlideFader, "Fader", [-0.04, 0, 0.3], { label: "Keys space", toPart: "keys", toParam: "reverb.mix", value: 0.35 }),
+    o(SlideFader, "Fader", [-0.04, 0, 0.3], { label: "Pad level", toPart: "pad", toParam: "@volume", value: 0.6 }),
     o(SlideFader, "Whammy", [0.1, 0, 0.3], { label: "Lead bend", springBack: true, toPart: "lead", toParam: "@bend", tint: "#ff4f9a" }),
     o(XYPad, "XY", [0.32, 0, 0.3], { label: "Bass filter", toPart: "bass", xParam: "filter.cutoff", yParam: "filter.emphasis" }),
     o(Flywheel, "Flywheel", [0.58, 0, 0.3], { label: "Shimmer" }),

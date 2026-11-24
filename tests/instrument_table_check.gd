@@ -22,20 +22,31 @@ func _ready() -> void:
 	for part in SynthBridge.PARTS:
 		check(bridge.rigs.has(part), "a rig for %s" % part)
 	var keys: InstrumentRig = bridge.rigs["keys"]
-	check(keys.instrument == "Lumen" and keys.synth.get_param("voice.bend_range") == 12.0, "keys is Lumen and bends an octave")
+	check(keys.instrument == "Prism" and keys.synth.get_param("voice.bend_range") == 12.0, "keys is Prism and bends an octave")
+	check(bridge.rigs.has("pad") and bridge.rigs["pad"].instrument == "Prism", "there's a pad part, on Prism")
 
-	# The dial is patched to the Lumen filter: all the way up is 18 kHz, half way is the log middle.
+	# The dial is patched to the keys' filter ("filter.cutoff", Prism's f1.cutoff): all the way up is 18 kHz.
 	var dial: TwistDial = table.objects["Dial"]
 	dial.set_value(1.0)
-	check(absf(keys.synth.get_param("filter.cutoff") - 18000.0) < 1.0, "dial up = cutoff 18 kHz (got %s)" % keys.synth.get_param("filter.cutoff"))
+	check(absf(keys.synth.get_param("f1.cutoff") - 18000.0) < 1.0, "dial up = cutoff 18 kHz (got %s)" % keys.synth.get_param("f1.cutoff"))
 	dial.set_value(0.5)
 	var mid := sqrt(30.0 * 18000.0)
-	check(absf(keys.synth.get_param("filter.cutoff") - mid) / mid < 0.01, "dial half way = the log middle (got %s)" % keys.synth.get_param("filter.cutoff"))
+	check(absf(keys.synth.get_param("f1.cutoff") - mid) / mid < 0.01, "dial half way = the log middle (got %s)" % keys.synth.get_param("f1.cutoff"))
 
-	# Repatch the dial to Comet's resonance: the dial now moves that instead.
+	# Repatch the dial to the lead's resonance: the dial now moves that instead.
 	kit.patches.set_patch("Dial.turn", "lead", "filter.resonance")
 	dial.set_value(0.3)
-	check(absf(bridge.rigs["lead"].synth.get_param("filter.resonance") - 3.0) < 0.01, "repatched: the dial sets Comet resonance to 3")
+	check(absf(bridge.rigs["lead"].synth.get_param("f1.resonance") - 3.0) < 0.01, "repatched: the dial sets the lead's resonance to 3")
+	# Chord blocks layer the pad an octave under the keys.
+	var pad_events := []
+	bridge.rigs["pad"].played.connect(func(e): pad_events.append(e))
+	var blocks: ChordBlocks = table.objects["Blocks"]
+	var bh := PlayHand.new("mouse", 7)
+	bh.position = blocks.global_transform * Vector3(blocks.box.position.x + 0.02, blocks.block * 0.5, 0)
+	blocks.hand_down(bh)
+	var pad_on := pad_events.filter(func(e): return e.type == "on").map(func(e): return e.note)
+	check(pad_on == [36, 40, 43], "the C block also holds C major on the pad, an octave down (got %s)" % [pad_on])
+	blocks.hand_up(bh)
 
 	# A note from the bars reaches the Driftwood rig.
 	var played := []

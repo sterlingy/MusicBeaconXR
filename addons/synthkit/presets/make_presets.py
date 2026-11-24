@@ -293,6 +293,75 @@ P["Tangle"] = [
 ]
 
 
+# Prism: one engine, three roles. Enum values: engines Off 0, Analog 1, Wavetable 2,
+# FM 3, Harmonic 4; tables Classic 0, Pulse 1, Vocal 2, Sweep 3, Bell 4, Glass 5,
+# Organ 6, Digital 7; filters LP24 0, LP12 1, BP 2, HP 3, Notch 4, Ladder 5, Comb 6,
+# Formant 7; mod sources None 0, Amp Env 1, Env2 2, Env3 3, LFO1 4, LFO2 5, LFO3 6,
+# Velocity 7, Key 8, Wheel 9, Pressure 10, Random 11, Macro1-4 12-15; targets Pitch 1,
+# A Pitch 2, B Pitch 3, A Timbre 4, A Morph 5, A Level 6, B Timbre 7, B Morph 8,
+# B Level 9, FM 10, Ring 11, Fold 12, Noise 13, F1 Cut 14, F1 Res 15, F2 Cut 16,
+# F2 Res 17, Balance 18, Amp 19, Pan 20, Detune 21, LFO1 Rate 22.
+def mods(*slots):
+    out = {}
+    for i, (src, dst, amt) in enumerate(slots):
+        out["mod%d.src" % (i + 1)] = src
+        out["mod%d.dst" % (i + 1)] = dst
+        out["mod%d.amount" % (i + 1)] = amt
+    return out
+
+
+P["Prism"] = [
+    ("Prism Keys", "Keys: a wavetable saw and a detuned square; Macro 1 opens the filter, Macro 2 warps the wave.", {
+        "a.type": 2, "a.table": 0, "a.timbre": 0.6, "b.type": 1, "b.wave": 1, "b.level": 4,
+        "f1.cutoff": 2200, "f1.resonance": 2, "f1.env": 4, "env2.decay": 0.5, "env2.sustain": 2,
+        "env1.attack": 0.003, "env1.decay": 1.2, "env1.sustain": 6, "env1.release": 0.6,
+        "lfo2.rate": 0.3, "fx1.type": 1, "fx1.amount": 3, "send.space": 3,
+        **mods((7, 14, 0.25), (9, 4, 0.4), (12, 14, 0.6), (13, 5, 0.8), (5, 4, 0.1))}),
+    ("Glass EP", "Keys: FM tine piano, brighter the harder you play, with a gentle tremolo.", {
+        "a.type": 3, "a.ratio": 1, "a.timbre": 0.3, "a.morph": 0.1, "b.type": 3, "b.ratio": 11, "b.timbre": 0.2, "b.level": 2,
+        "f1.type": 1, "f1.cutoff": 9000, "f1.env": 0, "env1.attack": 0.002, "env1.decay": 2.5, "env1.sustain": 2, "env1.release": 0.5,
+        "env3.decay": 0.3, "lfo2.rate": 4.5, "lfo2.shape": 0, "fx1.type": 2, "fx1.amount": 2, "fx1.rate": 0.3, "send.space": 2,
+        **mods((3, 4, 0.5), (7, 4, 0.4), (5, 20, 0.3), (12, 7, 0.6))}),
+    ("Drawbar Drift", "Keys: organ registrations with a rotary-style chorus; Macro 1 pulls the drawbars.", {
+        "a.type": 2, "a.table": 6, "a.timbre": 0.35, "a.unison": 2, "a.detune": 6, "b.type": 0,
+        "f1.type": 1, "f1.cutoff": 8000, "f1.env": 0, "env1.attack": 0.005, "env1.sustain": 10, "env1.release": 0.08,
+        "fx1.type": 1, "fx1.amount": 6, "fx1.rate": 0.9, "send.space": 2,
+        **mods((12, 4, 0.65), (9, 22, 0.5), (4, 20, 0.15))}),
+    ("Comet Tail", "Lead: three detuned saws through the ladder, legato glide, vibrato; pressure opens it.", {
+        "voice.mode": 2, "voice.glide": 0.06, "voice.priority": 2, "a.unison": 3, "a.detune": 14,
+        "b.type": 1, "b.wave": 1, "b.coarse": 12, "b.level": 3,
+        "f1.type": 5, "f1.cutoff": 1800, "f1.resonance": 4, "f1.env": 5, "env2.attack": 0.01, "env2.decay": 0.35, "env2.sustain": 4,
+        "env1.sustain": 9, "env1.release": 0.25, "lfo1.rate": 5.5, "lfo1.vibrato": 14, "fx1.type": 3, "fx1.amount": 2, "send.echo": 3, "send.space": 2,
+        **mods((9, 14, 0.4), (10, 14, 0.3), (12, 15, 0.5))}),
+    ("Talking Lead", "Lead: a vowel wavetable that talks on its own; the mod wheel makes it speak faster.", {
+        "voice.mode": 1, "voice.glide": 0.03, "voice.priority": 2, "a.type": 2, "a.table": 2, "a.timbre": 0.3, "a.level": 9, "out.volume": 10,
+        "b.type": 4, "b.timbre": 0.4, "b.morph": 1, "b.coarse": -12, "b.level": 3,
+        "f1.type": 1, "f1.cutoff": 5000, "f1.env": 2, "env1.sustain": 9, "env1.release": 0.2,
+        "lfo1.rate": 5.2, "lfo1.vibrato": 12, "lfo2.rate": 0.6, "lfo2.shape": 5, "send.echo": 2, "send.space": 2,
+        **mods((5, 4, 0.35), (9, 4, 0.5), (7, 14, 0.2))}),
+    ("Aurora Pad", "Pad: a four-voice wavetable swell over harmonics, slowly evolving; low priority so leads cut through.", {
+        "voice.priority": 0, "a.type": 2, "a.table": 3, "a.timbre": 0.35, "a.unison": 4, "a.detune": 18,
+        "b.type": 4, "b.timbre": 0.5, "b.morph": 0.3, "b.coarse": 12, "b.level": 4,
+        "f1.cutoff": 1400, "f1.resonance": 2, "f1.env": 1, "f2.type": 2, "f2.cutoff": 2400, "f2.resonance": 3,
+        "filter.routing": 1, "filter.balance": 0.25, "env1.attack": 1.6, "env1.decay": 2, "env1.sustain": 8, "env1.release": 3.5,
+        "env3.attack": 4, "env3.decay": 6, "env3.sustain": 6, "lfo2.rate": 0.11, "lfo3.rate": 0.08,
+        "fx1.type": 1, "fx1.amount": 5, "fx2.type": 2, "fx2.amount": 3, "fx2.rate": 0.1, "send.space": 6,
+        **mods((3, 4, 0.4), (6, 14, 0.15), (5, 7, 0.3), (12, 14, 0.5), (13, 4, 0.5))}),
+    ("Glass Choir", "Pad: a vowel choir through the formant filter, drifting between vowels.", {
+        "voice.priority": 0, "a.type": 2, "a.table": 2, "a.timbre": 0.5, "a.unison": 3, "a.detune": 10,
+        "b.type": 2, "b.table": 5, "b.timbre": 0.3, "b.coarse": 12, "b.level": 3,
+        "f1.type": 7, "f1.cutoff": 1200, "f1.resonance": 4, "f1.env": 0, "f1.keytrack": 0, "f2.type": 1, "f2.cutoff": 6000,
+        "env1.attack": 1.2, "env1.sustain": 9, "env1.release": 3, "lfo2.rate": 0.07, "send.space": 7, "out.volume": 3.8,
+        **mods((5, 14, 0.25), (12, 14, 0.6), (9, 21, 0.4))}),
+    ("Dust Halo", "Pad: harmonics, a hint of FM and noise, a touch of crush; each note wanders in the stereo field.", {
+        "voice.priority": 0, "a.type": 4, "a.timbre": 0.6, "a.morph": 0.5, "b.type": 3, "b.ratio": 4, "b.timbre": 0.2, "b.level": 2.5,
+        "mix.noise": 1.5, "mix.fold": 1, "f1.type": 1, "f1.cutoff": 2500, "f1.env": 1,
+        "env1.attack": 2.5, "env1.sustain": 8, "env1.release": 4, "lfo3.rate": 0.15,
+        "fx1.type": 1, "fx1.amount": 4, "fx2.type": 4, "fx2.amount": 2, "send.space": 7,
+        **mods((6, 20, 0.4), (11, 7, 0.3), (12, 12, 0.6), (13, 13, 0.4))}),
+]
+
+
 def slug(name):
     return re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_")
 

@@ -19,6 +19,18 @@
       ],
       "port": 8777,
       "autoPort": false
+    },
+    {
+      "name": "site-static",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8790",
+        "--directory",
+        "build/site"
+      ],
+      "port": 8790
     }
   ]
 }

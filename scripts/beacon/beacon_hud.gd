@@ -4,7 +4,7 @@ extends CanvasLayer
 ## active beacons with their weights, and each part's level.
 
 const ACCENT := Color("ffb547")
-const ROLE_COLOR := {"drums": Color("ff8a3d"), "bass": Color("2ec4b6"), "keys": Color("f5c04a"), "lead": Color("ff4f9a"), "pluck": Color("9ccc65"), "texture": Color("8b6cf0")}
+const ROLE_COLOR := {"drums": Color("ff8a3d"), "bass": Color("2ec4b6"), "keys": Color("f5c04a"), "lead": Color("ff4f9a"), "pluck": Color("9ccc65"), "texture": Color("8b6cf0"), "pad": Color("7ad7ff")}
 
 var player: BeaconPlayer
 var help_text := ""
@@ -56,7 +56,7 @@ func _ready() -> void:
 		v.add_child(row)
 		_rows.append({"label": l, "bar": bar})
 	v.add_child(HSeparator.new())
-	for role in BeaconMixer.ROLES:
+	for role in BeaconPlayer.PARTS:
 		var h := HBoxContainer.new()
 		var l := _label(role.capitalize(), 13, Color.WHITE)
 		l.custom_minimum_size.x = 70

@@ -20,3 +20,6 @@ web/.cert/
 
 # Export output
 build/
+
+# Listening demos rendered by tools/prism_demo.gd (large; regenerate any time)
+media/prism-demos/

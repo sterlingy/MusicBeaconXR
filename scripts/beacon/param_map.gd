@@ -40,33 +40,26 @@ static func to_synth(role: String, p: Dictionary) -> Dictionary:
 			if p.has("fenv.decay"): o["fenv.decay"] = clampf(float(p["fenv.decay"]), 0.004, 10)
 			if p.has("glide"): o["ctrl.glide"] = clampf(float(p["glide"]), 0, 5)
 		"lead":
-			if p.has("osc.wave"): o["osc1.wave"] = OSC_WAVE.get(p["osc.wave"], 0)
-			if p.has("osc2.semis"): o["osc2.semi"] = clampf(float(p["osc2.semis"]), -24, 24)
-			if p.has("filter.cutoff"): o["filter.cutoff"] = clampf(float(p["filter.cutoff"]), 30, 18000)
-			if p.has("filter.resonance"): o["filter.resonance"] = clampf(float(p["filter.resonance"]), 0, 10)
-			if p.has("vibrato.depth"): o["vibrato.depth"] = clampf(float(p["vibrato.depth"]) / 4.0, 0, 10)
-			if p.has("vibrato.rate"): o["vibrato.rate"] = clampf(float(p["vibrato.rate"]), 0.1, 12)
-			if p.has("portamento"):
-				var g := float(p["portamento"])
-				o["perf.glide_mode"] = 1 if g > 0.001 else 0
-				o["perf.glide"] = clampf(g, 0, 2)
-			if p.has("delay.send"):
-				o["delay.on"] = 1 if float(p["delay.send"]) > 0.01 else 0
-				o["delay.mix"] = clampf(float(p["delay.send"]) * 10.0, 0, 10)
-			if p.has("aenv.release"): o["aenv.release"] = clampf(float(p["aenv.release"]), 0.005, 8)
+			# Prism: the base preset makes the sound; the song sets its tone, motion and space.
+			if p.has("filter.cutoff"): o["f1.cutoff"] = clampf(float(p["filter.cutoff"]), 30, 18000)
+			if p.has("filter.resonance"): o["f1.resonance"] = clampf(float(p["filter.resonance"]), 0, 10)
+			if p.has("vibrato.depth"): o["lfo1.vibrato"] = clampf(float(p["vibrato.depth"]), 0, 100)
+			if p.has("vibrato.rate"): o["lfo1.rate"] = clampf(float(p["vibrato.rate"]), 0.1, 12)
+			if p.has("portamento"): o["voice.glide"] = clampf(float(p["portamento"]), 0, 2)
+			if p.has("delay.send"): o["send.echo"] = clampf(float(p["delay.send"]) * 10.0, 0, 10)
+			if p.has("reverb.send"): o["send.space"] = clampf(float(p["reverb.send"]) * 10.0, 0, 10)
+			if p.has("aenv.release"): o["env1.release"] = clampf(float(p["aenv.release"]), 0.005, 15)
+
 		"keys":
-			if p.has("osc.wave"):
-				o["osc1.wave"] = OSC_WAVE.get(p["osc.wave"], 0)
-				o["osc2.wave"] = o["osc1.wave"]
-			if p.has("osc.detune"): o["osc2.fine"] = clampf(float(p["osc.detune"]), -50, 50)
-			if p.has("filter.cutoff"): o["filter.cutoff"] = clampf(float(p["filter.cutoff"]), 30, 18000)
-			if p.has("filter.resonance"): o["filter.resonance"] = clampf(float(p["filter.resonance"]), 0, 10)
-			if p.has("aenv.attack"): o["aenv.attack"] = clampf(float(p["aenv.attack"]), 0.001, 10)
-			if p.has("aenv.release"): o["aenv.release"] = clampf(float(p["aenv.release"]), 0.005, 10)
-			if p.has("chorus.mix"):
-				o["chorus.on"] = 1
-				o["chorus.mix"] = clampf(float(p["chorus.mix"]) * 10.0, 0, 10)
-			if p.has("reverb.send"): o["reverb.mix"] = clampf(float(p["reverb.send"]) * 10.0, 0, 10)
+			if p.has("filter.cutoff"): o["f1.cutoff"] = clampf(float(p["filter.cutoff"]), 30, 18000)
+			if p.has("filter.resonance"): o["f1.resonance"] = clampf(float(p["filter.resonance"]), 0, 10)
+			if p.has("osc.detune"): o["b.fine"] = clampf(float(p["osc.detune"]), -50, 50)
+			if p.has("aenv.attack"): o["env1.attack"] = clampf(float(p["aenv.attack"]), 0.001, 10)
+			if p.has("aenv.release"): o["env1.release"] = clampf(float(p["aenv.release"]), 0.005, 15)
+			if p.has("chorus.mix"): o["fx1.amount"] = clampf(float(p["chorus.mix"]) * 10.0, 0, 10)
+			if p.has("reverb.send"): o["send.space"] = clampf(float(p["reverb.send"]) * 10.0, 0, 10)
+			if p.has("delay.send"): o["send.echo"] = clampf(float(p["delay.send"]) * 10.0, 0, 10)
+
 		"pluck":
 			if p.has("model"): o["model.type"] = DRIFT_MODEL.get(p["model"], 0)
 			if p.has("brightness"): o["model.brightness"] = clampf(float(p["brightness"]) * 10.0, 0, 10)

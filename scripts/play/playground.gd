@@ -155,10 +155,10 @@ func _build_table() -> void:
 	dial.start_value = 0.6
 	_add("Dial", dial, Vector3(-0.22, 0, 0.3))
 	var fader := SlideFader.new()
-	fader.label = "Keys space"
-	fader.default_part = "keys"
-	fader.default_param = "reverb.mix"
-	fader.start_value = 0.35
+	fader.label = "Pad level"
+	fader.default_part = "pad"
+	fader.default_param = "@volume"
+	fader.start_value = 0.6
 	_add("Fader", fader, Vector3(-0.04, 0, 0.3))
 	var whammy := SlideFader.new()
 	whammy.label = "Lead bend"

@@ -17,13 +17,14 @@ const LIVE = {
   keys: { waves: ["sawtooth", "sawtooth"], det: [-7, 7], mult: [1, 1], amp: 0.13, attack: 0.03, release: 0.9, cutoff: 2400, q: 0.9, chorus: true },
   lead: { waves: ["sine", "triangle"], det: [0, 4], mult: [1, 2], amp: 0.2, attack: 0.02, release: 0.35, cutoff: 5000, q: 1.5 },
   bass: { waves: ["sawtooth", "square"], det: [-5, 5], mult: [1, 0.5], amp: 0.2, attack: 0.006, release: 0.18, cutoff: 600, q: 3 },
+  pad: { waves: ["sawtooth", "triangle"], det: [-12, 12], mult: [1, 2], amp: 0.09, attack: 1.2, release: 2.8, cutoff: 1400, q: 1.2, chorus: true },
 };
 /** One-shot parts on Driftwood: model and how long notes ring. */
 const PLUCKED = {
   mallet: { model: "marimba", dur: 0.6, brightness: 0.6, decay: 1.2 },
   harp: { model: "steel", dur: 1.4, brightness: 0.55, decay: 2.5 },
 };
-export const PARTS = ["mallet", "harp", "lead", "bass", "drums", "keys"];
+export const PARTS = ["mallet", "harp", "lead", "bass", "drums", "keys", "pad"];
 const DRUM_NOTES = { 36: "kick", 38: "snare", 39: "clap", 42: "hat", 46: "open", 45: "ltom", 50: "htom", 49: "cymbal" };
 
 /** Every knob a patch can reach, per part: param -> [label, apply(state, v 0..1)]. */
@@ -44,7 +45,7 @@ function knobsFor(part) {
       "vibrato.rate": ["Vibrato rate", (s, v) => { s.vibRate = logMap(0.1, 12)(v); }],
       "aenv.release": ["Release", (s, v) => { s.release = logMap(0.02, 4)(v); }],
     });
-    if (part === "keys") k["chorus.mix"] = ["Chorus", (s, v) => { s.chorus = v; }];
+    if (part === "keys" || part === "pad") k["chorus.mix"] = ["Chorus", (s, v) => { s.chorus = v; }];
   } else if (PLUCKED[part]) {
     Object.assign(k, {
       "model.brightness": ["Brightness", (s, v) => { s.brightness = v; }],
@@ -71,7 +72,7 @@ export class PlaySound {
   _defaults(part) {
     const L = LIVE[part], P = PLUCKED[part];
     return {
-      volume: 0.8, reverb: part === "drums" ? 0.06 : 0.25, delay: 0, tremolo: 0, bend: 0,
+      volume: part === "pad" ? 0.6 : 0.8, reverb: part === "drums" ? 0.06 : part === "pad" ? 0.5 : 0.25, delay: 0, tremolo: 0, bend: 0,
       cutoff: L?.cutoff ?? 2000, q: L?.q ?? 1, vib: 0, vibRate: 5.5, release: L?.release ?? 0.3, chorus: 0.4,
       brightness: P?.brightness ?? 0.6, decay: P?.decay ?? 1.2, click: 0.15, tone: {}, drive: 0,
     };
@@ -90,7 +91,7 @@ export class PlaySound {
     this.bus = new Bus(ctx);
     this.bus.master.gain.value = this.volume;
     for (const part of PARTS) {
-      const ch = new Channel(this.bus, { chorus: part === "keys", drive: part === "drums" || part === "bass" });
+      const ch = new Channel(this.bus, { chorus: part === "keys" || part === "pad", drive: part === "drums" || part === "bass" });
       const input = ctx.createGain(); // tremolo rides on this
       input.connect(ch.input);
       const trem = ctx.createOscillator();
@@ -133,7 +134,7 @@ export class PlaySound {
     p.ch.set("level", s.volume, 0.03);
     p.ch.set("reverb", s.reverb, 0.05);
     p.ch.set("delay", s.delay, 0.05);
-    if (part === "keys") p.ch.set("chorus", s.chorus, 0.05);
+    if (part === "keys" || part === "pad") p.ch.set("chorus", s.chorus, 0.05);
     if (part === "drums") p.ch.set("drive", s.drive, 0.05);
     p.input.gain.setTargetAtTime(1 - s.tremolo * 0.45, t, 0.03);
     p.tremDepth.gain.setTargetAtTime(s.tremolo * 0.45, t, 0.03);

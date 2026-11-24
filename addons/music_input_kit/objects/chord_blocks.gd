@@ -12,6 +12,8 @@ extends Playable
 @export var reach := 0.3
 ## Add the 7th to every chord.
 @export var sevenths := false
+## Another part that doubles every chord an octave lower (a pad under the keys); "" for none.
+@export var layer_part := "pad"
 
 var blocks: Array[MeshInstance3D] = []
 var labels: Array[Label3D] = []
@@ -77,6 +79,8 @@ func hand_down(hand: PlayHand) -> void:
 	var voices := []
 	for n in chord_of(i):
 		voices.append(kit.start_note(part, n, 0.45 + 0.45 * s))
+		if layer_part != "":
+			voices.append(kit.start_note(layer_part, n - 12, 0.6))
 	_held[hand.id] = {"i": i, "voices": voices, "y0": local.y}
 	flash(blocks[i], 2.0, 0.4)
 	hand.pulse(s * 0.5)

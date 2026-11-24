@@ -109,12 +109,20 @@ test("bars, pads, strings, orb, ribbon, blocks play the right notes", () => {
   assert.equal(log.on[0][1], 36);
 
   log.clear();
-  const bl = new ChordBlocks("Blocks").attach(kit);
+  const bl = new ChordBlocks("Blocks", { layerPart: "" }).attach(kit);
   const bh = handAt(bl, [bl.blockX(4), bl.block / 2, 0]);
   bl.handDown(bh);
   assert.deepEqual(log.on.map((o) => o[1]), [55, 59, 62], "V is G major");
   bl.handUp(bh);
   assert.equal(log.off.length, 3);
+
+  log.clear();
+  const layered = new ChordBlocks("Layered").attach(kit);
+  const lh = handAt(layered, [layered.blockX(0), layered.block / 2, 0]);
+  layered.handDown(lh);
+  assert.deepEqual(log.on.filter((o) => o[0] === "pad").map((o) => o[1]), [36, 40, 43], "pad doubles the chord an octave down");
+  layered.handUp(lh);
+  assert.equal(log.off.length, 6);
 });
 
 test("shaping objects: dial, spring lever, XY, flywheel, tilt, scale switch", () => {

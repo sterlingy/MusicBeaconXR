@@ -15,8 +15,13 @@ signal harmony_changed(info: Dictionary)
 ## A note was scheduled (it sounds a moment later, at the clock's look-ahead).
 signal note_played(role: String, beacon_id: String)
 
-const INSTRUMENT := {"drums": "Pulsar", "bass": "Undertow", "keys": "Lumen", "lead": "Comet", "pluck": "Driftwood", "texture": "Tangle"}
-const BASE_PRESET := {"drums": "Classic Eight", "bass": "Deep Current", "keys": "Glow Pad", "lead": "Fifth Flight", "pluck": "Nylon Pluck", "texture": "Drone Garden"}
+## Keys, lead and pad play on Prism (SynthKit's deep, mobile-sized engine).
+const INSTRUMENT := {"drums": "Pulsar", "bass": "Undertow", "keys": "Prism", "lead": "Prism", "pluck": "Driftwood", "texture": "Tangle", "pad": "Prism"}
+const BASE_PRESET := {"drums": "Classic Eight", "bass": "Deep Current", "keys": "Prism Keys", "lead": "Comet Tail", "pluck": "Nylon Pluck", "texture": "Drone Garden", "pad": "Aurora Pad"}
+## Every part the player plays: the song parts, plus a pad that holds the harmony's chords.
+const PARTS := ["drums", "bass", "keys", "lead", "pluck", "texture", "pad"]
+## Moods that lean on a pad (others get less of it).
+const PAD_MOODS := ["Drift", "Glow", "Tide"]
 const DRUM_NOTE := {"kick": 36, "snare": 38, "clap": 39, "hat": 42, "open": 46}
 
 var field: BeaconField = BeaconField.make_grid()
@@ -33,10 +38,13 @@ var played := {} # role -> notes played (for tests and meters)
 var _applied := {} # role -> {synth param id: value}
 var _param_t := 0.0
 var _gain := {} # role -> smoothed linear gain
+var _pad_notes: Array = [] # the chord the pad is holding
+var _awake := {} # role -> Prism part awake (out.gain 1) or asleep (0)
 
 
 func _ready() -> void:
-	for role in BeaconMixer.ROLES:
+	var phone := OS.has_feature("mobile")
+	for role in PARTS:
 		var rig := InstrumentRig.new()
 		rig.name = role.capitalize()
 		rig.instrument = INSTRUMENT[role]
@@ -47,6 +55,11 @@ func _ready() -> void:
 			if p.name == BASE_PRESET[role]:
 				rig.load_preset(p)
 		rig.set_volume_db(-80.0)
+		if INSTRUMENT[role] == "Prism":
+			# Phones and Quest: lighter voices and a smaller shared voice budget.
+			rig.set_param("voice.quality", 0 if phone else 2)
+			rig.set_param("voice.budget", 12 if phone else 24)
+			_awake[role] = true
 		rigs[role] = rig
 		_applied[role] = {}
 		_gain[role] = 0.0
@@ -95,6 +108,10 @@ func _refresh() -> void:
 		if songs.has(n.id):
 			active.append({"id": n.id, "w": n.w, "d": n.d, "beacon": n.beacon, "song": songs[n.id]})
 	mix = BeaconMixer.blend(active)
+	var pad := 0.0
+	for a in active:
+		pad += a.w * pad_level(a.song)
+	mix["pad"] = {"gain": pad, "params": {}, "sources": []}
 	if harmony.id == null and not active.is_empty():
 		harmony.update(active, 0)
 
@@ -106,6 +123,12 @@ func _process(delta: float) -> void:
 		# Smooth level changes so walking never clicks.
 		_gain[role] = lerpf(_gain[role], float(mix[role].gain) if Transport.running else 0.0, minf(1.0, delta * 6.0))
 		rigs[role].set_volume_db(linear_to_db(maxf(_gain[role], 0.0001)))
+		# A Prism part faded out of the blend sleeps: no voices, no CPU.
+		if _awake.has(role):
+			var awake: bool = _gain[role] > 0.0005
+			if awake != _awake[role]:
+				_awake[role] = awake
+				rigs[role].synth.set_param("out.gain", 1.0 if awake else 0.0)
 	_param_t -= delta
 	if _param_t <= 0.0:
 		_param_t = 0.1
@@ -146,6 +169,8 @@ func _play_step(index: int, beat: float) -> void:
 		if absf(target - Transport.bpm) > 0.5:
 			# Glide: close a third of the gap per bar (Transport applies it on the next bar line).
 			Transport.set_tempo(Transport.bpm + (target - Transport.bpm) * 0.35)
+	if step == 0:
+		_play_pad(bar, beat)
 	for ev in BeaconMixer.step_events(active, mix, harmony, bar, step):
 		var synth: JamSynth = rigs[ev.role].synth
 		var on := Transport.frame_for(synth, beat)
@@ -165,3 +190,30 @@ func _play_step(index: int, beat: float) -> void:
 func transport_stopped() -> void:
 	for role in rigs:
 		rigs[role].synth.all_notes_off()
+	_pad_notes = []
+
+
+## How much pad a song wants: calm, low-energy songs lean on it.
+static func pad_level(song: Dictionary) -> float:
+	var energy := float(song.get("energy", 0.5))
+	var mood_k := 1.0 if song.get("mood", "") in PAD_MOODS else 0.6
+	return clampf(0.75 - energy * 0.6, 0.12, 0.7) * mood_k
+
+
+## The pad holds the harmony's chord (root, third, fifth, seventh), tied across
+## bars while the chord stays the same so it swells instead of retriggering.
+func _play_pad(bar: int, beat: float) -> void:
+	if mix.get("pad", {}).get("gain", 0.0) <= 0.001 or harmony.song.is_empty():
+		return
+	var chord: Array = BeaconMixer.chord_notes(harmony.song.key, harmony.chord_degree(bar), 3, 4)
+	if chord == _pad_notes:
+		return
+	var synth: JamSynth = rigs["pad"].synth
+	var at := Transport.frame_for(synth, beat)
+	for n in _pad_notes:
+		synth.note_off(n, at)
+	for n in chord:
+		synth.note_on(n, 0.7, at)
+	_pad_notes = chord
+	played["pad"] += 1
+	note_played.emit("pad", harmony.id)

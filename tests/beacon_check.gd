@@ -74,8 +74,9 @@ func _check_player() -> void:
 	check(total > 20, "notes were scheduled (%d)" % total)
 	check(player.harmony.id == "g44", "harmony followed the listener to E5 (now %s)" % player.harmony.id)
 	var line := []
-	for role in BeaconMixer.ROLES:
+	for role in BeaconPlayer.PARTS:
 		line.append("%s %d notes, peak %.2f" % [role, player.played[role], peaks.get(role, 0.0)])
+	check(player.played["pad"] >= 1, "the pad held the harmony's chords (%d chord changes)" % player.played["pad"])
 	print("  player: ", "; ".join(line))
 	print("  harmony changes: ", harmony_changes.map(func(h): return "%s (%s)" % [h.title, h.chord]))
 	var sounding := 0

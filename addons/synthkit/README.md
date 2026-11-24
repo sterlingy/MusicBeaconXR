@@ -1,7 +1,7 @@
 # SynthKit
 
 Shivoo Studios' live-synthesized instruments as a Godot 4.5+ addon, shared
-between projects (AudioSyncMaster, MusicBeaconXR): six instruments with a C++
+between projects (AudioSyncMaster, MusicBeaconXR): seven instruments with a C++
 engine, their front panels, 48 factory presets, user presets, a step sequencer
 and a shared musical clock.
 
@@ -13,6 +13,7 @@ and a shared musical clock.
 | Lumen | 8-voice poly keys and pads |
 | Driftwood | Physical-model plucks and mallets |
 | Tangle | Modular with patch cables |
+| Prism | Deep keys / lead / pad engine, sized to run several at once on phones and Quest |
 
 This folder is the one place the instruments live. Projects copy its addon
 part to `addons/synthkit` (AudioSyncMaster: `tools/sync_synthkit.ps1`). Git
@@ -62,6 +63,26 @@ rig.play_note(60, 0.8)
   plugin (USB and Bluetooth LE MIDI) when the project includes it.
 - `Transport` can follow another clock (`follower`, `apply_state`,
   `clock_offset`) for networked sessions.
+
+## Prism
+One engine for keys, leads and pads (8 factory presets: 3 keys, 2 leads, 3 pads).
+- **Sound:** two engines per voice (Analog with up to 4-voice unison, Wavetable
+  with 8 built-in tables and warp, two-operator FM with feedback, Harmonic),
+  sub, noise, B->A FM, ring mod and a wavefolder; two filters (12/24 dB SVF modes,
+  notch, ladder, comb, formant) in series, parallel or split.
+- **Motion:** three envelopes, a per-voice LFO with a vibrato knob, two global
+  LFOs (tempo sync, sample & hold, smooth random), four macros and a 12-slot mod
+  matrix (sources include velocity, key, mod wheel, pressure and per-note random).
+- **Effects:** two insert slots (chorus, phaser, drive, crush) and sends to a
+  space (reverb) and echo shared by every Prism instance.
+- **Built for several at once:** modulation, envelopes and filter coefficients
+  run every 32 samples; wavetables are built once (`dsp/wavetables.cpp`, our own
+  FFT) and shared; one voice budget across all instances (`voice.budget`,
+  `voice.priority` decides who gives way); `out.gain` 0 puts an instance to sleep;
+  `voice.quality` Low trims unison, the ladder and the serial second filter.
+- MusicBeaconXR's `tests/prism_check.gd` checks every engine, filter, effect and
+  mod target, and benchmarks keys + lead + pad in a full mix (about 4% of one
+  desktop core for the three Prisms at their busiest).
 
 ## Layout
 - `bin/` — the compiled engine (Windows x86_64 debug/release, Android arm64).

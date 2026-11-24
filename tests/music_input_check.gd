@@ -210,6 +210,7 @@ func _check_ribbon_blocks() -> void:
 	r.free()
 	_reset()
 	var bl := ChordBlocks.new()
+	bl.layer_part = "" # keys alone here; the pad layer is checked below
 	add_child(bl)
 	var x := bl.box.position.x + bl.block * 0.5
 	var p := hand_at(bl, Vector3(x + 4 * (bl.block + bl.gap), bl.block * 0.5, 0))
@@ -229,6 +230,16 @@ func _check_ribbon_blocks() -> void:
 	check(ons.size() == 3, "XR: reaching the block plays its chord")
 	bl.hand_up(xr)
 	bl.free()
+	_reset()
+	var layered := ChordBlocks.new()
+	add_child(layered)
+	var lh := hand_at(layered, Vector3(layered.box.position.x + layered.block * 0.5, layered.block * 0.5, 0))
+	layered.hand_down(lh)
+	var pad := ons.filter(func(o): return o[0] == "pad").map(func(o): return o[2])
+	check(pad == [36, 40, 43], "the pad layer doubles the chord an octave down (got %s)" % [pad])
+	layered.hand_up(lh)
+	check(offs.size() == 6, "and lets go of both layers")
+	layered.free()
 
 
 func _check_shapers() -> void:
