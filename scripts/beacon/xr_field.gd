@@ -64,7 +64,7 @@ func _start_xr(real := true) -> void:
 	var ptr := input.get_node_or_null("PointerSource")
 	if ptr:
 		ptr.enabled = false
-	left_hand.button_pressed.connect(func(a): if a == "menu_button": _toggle_passthrough())
+	left_hand.button_pressed.connect(_on_left_button)
 
 	panel = Label3D.new()
 	panel.font_size = 32
@@ -113,6 +113,22 @@ func _controller(tracker: String) -> XRController3D:
 	return c
 
 
+func _on_left_button(a: String) -> void:
+	match a:
+		"menu_button":
+			_toggle_passthrough()
+		"primary_click":
+			# Press the left stick: over to the Instrument Table.
+			get_tree().change_scene_to_file("res://scenes/instrument_table.tscn")
+
+
+func _on_action(name: String, arg: Variant) -> void:
+	# In the headset the menu button is passthrough, not a jump to the flat globe.
+	if xr_active and name == "switch_scene":
+		return
+	super._on_action(name, arg)
+
+
 ## Passthrough (if the headset has it): clear background, no floor, the field floats in the room.
 func _toggle_passthrough() -> void:
 	if xr == null:
@@ -157,7 +173,7 @@ func _process(delta: float) -> void:
 func help_text() -> String:
 	if not xr_active:
 		return "No headset: flat view. " + super.help_text()
-	return "XR: stick glide · trigger walk there · grip tabletop · A play · B auto-walk%s" % (" (on)" if input.wander else "")
+	return "XR: stick glide · trigger walk there · grip tabletop · A play · B auto-walk · left stick click: instruments%s" % (" (on)" if input.wander else "")
 
 
 func _update_panel() -> void:

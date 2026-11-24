@@ -229,7 +229,12 @@ func _update_world(delta: float) -> void:
 
 
 func help_text() -> String:
-	return "WASD walk · click to go · T auto-walk%s · wheel zoom · G globe" % (" (on)" if input.wander else "")
+	return "WASD walk · click to go · T auto-walk%s · wheel zoom · G globe · I instruments" % (" (on)" if input.wander else "")
+
+
+func _unhandled_key_input(event: InputEvent) -> void:
+	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_I:
+		get_tree().change_scene_to_file("res://scenes/instrument_table.tscn")
 
 
 func _check_shot() -> void:
