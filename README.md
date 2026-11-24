@@ -12,9 +12,26 @@ Generative music driven by where you are. Beacons are placed in a space: a 100 m
 | `scenes/beacon_field.tscn` | **3D test grid** (main scene): pillars per beacon, a listener to walk, blend lines, HUD. WASD walk, click to go, T auto-walk, Space play, G globe. | F5 in Godot |
 | `scenes/globe_field.tscn` | **3D globe**: 614 beacons on a sphere, great-circle blend arcs. WASD walk, 1–9 jump to cities, G back to grid. | open the scene, F6 |
 | `scenes/studio.tscn` | SynthKit studio page, to try the instruments by hand. | open the scene, F6 |
+| `addons/listener_kit/` | **ListenerKit**, where the listener is and every way to move them: keyboard / gamepad, click / tap / pinch, wander, OpenXR locomotion. No SynthKit, no scene code, so other apps can use it. See [addons/listener_kit/README.md](addons/listener_kit/README.md). The browser twin is `web/src/input/listener.js`. | `godot --headless --path . res://tests/listener_check.tscn` |
+| `scenes/xr_field.tscn` | **OpenXR field**: you are the listener. Room-scale walking, left-stick glide, right-stick snap turn, trigger to walk where you point, grip for life size / tabletop, A play, B auto-walk, passthrough toggle (menu) where the headset has it. Falls back to the flat view without a headset. | `godot --path . --xr-mode on res://scenes/xr_field.tscn` |
+| `web/ar.html` | **WebXR** AR (Chrome on Android, Quest Browser) and VR, plus a first-person preview for screens. | open from the **AR / VR ↗** button |
 | `songs/` | Song packs (25 grid, 614 globe) exported from the browser generator, so both versions start from the same songs. | `node web/tools/export-songs.mjs` regenerates them |
 
 Published browser page (private until shared): https://claude.ai/artifact/FjUKz2qaULZhrvxKuq7EbN · User manual: [web/manual.html](web/manual.html), served at /manual.html (built from the Claude Docs source, https://claude.ai/artifact/1MCvFAJCSEtb4kNtWKFcrr, with `web/tools/build-manual.py`)
+
+## Platforms
+
+| Platform | How | Status |
+|---|---|---|
+| Windows desktop | Godot, `Windows Desktop` preset, or F5 in the editor | Built and run here |
+| PC VR (SteamVR, Oculus / Link, any OpenXR runtime) | Godot, `Windows VR (OpenXR)` preset (opens `xr_field` with OpenXR on), or `--xr-mode on` | Built; tested without a headset (falls back to flat), the XR rig tested with `--fake-xr` |
+| Meta Quest (standalone) | Godot, `Quest (OpenXR)` preset | APK builds, but needs the OpenXR vendors plugin and a gradle build to run as XR on the headset (see Known gaps) |
+| Android phone | Godot, `Android phone (flat)` preset (landscape, tap to go, pinch zoom) | APK builds; not run on a device here |
+| Any browser, desktop or phone | `web/` (Beacon Field, Synths, AR / VR preview) | Tested here |
+| WebAR | `web/ar.html` → Start AR (Chrome on Android, Quest Browser) | Needs a device; preview tested here |
+| WebVR | `web/ar.html` → Start VR (Quest Browser, PC VR browsers, Vision Pro) | Needs a device; preview tested here |
+
+Export presets live in `export_presets.template.cfg` (copy it to `export_presets.cfg`, which stays out of git because it can hold signing passwords). OpenXR is off for flat builds and on for the `pcvr` and `quest` feature tags, which also make `xr_field` the main scene.
 
 ## One song format, two players
 
@@ -36,3 +53,5 @@ Transport.start()
 - SynthKit is shared with AudioSyncMaster. Its home on this PC is `D:\SynthKit` (engine source, build scripts, binaries, scripts, presets). Change the instruments there, then run `powershell -ExecutionPolicy Bypass -File tools\sync_synthkit.ps1`; don't edit `addons/synthkit` here. Building the engine needs its third-party libraries and VS 2022 (see SynthKit's README).
 - The browser synths are ports of the instrument designs, not the C++ engine.
 - The Godot player doesn't follow song forms or automation yet, and the local grid is browser-only.
+- Quest standalone: the plain export has no OpenXR loader or Quest manifest entries. Add the Godot OpenXR vendors plugin (`addons/godotopenxrvendors`), install the Android build template, and turn on gradle build and the Meta plugin in the `Quest (OpenXR)` preset. PC VR (including Quest over Link) uses the Windows VR build instead; not tried on a headset yet.
+- No Godot web export: SynthKit is a GDExtension with no web build, so the browser version is `web/`.

@@ -9,6 +9,8 @@ The test playfield for MusicBeaconXR. You walk a listener between music beacons;
 - **Screen off:** phones pause web audio when the screen turns off, so while the music plays the page keeps the screen on (Screen Wake Lock: Chrome on Android, Safari on iOS 16.4 and later; HTTPS or localhost only). If the music still stops (another app, a call, locking the phone by hand), it picks up again when you come back to the page. Following your location needs the page on screen anyway.
 - **Location problems:** pages from `serve.py` report each location attempt (secure or not, permission state, error, accuracy; never coordinates) to the server's console, so a phone's problem can be read on the PC.
 - **Tests:** `node --test web/tests`
+- **Install on a phone:** pages from `serve.py` carry a web app manifest (`manifest.webmanifest`, `icon.svg`), so phones offer **Add to Home Screen** / **Install**, with AR / VR and Synths shortcuts.
+- **Gamepads:** a connected gamepad walks the listener (left stick or d-pad), A plays, Y toggles auto-walk.
 - **Godot song packs:** `node web/tools/export-songs.mjs` rebuilds `songs/grid.json` and `songs/globe.json` from the browser's generator. The Godot player plays each song's verse patterns as a loop and maps only the sound settings it knows; sections, presets' extra controls and automation are browser-only for now.
 
 ## Three fields
@@ -21,6 +23,26 @@ The test playfield for MusicBeaconXR. You walk a listener between music beacons;
   - Once you travel 40% of the side from the middle (20 km on the 50 km grid, at least 0.6 of a spacing), the grid re-centers on you. The beacons you're near keep their IDs and songs, so the music carries on. A jump somewhere that doesn't overlap the old grid starts fresh.
   - Distances are measured on a flat map of the area, where neighbouring beacons are exactly one spacing apart (under 1% off the true distance over 40 km, about 1% at the edge of a 100 km grid). Columns are measured at the whole degree of latitude nearest the center.
   - **Nearby** shows about 8 spacings around you; **Whole grid** shows all of it. Distances under 1 km show in meters.
+
+## AR and VR page
+
+`ar.html` (the **AR / VR ↗** button) shows the test grid in 3D and lets you walk it with your body.
+
+- **AR** (Chrome on Android, Quest Browser with passthrough): pick a scale, tap **Start AR**. The field is laid out around you with you standing on the listener and the map's north straight ahead. Walk to move between beacons. Tap a spot on the floor to move the field's middle there; **Re-center** lays it out around you again.
+- **VR** (Quest Browser, PC VR browsers, Vision Pro): the same in a dark room. Trigger re-centers, grip steps through the scales.
+- **Scale:** life size (the grid is 500 m across), or 1:10 to 1:200. 1:50 (the default) fits it in a 10 m room; 1:100 in 5 m.
+- **Preview** (any browser, or before starting XR): first person. WASD / arrows walk the way you look, drag to look around, Space plays, T auto-walks.
+- WebXR needs a secure page: run `python web/serve.py --https` and open the https address on the phone or headset (localhost also counts as secure on the PC itself).
+- No libraries: a small WebGL renderer in `src/ar/gl.js`; placement math in `src/ar/placement.js`.
+
+## ListenerKit (input)
+
+`src/input/listener.js` holds the listener position and every way to move it, with no audio or page code, so other web apps can use it. It mirrors the Godot kit in `addons/listener_kit` (same names and rules).
+
+- **Spaces:** `planarSpace` (meters, the test grid), `localSpace(field)` (a local grid's flat map), `geoSpace` (lat/lon on the globe). A move direction is always (right, forward).
+- **ListenerInput:** position, walk target, wander; events `moved`, `action`, `wander`, `manual`. Each tick: a source that drives the position (an XR pose, GPS) wins, then the first source with a move intent (which cancels the target), then the target, then wander.
+- **Sources:** `keyboardSource` (WASD / arrows, gamepad stick and d-pad; Space, T and 1–9 as actions; ignores typing in form fields), `pointerSource` (press to walk there, drag to steer, tap to select), `geolocationSource` (follows the device; stops on a hand move), `poseSource` (a WebXR or other tracked pose).
+- Beacon Field (`app.js`) and the AR page (`ar.js`) both walk through it. Tests: `web/tests/input.test.mjs`.
 
 ## Synths page
 
