@@ -2,7 +2,7 @@ extends Node3D
 ## The globe: a beacon every 10° of latitude and longitude (614 in all), each
 ## with its own song. Walk the surface; the three closest beacons blend.
 ##
-## Controls: WASD / arrows walk, 1-9 jump to cities, T auto-walk, wheel zoom,
+## Controls: WASD / arrows / gamepad walk, click the globe to go there, 1-9 jump to cities, T auto-walk, wheel zoom,
 ## Space play/stop, G back to the test grid.
 ## Dev: `-- --shot=<path> [--frames=N] [--at=lat,lon] [--play]`.
 
@@ -20,8 +20,7 @@ var listener: MeshInstance3D
 var arcs: MeshInstance3D
 var highlights := [] # 3 glowing pillars over the active beacons
 var labels := [] # 3 labels for the active beacons
-var wander := false
-var heading := randf() * TAU
+var input: ListenerInput
 var altitude := 90.0
 var _cam_basis := Basis.IDENTITY
 var _shot := ""
@@ -45,8 +44,39 @@ func _ready() -> void:
 	hud = BeaconHud.new(player)
 	hud.title_text = "BEACON GLOBE"
 	add_child(hud)
-	player.set_position(Vector2(-0.128, 51.507))
+	_build_input()
+	input.jump_to(Vector2(-0.128, 51.507))
 	_parse_args()
+
+
+## Walking comes from ListenerKit: keyboard / gamepad, click or tap the globe, wander.
+func _build_input() -> void:
+	input = ListenerInput.new()
+	input.name = "ListenerInput"
+	input.space = ListenerSpace.geo(WALK_DEG)
+	input.add_child(KeyboardSource.new())
+	var ptr := PointerSource.new()
+	ptr.camera = camera
+	ptr.pick = PointerSource.sphere_picker(R, PointerSource.unit_to_lonlat)
+	ptr.send_select = false
+	input.add_child(ptr)
+	add_child(input)
+	input.moved.connect(player.set_position)
+	input.action.connect(_on_action)
+
+
+func _on_action(name: String, arg: Variant) -> void:
+	match name:
+		"toggle_play":
+			Transport.toggle()
+		"switch_scene":
+			get_tree().change_scene_to_file("res://scenes/beacon_field.tscn")
+		"zoom":
+			altitude = clampf(altitude * float(arg), 25.0, 900.0)
+		"jump":
+			var c: Array = CITIES[int(arg)]
+			input.jump_to(Vector2(c[2], c[1]))
+			_status = "Jumped to " + c[0]
 
 
 func _build_world() -> void:
@@ -191,7 +221,6 @@ func _surface_xform(lat: float, lon: float, lift: float) -> Transform3D:
 
 
 func _process(delta: float) -> void:
-	_move(delta)
 	var p := player.pos # (lon, lat)
 	var up := to_world(p.y, p.x, 1.0)
 	listener.transform = _surface_xform(p.y, p.x, 3.5)
@@ -207,7 +236,7 @@ func _process(delta: float) -> void:
 	camera.look_at(up * R + north * altitude * 0.1, north)
 	_update_active()
 	_draw_arcs()
-	hud.help_text = "WASD walk · 1-9 cities · T auto-walk%s · wheel zoom · G grid%s" % [" (on)" if wander else "", ("  ·  " + _status) if _status != "" else ""]
+	hud.help_text = "WASD walk · click to go · 1-9 cities · T auto-walk%s · wheel zoom · G grid%s" % [" (on)" if input.wander else "", ("  ·  " + _status) if _status != "" else ""]
 	if _shot != "":
 		_frames -= 1
 		if _frames <= 0:
@@ -215,28 +244,6 @@ func _process(delta: float) -> void:
 			get_viewport().get_texture().get_image().save_png(_shot)
 			print("screenshot: ", _shot)
 			get_tree().quit()
-
-
-func _move(delta: float) -> void:
-	var dir := Vector2.ZERO
-	if Input.is_physical_key_pressed(KEY_A) or Input.is_physical_key_pressed(KEY_LEFT): dir.x -= 1
-	if Input.is_physical_key_pressed(KEY_D) or Input.is_physical_key_pressed(KEY_RIGHT): dir.x += 1
-	if Input.is_physical_key_pressed(KEY_W) or Input.is_physical_key_pressed(KEY_UP): dir.y += 1
-	if Input.is_physical_key_pressed(KEY_S) or Input.is_physical_key_pressed(KEY_DOWN): dir.y -= 1
-	if dir == Vector2.ZERO and wander:
-		heading += randf_range(-1.0, 1.0) * delta
-		dir = Vector2(cos(heading), sin(heading)) * 0.6
-		if absf(player.pos.y) > 80.0 and signf(dir.y) == signf(player.pos.y):
-			heading = -heading
-	if dir == Vector2.ZERO:
-		return
-	if dir.length() > 1.0:
-		dir = dir.normalized()
-	var step := WALK_DEG * delta
-	var p := player.pos
-	# A degree of longitude shrinks toward the poles; keep walking speed even.
-	var k := 1.0 / maxf(0.15, cos(deg_to_rad(p.y)))
-	player.set_position(Vector2(p.x + dir.x * step * minf(k, 4.0), p.y + dir.y * step))
 
 
 func _update_active() -> void:
@@ -287,26 +294,6 @@ func _draw_arcs() -> void:
 	im.surface_end()
 
 
-func _unhandled_input(event: InputEvent) -> void:
-	if event is InputEventKey and event.pressed and not event.echo:
-		var k: int = event.physical_keycode
-		if k == KEY_SPACE:
-			Transport.toggle()
-		elif k == KEY_T:
-			wander = not wander
-		elif k == KEY_G:
-			get_tree().change_scene_to_file("res://scenes/beacon_field.tscn")
-		elif k >= KEY_1 and k <= KEY_9:
-			var c: Array = CITIES[k - KEY_1]
-			player.set_position(Vector2(c[2], c[1]))
-			_status = "Jumped to " + c[0]
-	elif event is InputEventMouseButton and event.pressed:
-		if event.button_index == MOUSE_BUTTON_WHEEL_UP:
-			altitude = clampf(altitude * 0.9, 25.0, 900.0)
-		elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
-			altitude = clampf(altitude * 1.1, 25.0, 900.0)
-
-
 func _parse_args() -> void:
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--shot="):
@@ -315,7 +302,7 @@ func _parse_args() -> void:
 			_frames = int(a.trim_prefix("--frames="))
 		elif a.begins_with("--at="):
 			var ll := a.trim_prefix("--at=").split(",")
-			player.set_position(Vector2(float(ll[1]), float(ll[0])))
+			input.jump_to(Vector2(float(ll[1]), float(ll[0])))
 		elif a.begins_with("--alt="):
 			altitude = float(a.trim_prefix("--alt="))
 		elif a == "--play":

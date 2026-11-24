@@ -1,0 +1,86 @@
+class_name PointerSource
+extends ListenerSource
+## Click or tap the world to walk there; drag to keep steering. Works with the
+## mouse and with touch screens (phones, tablets).
+##
+## `pick` turns a camera ray into a listener position (or null for a miss). Use
+## PointerSource.ground_picker() for a flat floor or sphere_picker() for a globe.
+
+var camera: Camera3D
+## func(origin: Vector3, dir: Vector3) -> Variant (Vector2 position or null)
+var pick: Callable
+## Dragging further than this many pixels steers instead of selecting.
+var drag_px := 8.0
+## Taps also send "select" (arg: position) so the host can snap to a beacon.
+var send_select := true
+
+var _down := false
+var _down_at := Vector2.ZERO
+
+
+func _init() -> void:
+	name = "PointerSource"
+
+
+## Floor at height `y`; world (x, z) is the listener position.
+static func ground_picker(y := 0.0) -> Callable:
+	return func(origin: Vector3, dir: Vector3) -> Variant:
+		if absf(dir.y) < 1e-4:
+			return null
+		var t := (y - origin.y) / dir.y
+		if t < 0.0:
+			return null
+		var hit := origin + dir * t
+		return Vector2(hit.x, hit.z)
+
+
+## Sphere at the origin; `to_pos` maps a unit surface vector to a listener position.
+static func sphere_picker(radius: float, to_pos: Callable) -> Callable:
+	return func(origin: Vector3, dir: Vector3) -> Variant:
+		var b := origin.dot(dir)
+		var c := origin.length_squared() - radius * radius
+		var disc := b * b - c
+		if disc < 0.0:
+			return null
+		var t := -b - sqrt(disc)
+		if t < 0.0:
+			return null
+		return to_pos.call((origin + dir * t).normalized())
+
+
+## (lon, lat) degrees for a unit vector, matching y-up, lon 0 at +z.
+static func unit_to_lonlat(v: Vector3) -> Vector2:
+	return Vector2(rad_to_deg(atan2(v.x, v.z)), rad_to_deg(asin(clampf(v.y, -1.0, 1.0))))
+
+
+func _pick_at(screen: Vector2) -> Variant:
+	if camera == null or not pick.is_valid():
+		return null
+	return pick.call(camera.project_ray_origin(screen), camera.project_ray_normal(screen))
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	var li := listener()
+	if li == null or not enabled:
+		return
+	# Godot turns touches into mouse events by default; only read raw touches when that's off.
+	if (event is InputEventScreenTouch or event is InputEventScreenDrag) and ProjectSettings.get_setting("input_devices/pointing/emulate_mouse_from_touch", true):
+		return
+	var pressed_btn: bool = (event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT) or event is InputEventScreenTouch
+	if pressed_btn:
+		if event.pressed:
+			_down = true
+			_down_at = event.position
+			var p: Variant = _pick_at(event.position)
+			if p != null:
+				li.set_target(p)
+		else:
+			if _down and send_select and event.position.distance_to(_down_at) < drag_px:
+				var p: Variant = _pick_at(event.position)
+				if p != null:
+					li.send_action("select", p)
+			_down = false
+	elif _down and (event is InputEventMouseMotion or event is InputEventScreenDrag):
+		var p: Variant = _pick_at(event.position)
+		if p != null:
+			li.set_target(p)

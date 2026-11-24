@@ -1,7 +1,7 @@
 extends Node3D
 ## 3D beacon field: the 5x5 test grid as pillars on a plane, a listener you
 ## walk around, and the blend playing on SynthKit. The starting point for the
-## XR version (swap the camera and input for an XR rig).
+## XR version (scenes/xr_field.tscn).
 ##
 ## Controls: WASD / arrows walk, click the ground to walk there, Space play/stop,
 ## T auto-walk, mouse wheel zoom.
@@ -17,9 +17,7 @@ var camera: Camera3D
 var lines: MeshInstance3D
 var pillars := {} # beacon id -> {mesh, mat, light, label}
 var flashes := {} # beacon id -> seconds left
-var target = null # Vector2 or null
-var wander := false
-var heading := randf() * TAU
+var input: ListenerInput
 var zoom := 0.7
 var hud: BeaconHud
 
@@ -37,8 +35,41 @@ func _ready() -> void:
 	_build_beacons()
 	hud = BeaconHud.new(player)
 	add_child(hud)
-	player.set_position(Vector2(-38, 27))
+	_build_input()
+	input.jump_to(Vector2(-38, 27))
 	_parse_args()
+
+
+## Walking comes from ListenerKit (keyboard / gamepad, click or tap, wander); this
+## scene only listens for the position and the commands.
+func _build_input() -> void:
+	var m := 2.5 * player.field.spacing # half the grid plus half a spacing
+	input = ListenerInput.new()
+	input.name = "ListenerInput"
+	input.space = ListenerSpace.planar(Rect2(-m, -m, 2 * m, 2 * m), WALK_SPEED)
+	input.add_child(KeyboardSource.new())
+	var ptr := PointerSource.new()
+	ptr.camera = camera
+	ptr.pick = PointerSource.ground_picker(0.0)
+	input.add_child(ptr)
+	add_child(input)
+	input.moved.connect(player.set_position)
+	input.action.connect(_on_action)
+
+
+func _on_action(name: String, arg: Variant) -> void:
+	match name:
+		"toggle_play":
+			Transport.toggle()
+		"switch_scene":
+			get_tree().change_scene_to_file("res://scenes/globe_field.tscn")
+		"zoom":
+			zoom = clampf(zoom * float(arg), 0.35, 2.0)
+		"select":
+			# A tap near a beacon walks onto it, like the browser playfield.
+			var near: Array = player.field.nearest(arg, 1)
+			if not near.is_empty() and near[0].d < 14.0:
+				input.set_target(near[0].beacon.pos)
 
 
 # ---------------------------------------------------------------- world
@@ -172,7 +203,6 @@ func _build_beacons() -> void:
 # ---------------------------------------------------------------- update
 
 func _process(delta: float) -> void:
-	_move(delta)
 	var p := player.pos
 	listener.position = Vector3(p.x, 6.0 + sin(Time.get_ticks_msec() / 300.0) * 0.6, p.y)
 	# Look a little left of the listener so the HUD panel doesn't cover the beacons around them.
@@ -181,7 +211,7 @@ func _process(delta: float) -> void:
 	camera.look_at(cam_target + Vector3(0, 0, -20))
 	_draw_lines()
 	_update_beacons(delta)
-	hud.help_text = "WASD walk · click to go · T auto-walk%s · wheel zoom · G globe" % (" (on)" if wander else "")
+	hud.help_text = "WASD walk · click to go · T auto-walk%s · wheel zoom · G globe" % (" (on)" if input.wander else "")
 	if _shot != "":
 		_frames -= 1
 		if _frames <= 0:
@@ -189,32 +219,6 @@ func _process(delta: float) -> void:
 			get_viewport().get_texture().get_image().save_png(_shot)
 			print("screenshot: ", _shot)
 			get_tree().quit()
-
-
-func _move(delta: float) -> void:
-	var dir := Vector2.ZERO
-	if Input.is_physical_key_pressed(KEY_A) or Input.is_physical_key_pressed(KEY_LEFT): dir.x -= 1
-	if Input.is_physical_key_pressed(KEY_D) or Input.is_physical_key_pressed(KEY_RIGHT): dir.x += 1
-	if Input.is_physical_key_pressed(KEY_W) or Input.is_physical_key_pressed(KEY_UP): dir.y -= 1
-	if Input.is_physical_key_pressed(KEY_S) or Input.is_physical_key_pressed(KEY_DOWN): dir.y += 1
-	var step := WALK_SPEED * delta
-	var p := player.pos
-	if dir != Vector2.ZERO:
-		target = null
-		player.set_position(p + dir.normalized() * step)
-	elif target != null:
-		var d: Vector2 = target - p
-		if d.length() <= step:
-			player.set_position(target)
-			target = null
-		else:
-			player.set_position(p + d.normalized() * step)
-	elif wander:
-		heading += randf_range(-1.1, 1.1) * delta
-		var next := p + Vector2(cos(heading), sin(heading)) * step * 0.6
-		if absf(next.x) > 230: heading = PI - heading
-		if absf(next.y) > 230: heading = -heading
-		player.set_position(next)
 
 
 func _draw_lines() -> void:
@@ -252,29 +256,6 @@ func _update_beacons(delta: float) -> void:
 		pl.ring.scale = Vector3.ONE * (1.25 if is_key else 1.0)
 
 
-# ---------------------------------------------------------------- input
-
-func _unhandled_input(event: InputEvent) -> void:
-	if event is InputEventKey and event.pressed and not event.echo:
-		if event.physical_keycode == KEY_SPACE:
-			Transport.toggle()
-		elif event.physical_keycode == KEY_T:
-			wander = not wander
-		elif event.physical_keycode == KEY_G:
-			get_tree().change_scene_to_file("res://scenes/globe_field.tscn")
-	elif event is InputEventMouseButton and event.pressed:
-		if event.button_index == MOUSE_BUTTON_LEFT:
-			var origin := camera.project_ray_origin(event.position)
-			var dir := camera.project_ray_normal(event.position)
-			if absf(dir.y) > 1e-4:
-				var hit := origin + dir * (-origin.y / dir.y)
-				target = player.field.clamp_pos(Vector2(hit.x, hit.z))
-		elif event.button_index == MOUSE_BUTTON_WHEEL_UP:
-			zoom = clampf(zoom * 0.9, 0.35, 2.0)
-		elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
-			zoom = clampf(zoom * 1.1, 0.35, 2.0)
-
-
 func _parse_args() -> void:
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--shot="):
@@ -283,10 +264,10 @@ func _parse_args() -> void:
 			_frames = int(a.trim_prefix("--frames="))
 		elif a.begins_with("--pos="):
 			var xy := a.trim_prefix("--pos=").split(",")
-			player.set_position(Vector2(float(xy[0]), float(xy[1])))
+			input.jump_to(Vector2(float(xy[0]), float(xy[1])))
 		elif a == "--play":
 			Transport.metronome_on = false
 			Transport.count_in_bars = 0
 			Transport.start()
 		elif a == "--wander":
-			wander = true
+			input.wander = true
