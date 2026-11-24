@@ -1,0 +1,13 @@
+{
+  "name": "Beacon Field",
+  "short_name": "Beacons",
+  "description": "Generative music driven by where you are between beacons.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0e131a",
+  "theme_color": "#0e131a",
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }],
+  "shortcuts": [{ "name": "AR / VR", "url": "ar.html" }, { "name": "Synths", "url": "synths.html" }]
+}

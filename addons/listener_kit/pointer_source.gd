@@ -1,7 +1,7 @@
 class_name PointerSource
 extends ListenerSource
-## Click or tap the world to walk there; drag to keep steering. Works with the
-## mouse and with touch screens (phones, tablets).
+## Click or tap the world to walk there; drag to keep steering; pinch to zoom.
+## Works with the mouse and with touch screens (phones, tablets).
 ##
 ## `pick` turns a camera ray into a listener position (or null for a miss). Use
 ## PointerSource.ground_picker() for a flat floor or sphere_picker() for a globe.
@@ -62,6 +62,10 @@ func _pick_at(screen: Vector2) -> Variant:
 func _unhandled_input(event: InputEvent) -> void:
 	var li := listener()
 	if li == null or not enabled:
+		return
+	# Pinch (touch screens, trackpads) zooms like the mouse wheel.
+	if event is InputEventMagnifyGesture and event.factor > 0.0:
+		li.send_action("zoom", 1.0 / event.factor)
 		return
 	# Godot turns touches into mouse events by default; only read raw touches when that's off.
 	if (event is InputEventScreenTouch or event is InputEventScreenDrag) and ProjectSettings.get_setting("input_devices/pointing/emulate_mouse_from_touch", true):
