@@ -17,3 +17,6 @@ Thumbs.db
 
 # Local HTTPS certificate (web/serve.py --https)
 web/.cert/
+
+# Export output
+build/

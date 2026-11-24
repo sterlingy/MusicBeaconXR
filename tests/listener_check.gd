@@ -20,6 +20,7 @@ func _ready() -> void:
 	_check_planar()
 	_check_geo()
 	_check_input()
+	_check_xr()
 	print("listener_check: %s (%d failure(s))" % ["OK" if failures == 0 else "FAILED", failures])
 	get_tree().quit(0 if failures == 0 else 1)
 
@@ -86,6 +87,50 @@ func _check_input() -> void:
 	li.tick(0.1)
 	check(near(li.position, Vector2(3, 4)), "a drives_position source sets the position outright")
 	li.queue_free()
+
+
+func _check_xr() -> void:
+	# No headset here: the rig's nodes are untracked, so the head sits at the origin.
+	var li := ListenerInput.new()
+	li.space = ListenerSpace.planar(Rect2(-250, -250, 500, 500), 55.0)
+	add_child(li)
+	li.set_process(false)
+	var origin := XROrigin3D.new()
+	add_child(origin)
+	var cam := XRCamera3D.new()
+	origin.add_child(cam)
+	var right := XRController3D.new()
+	origin.add_child(right)
+	var src := XRLocomotionSource.new()
+	src.require_interface = false
+	src.origin = origin
+	src.camera = cam
+	src.right = right
+	src.move_speed = 10.0
+	li.add_child(src)
+	origin.global_position = Vector3(20, 0, 30)
+	li.tick(0.1)
+	check(near(li.position, Vector2(20, 30)), "XR: the head's floor spot is the listener (got %s)" % li.position)
+	li.set_target(Vector2(20, 0))
+	for i in 40:
+		li.tick(0.1) # 1 m per tick
+	check(near(li.position, Vector2(20, 0)) and li.target == null, "XR: a walk target moves the play space (at %s)" % li.position)
+	src.set_scale_index(1)
+	check(origin.world_scale == 25.0 and near(src.to_pos.call(src._head_floor()), Vector2(20, 0)), "XR: tabletop scale keeps you on the same spot")
+	src.set_scale_index(0)
+	origin.global_position = Vector3(400, 0, 0)
+	li.tick(0.1)
+	check(near(li.position, Vector2(250, 0)) and absf(origin.global_position.x - 250.0) < 1e-3, "XR: the field's edge stops the play space")
+	right.global_transform = Transform3D(Basis(Vector3.RIGHT, deg_to_rad(-45)), Vector3(0, 1, 0))
+	var hit: Variant = src.floor_hit()
+	check(hit != null and absf(hit.y) < 1e-4 and absf(hit.z + 1.0) < 1e-3, "XR: the right hand's ray finds the floor (got %s)" % str(hit))
+	li.wander = true
+	var before := li.position
+	for i in 30:
+		li.tick(0.1)
+	check(li.position != before and absf(li.position.x) <= 250.0, "XR: wander moves the play space")
+	li.queue_free()
+	origin.queue_free()
 
 
 class _FixedSource extends ListenerSource:

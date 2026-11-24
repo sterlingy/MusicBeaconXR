@@ -19,6 +19,9 @@ var pillars := {} # beacon id -> {mesh, mat, light, label}
 var flashes := {} # beacon id -> seconds left
 var input: ListenerInput
 var zoom := 0.7
+var env: Environment
+var ground: MeshInstance3D
+var grid_lines: MeshInstance3D
 var hud: BeaconHud
 
 var _shot := ""
@@ -75,7 +78,7 @@ func _on_action(name: String, arg: Variant) -> void:
 # ---------------------------------------------------------------- world
 
 func _build_world() -> void:
-	var env := Environment.new()
+	env = Environment.new()
 	env.background_mode = Environment.BG_COLOR
 	env.background_color = Color("0b1016")
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
@@ -95,7 +98,7 @@ func _build_world() -> void:
 	sun.light_energy = 0.7
 	add_child(sun)
 
-	var ground := MeshInstance3D.new()
+	ground = MeshInstance3D.new()
 	var pm := PlaneMesh.new()
 	pm.size = Vector2(1200, 1200)
 	ground.mesh = pm
@@ -121,9 +124,9 @@ func _build_world() -> void:
 			im.surface_set_color(c)
 			im.surface_add_vertex(seg[1])
 	im.surface_end()
-	var grid := MeshInstance3D.new()
-	grid.mesh = im
-	add_child(grid)
+	grid_lines = MeshInstance3D.new()
+	grid_lines.mesh = im
+	add_child(grid_lines)
 
 	listener = MeshInstance3D.new()
 	var cap := CapsuleMesh.new()
@@ -203,15 +206,33 @@ func _build_beacons() -> void:
 # ---------------------------------------------------------------- update
 
 func _process(delta: float) -> void:
+	_update_camera(delta)
+	_update_world(delta)
+	_check_shot()
+
+
+func _update_camera(delta: float) -> void:
 	var p := player.pos
-	listener.position = Vector3(p.x, 6.0 + sin(Time.get_ticks_msec() / 300.0) * 0.6, p.y)
 	# Look a little left of the listener so the HUD panel doesn't cover the beacons around them.
 	var cam_target := Vector3(p.x - 40.0 * zoom, 0, p.y)
 	camera.position = camera.position.lerp(cam_target + Vector3(0, 230, 210) * zoom, minf(1.0, delta * 4.0)) if camera.position != Vector3.ZERO else cam_target + Vector3(0, 230, 210) * zoom
 	camera.look_at(cam_target + Vector3(0, 0, -20))
+
+
+## Listener marker, blend lines, beacon glow and the HUD hint: everything but the camera.
+func _update_world(delta: float) -> void:
+	var p := player.pos
+	listener.position = Vector3(p.x, 6.0 + sin(Time.get_ticks_msec() / 300.0) * 0.6, p.y)
 	_draw_lines()
 	_update_beacons(delta)
-	hud.help_text = "WASD walk · click to go · T auto-walk%s · wheel zoom · G globe" % (" (on)" if input.wander else "")
+	hud.help_text = help_text()
+
+
+func help_text() -> String:
+	return "WASD walk · click to go · T auto-walk%s · wheel zoom · G globe" % (" (on)" if input.wander else "")
+
+
+func _check_shot() -> void:
 	if _shot != "":
 		_frames -= 1
 		if _frames <= 0:
