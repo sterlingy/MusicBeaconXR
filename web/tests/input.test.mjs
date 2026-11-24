@@ -141,3 +141,16 @@ test("the grid start position weighs the same through the kit", () => {
   const li = new ListenerInput({ space: planarSpace({ half: 250 }), position: { x: -38, y: 27 } });
   assert.deepEqual(weigh(f, li.position).map((n) => n.id), weigh(f, { x: -38, y: 27 }).map((n) => n.id));
 });
+
+test("AR placement: the viewer stands on the listener, facing the field's north", async () => {
+  const { worldOf, fieldOf, placeAt } = await import("../src/ar/placement.js");
+  const s = { scale: 1 / 50, theta: 0, anchor: { x: 0, y: 0, z: 0 } };
+  placeAt(s, { x: -38, y: 27 }, 2, 0, 3, 1, 0); // standing at (2, 3), facing +x
+  const f = fieldOf(s, 2, 3);
+  assert.ok(Math.abs(f.x + 38) < 1e-9 && Math.abs(f.y - 27) < 1e-9);
+  // One real meter forward (+x) is 50 field meters north (-y).
+  const g = fieldOf(s, 3, 3);
+  assert.ok(Math.abs(g.x + 38) < 1e-9 && Math.abs(g.y - (27 - 50)) < 1e-9);
+  const w = worldOf(s, { x: -38, y: 27 }, 0.5);
+  assert.ok(Math.abs(w[0] - 2) < 1e-9 && w[1] === 0.5 && Math.abs(w[2] - 3) < 1e-9);
+});
