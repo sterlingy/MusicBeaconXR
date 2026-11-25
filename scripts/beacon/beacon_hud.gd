@@ -1,9 +1,11 @@
 class_name BeaconHud
 extends CanvasLayer
 ## On-screen readout for a BeaconPlayer: key and chord, tempo, the three
-## active beacons with their weights, and each part's level.
+## active beacons with their weights, and each part's level with mute (M) and
+## solo (S) buttons, to hear what one part is doing.
 
 const ACCENT := Color("ffb547")
+const MUTE_COLOR := Color("e0565b")
 const ROLE_COLOR := {"drums": Color("ff8a3d"), "bass": Color("2ec4b6"), "keys": Color("f5c04a"), "lead": Color("ff4f9a"), "pluck": Color("9ccc65"), "texture": Color("8b6cf0"), "pad": Color("7ad7ff")}
 
 var player: BeaconPlayer
@@ -14,6 +16,8 @@ var _now: Label
 var _sub: Label
 var _rows := []
 var _parts := {}
+var _names := {} # role -> its label
+var _buttons := {} # role -> [mute, solo]
 var _help: Label
 var _flash := 0.0
 
@@ -71,13 +75,43 @@ func _ready() -> void:
 		fill.set_corner_radius_all(3)
 		bar.add_theme_stylebox_override("fill", fill)
 		h.add_child(bar)
+		var m := _toggle("M", MUTE_COLOR, func(on): player.set_muted(role, on))
+		var so := _toggle("S", ACCENT, func(on): player.set_soloed(role, on))
+		h.add_child(m)
+		h.add_child(so)
+		_buttons[role] = [m, so]
+		h.add_theme_constant_override("separation", 6)
 		v.add_child(h)
 		_parts[role] = bar
+		_names[role] = l
 	_help = _label("", 12, Color(1, 1, 1, 0.5))
 	_help.autowrap_mode = TextServer.AUTOWRAP_WORD
 	_help.custom_minimum_size.x = 330
 	v.add_child(_help)
 	player.harmony_changed.connect(func(_i): _flash = 1.0)
+
+
+## A small square toggle (touch friendly) that lights up in its colour when on.
+func _toggle(text: String, on_color: Color, on_toggle: Callable) -> Button:
+	var b := Button.new()
+	b.text = text
+	b.toggle_mode = true
+	b.focus_mode = Control.FOCUS_NONE
+	b.custom_minimum_size = Vector2(30, 26)
+	b.add_theme_font_size_override("font_size", 12)
+	b.tooltip_text = "Mute" if text == "M" else "Solo"
+	for state in ["normal", "hover", "pressed", "hover_pressed"]:
+		var sb := StyleBoxFlat.new()
+		var on: bool = state.contains("pressed")
+		sb.bg_color = on_color if on else Color(0.13, 0.16, 0.2)
+		sb.border_color = on_color if on or state == "hover" else Color(0.25, 0.3, 0.38)
+		sb.set_border_width_all(1)
+		sb.set_corner_radius_all(5)
+		b.add_theme_stylebox_override(state, sb)
+	b.add_theme_color_override("font_pressed_color", Color(0.05, 0.06, 0.08))
+	b.add_theme_color_override("font_hover_pressed_color", Color(0.05, 0.06, 0.08))
+	b.toggled.connect(on_toggle)
+	return b
 
 
 func _label(t: String, size: int, color: Color) -> Label:
@@ -109,4 +143,10 @@ func _process(delta: float) -> void:
 			r.bar.value = 0
 	for role in _parts:
 		_parts[role].value = float(player.mix[role].gain) if not player.mix.is_empty() else 0.0
+		# Parts you can't hear (muted, or another part soloed) fade back.
+		var a := 1.0 if player.audible(role) else 0.3
+		_parts[role].modulate.a = a
+		_names[role].modulate.a = a
+		_buttons[role][0].set_pressed_no_signal(player.muted.has(role))
+		_buttons[role][1].set_pressed_no_signal(player.soloed.has(role))
 	_help.text = ("Space stop" if Transport.running else "Space PLAY") + "  ·  " + help_text

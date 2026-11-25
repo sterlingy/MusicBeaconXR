@@ -354,6 +354,6 @@ func _parse_args() -> void:
 			Transport.count_in_bars = 0
 			Transport.start()
 		elif a.begins_with("--solo="):
-			player.solo = a.trim_prefix("--solo=")
+			player.set_soloed(a.trim_prefix("--solo="), true)
 		elif a == "--wander":
 			input.wander = true

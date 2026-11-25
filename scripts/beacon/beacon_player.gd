@@ -40,7 +40,8 @@ var _param_t := 0.0
 var _gain := {} # role -> smoothed linear gain
 var _pad_notes: Array = [] # the chord the pad is holding
 var _awake := {} # role -> Prism part awake (out.gain 1) or asleep (0)
-var solo := "" # dev: hear only this part (--solo=<role>)
+var muted := {} # role -> true: silenced by the mix panel's M
+var soloed := {} # role -> true: when any part is soloed, only soloed parts play
 
 
 func _ready() -> void:
@@ -121,12 +122,29 @@ func _refresh() -> void:
 		harmony.update(active, 0)
 
 
+## Mute and solo, like a mixing desk: solo wins over mute.
+func audible(role: String) -> bool:
+	if not soloed.is_empty():
+		return soloed.has(role)
+	return not muted.has(role)
+
+
+func set_muted(role: String, on: bool) -> void:
+	if on: muted[role] = true
+	else: muted.erase(role)
+
+
+func set_soloed(role: String, on: bool) -> void:
+	if on: soloed[role] = true
+	else: soloed.erase(role)
+
+
 func _process(delta: float) -> void:
 	if mix.is_empty() or rigs.is_empty():
 		return
 	for role in rigs:
 		# Smooth level changes so walking never clicks.
-		var want := float(mix[role].gain) if Transport.running and (solo == "" or solo == role) else 0.0
+		var want := float(mix[role].gain) if Transport.running and audible(role) else 0.0
 		_gain[role] = lerpf(_gain[role], want, minf(1.0, delta * 6.0))
 		rigs[role].set_volume_db(linear_to_db(maxf(_gain[role], 0.0001)))
 		# A Prism part faded out of the blend sleeps: no voices, no CPU.

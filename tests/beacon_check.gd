@@ -58,6 +58,14 @@ func _check_player() -> void:
 	check(player.active.size() == 3, "three active beacons")
 	var harmony_changes := []
 	player.harmony_changed.connect(func(info): harmony_changes.append(info))
+	# Mute and solo, like a mixing desk.
+	player.set_muted("drums", true)
+	check(not player.audible("drums") and player.audible("bass"), "mute silences one part")
+	player.set_soloed("lead", true)
+	check(player.audible("lead") and not player.audible("bass") and not player.audible("drums"), "solo plays only the soloed part")
+	player.set_soloed("lead", false)
+	player.set_muted("drums", false)
+	check(player.audible("drums") and player.audible("bass"), "clearing them brings every part back")
 	check(not Transport.metronome_on and Transport.count_in_bars == 0, "beacon music starts with no metronome or count-in")
 	Transport.start()
 	var peaks := {}
