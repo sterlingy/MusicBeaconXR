@@ -3,26 +3,33 @@ extends SceneTree
 ## packs it plays each melodic part the way the beacon player does (the song's
 ## own notes, ranges and settings through ParamMap, on phone quality) and
 ## measures the share of energy above 2.5 kHz, in dB. Lists the worst songs.
-##   godot --headless --path . -s res://tools/tone_check.gd -- [--role=lead] [--wav=<folder>] [--all]
+##   godot --headless --path . -s res://tools/tone_check.gd -- [--role=lead] [--wav=<folder>] [--all] [--presets] [--json=<file>]
 ## --all checks the globe pack too (slower). --wav writes the worst song per part.
 
 const SR := 48000.0
 const BLOCK := 512
-const SYNTH := {"bass": ["Undertow", "Deep Current"], "keys": ["Prism", "Prism Keys"], "lead": ["Prism", "Comet Tail"], "pluck": ["Driftwood", "Nylon Pluck"]}
+const SYNTH := {"drums": ["Pulsar", "Classic Eight"], "bass": ["Undertow", "Deep Current"], "keys": ["Prism", "Prism Keys"], "lead": ["Prism", "Comet Tail"],
+	"pluck": ["Driftwood", "Nylon Pluck"], "texture": ["Tangle", "Drone Garden"], "pad": ["Prism", "Aurora Pad"]}
 ## Above this share (dB above 2.5 kHz), a part counts as shrill.
-const LIMIT := {"bass": -30.0, "keys": -22.0, "lead": -22.0, "pluck": -15.0}
+## Drums are judged looser: hats and snares live up there.
+const LIMIT := {"drums": -8.0, "bass": -30.0, "keys": -22.0, "lead": -22.0, "pluck": -15.0, "texture": -22.0, "pad": -25.0}
+const DRUM_NOTE := {"kick": 36, "snare": 38, "clap": 39, "hat": 42, "open": 46}
 const PRESET_LIMIT := {"keys": -22.0, "lead": -22.0, "pad": -25.0}
 
 
 func _init() -> void:
 	var roles := SYNTH.keys()
 	var wav_dir := ""
+	var json_path := ""
+	var dump := {}
 	var packs := ["res://songs/grid.json"]
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--role="):
 			roles = [a.trim_prefix("--role=")]
 		elif a.begins_with("--wav="):
 			wav_dir = a.trim_prefix("--wav=")
+		elif a.begins_with("--json="):
+			json_path = a.trim_prefix("--json=")
 		elif a == "--all":
 			packs.append("res://songs/globe.json")
 	var songs := {}
@@ -39,6 +46,9 @@ func _init() -> void:
 				continue
 			results.append([hf_db(buf), id, buf])
 		results.sort_custom(func(a, b): return a[0] > b[0])
+		dump[role] = {}
+		for r in results:
+			dump[role][r[1]] = snappedf(r[0], 0.1)
 		var vals := results.map(func(r): return r[0])
 		var over := results.filter(func(r): return r[0] > LIMIT[role]).size()
 		failed += over
@@ -47,6 +57,9 @@ func _init() -> void:
 		if wav_dir != "":
 			DirAccess.make_dir_recursive_absolute(wav_dir)
 			save_wav(results[0][2], wav_dir.path_join("%s_worst_%s.wav" % [role, results[0][1]]))
+	if json_path != "":
+		var f := FileAccess.open(json_path, FileAccess.WRITE)
+		f.store_string(JSON.stringify(dump))
 	print("tone_check: %s" % ("OK" if failed == 0 else "%d shrill part(s)" % failed))
 	quit(0 if failed == 0 else 1)
 
@@ -87,6 +100,8 @@ func check_presets() -> int:
 ## Plays two bars of a song's part like BeaconPlayer: same notes, same settings.
 func render(role: String, song: Dictionary) -> PackedVector2Array:
 	var t: Dictionary = song.tracks.get(role, {})
+	if role == "pad":
+		t = {"params": {}, "pattern": [[{"d": 0, "v": 0.7, "g": 16}]]} # the pad holds each bar's chord
 	if t.is_empty():
 		return PackedVector2Array()
 	var s := JamSynth.new()
@@ -110,14 +125,29 @@ func render(role: String, song: Dictionary) -> PackedVector2Array:
 	var pending := {} # frame -> notes to release
 	var frame := 0
 	for bar in 2:
-		var pat: Array = t.pattern
-		var bar_pat = pat[bar % pat.size()]
+		var bar_pat
+		if role == "drums":
+			bar_pat = t.pattern if bar == 0 or not t.has("patternB") else t.patternB
+		else:
+			var pat: Array = t.pattern
+			bar_pat = pat[bar % pat.size()]
 		var chord := int(song.progression[bar % song.progression.size()])
 		for step in 16:
-			var ev = bar_pat[step] if bar_pat else null
+			var ev = null
+			if role == "drums":
+				for v in DRUM_NOTE:
+					var vel := float(bar_pat.get(v, [])[step]) if bar_pat and bar_pat.get(v, []).size() > step else 0.0
+					if vel > 0.0:
+						s.note_on(DRUM_NOTE[v], vel)
+						var off_d := frame + int(step_frames * 0.8)
+						pending[off_d] = pending.get(off_d, []) + [DRUM_NOTE[v]]
+			elif bar_pat and step < bar_pat.size():
+				ev = bar_pat[step]
 			if ev != null:
 				var notes := []
-				if role == "keys":
+				if role == "pad":
+					notes = BeaconMixer.chord_notes(song.key, chord, 3, 4)
+				elif role == "keys":
 					notes = BeaconMixer.chord_notes(song.key, chord, int(round(t.params.get("octave", 4))), int(round(t.params.get("voicing", 3))))
 				else:
 					notes = [BeaconMixer.fold_into_range(role, BeaconMixer.degree_to_midi(song.key, chord + int(ev.d), BeaconMixer.ROLE_OCTAVE[role] + int(ev.get("o", 0))))]
