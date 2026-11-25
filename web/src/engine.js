@@ -1,7 +1,8 @@
 // The audio engine: a look-ahead clock that, every 16th step, asks the mixer
 // what the current beacon blend should play and schedules it sample-accurately
-// on the Web Audio instruments, or (synthMode "kit") on SynthKit's own
-// instruments through its web module, the same engine as the Godot app.
+// on SynthKit's instruments through its web module, the same engine as the
+// Godot app (synthMode "kit", the default), or on the old Web Audio
+// instruments (synthMode "web", kept for comparing until they're retired).
 
 import { weigh } from "./beacons.js";
 import { chordNotes, generateSong, ROLES } from "./song.js";
@@ -10,7 +11,7 @@ import { Bus, makeInstruments } from "./synths.js";
 import { songPosition } from "./form.js";
 import { makeKitInstruments, padGain } from "./kit/kitplayer.js";
 
-/** "web": the browser's own instruments (synths.js). "kit": SynthKit's, as in the app. */
+/** "kit": SynthKit's instruments, as in the app (default). "web": the old browser synths (synths.js). */
 export const SYNTH_MODES = ["web", "kit"];
 
 /** Wall-clock seconds: the shared clock every beacon's song runs on. */
@@ -36,7 +37,7 @@ export class BeaconEngine {
     this.clockT = null; // song-clock time sampled at the last bar line (while playing)
     this.anchor = { t: 0, beat: 0, bpm: 108 }; // audio time -> beats, for automation
     this.beatAt = (t) => this.anchor.beat + ((t - this.anchor.t) * this.anchor.bpm) / 60;
-    this.synthMode = "web";
+    this.synthMode = "kit";
     this.setField(field);
   }
 
@@ -148,7 +149,7 @@ export class BeaconEngine {
 
   /**
    * Picks the instruments ("web" or "kit"). Takes effect at once: a playing
-   * engine restarts on the new set. If SynthKit can't load, it stays on "web".
+   * engine restarts on the new set.
    */
   async setSynthMode(mode) {
     if (!SYNTH_MODES.includes(mode) || mode === this.synthMode) return this.synthMode;
@@ -162,17 +163,8 @@ export class BeaconEngine {
   }
 
   async _makeInstruments() {
-    if (this.synthMode === "kit") {
-      try {
-        this.inst = await makeKitInstruments(this.bus);
-        return;
-      } catch (err) {
-        console.warn("SynthKit couldn't load; using the browser instruments", err);
-        this.synthMode = "web";
-        this._note("synthError", String(err?.message || err));
-      }
-    }
-    this.inst = makeInstruments(this.bus);
+    // No fallback: if SynthKit can't load, start() fails and the page says why.
+    this.inst = this.synthMode === "kit" ? await makeKitInstruments(this.bus) : makeInstruments(this.bus);
   }
 
   _dropInstruments() {

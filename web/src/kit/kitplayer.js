@@ -15,13 +15,21 @@ export const BASE_PRESET = { drums: "Classic Eight", bass: "Deep Current", keys:
 export const PARTS = ["drums", "bass", "keys", "lead", "pluck", "texture", "pad"];
 export const DRUM_NOTE = { kick: 36, snare: 38, clap: 39, hat: 42, open: 46 };
 const PAD_MOODS = ["Drift", "Glow", "Tide"];
+/**
+ * SynthKit's output boost, and the pad's share. The songs' part levels are
+ * mixed for SynthKit (song.js MIX); this sets the whole mix so the busiest
+ * songs peak just under full scale (about -1 dBFS), since the app has no
+ * compressor. Same values in beacon_player.gd.
+ */
+export const KIT_GAIN_DB = 5;
+export const PAD_MIX = 0.379;
 const AWAKE = 0.0005;
 
 /** How much pad a song wants: calm, low-energy songs lean on it (BeaconPlayer.pad_level). */
 export function padLevel(song) {
   const energy = Number(song.energy ?? 0.5);
   const moodK = PAD_MOODS.includes(song.mood) ? 1 : 0.6;
-  return Math.max(0.12, Math.min(0.7, 0.75 - energy * 0.6)) * moodK;
+  return Math.max(0.12, Math.min(0.7, 0.75 - energy * 0.6)) * moodK * PAD_MIX;
 }
 
 /** The pad's share of a blend: each active song's pad level by its weight. */
@@ -109,6 +117,7 @@ export async function makeKitInstruments(bus, { base = new URL("../../synthkit/"
       synth.setParam("out.gain", 0); // asleep until the blend brings the part in
     }
     const ch = new Channel(bus);
+    ch.input.gain.value = Math.pow(10, KIT_GAIN_DB / 20);
     synth.connect(ch.input);
     out.channels[role] = wakeOnLevel(ch, synth, INSTRUMENT[role] === "Prism");
     out[role] = new KitPart(role, synth, ch);

@@ -457,13 +457,14 @@ $("play").addEventListener("click", togglePlay);
 $("play2").addEventListener("click", togglePlay);
 $("vol").addEventListener("input", (e) => engine.setVolume(+e.target.value));
 
-// Sound: the browser synths (default) or SynthKit's instruments, as in the app.
-// ?synth=kit or ?synth=web in the address picks one; the choice is remembered.
+// Sound: SynthKit's instruments, as in the app (default; the songs are mixed for
+// them), or the old browser synths for comparing. ?synth=kit or ?synth=web in
+// the address picks one; the choice is remembered.
 {
   const url = new URLSearchParams(location.search).get("synth");
   let saved = null;
-  try { saved = localStorage.getItem("beacon.synthMode"); } catch {}
-  const pick = ["web", "kit"].includes(url) ? url : saved === "kit" ? "kit" : "web";
+  try { saved = localStorage.getItem("beacon.sound"); } catch {}
+  const pick = ["web", "kit"].includes(url) ? url : saved === "web" ? "web" : "kit";
   engine.synthMode = pick;
   $("synthMode").value = pick;
   $("synthMode").addEventListener("change", async (e) => {
@@ -472,16 +473,11 @@ $("vol").addEventListener("input", (e) => engine.setVolume(+e.target.value));
     try {
       const got = await engine.setSynthMode(want);
       e.target.value = got;
-      try { localStorage.setItem("beacon.synthMode", got); } catch {}
+      try { localStorage.setItem("beacon.sound", got); } catch {}
     } catch (err) {
       setMsg("fieldMsg", "Couldn't switch the sound: " + err.message, true);
     }
     e.target.disabled = false;
-  });
-  engine.on((type, data) => {
-    if (type !== "synthError") return;
-    $("synthMode").value = "web";
-    setMsg("fieldMsg", "SynthKit couldn't load, so the browser synths are playing. (" + data + ")", true);
   });
 }
 $("wander").addEventListener("change", (e) => { input.wander = e.target.checked; });

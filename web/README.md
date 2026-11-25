@@ -84,9 +84,9 @@ The test playfield for Chord Master XR. You walk a listener between music beacon
 - **Sources:** `keyboardSource` (WASD / arrows, gamepad stick and d-pad; Space, T and 1–9 as actions; ignores typing in form fields), `pointerSource` (press to walk there, drag to steer, tap to select), `geolocationSource` (follows the device; stops on a hand move), `poseSource` (a WebXR or other tracked pose).
 - Chord Master XR (`app.js`) and the AR page (`ar.js`) both walk through it. Tests: `web/tests/input.test.mjs`.
 
-## Sound: browser synths or SynthKit (beta)
+## Sound: SynthKit
 
-The **Sound** menu in the header picks which instruments play the songs. **Browser synths** (the default) are `src/synths.js`, Web Audio versions of the instruments. **SynthKit (beta)** plays them on SynthKit's own instruments through its web module (`addons/synthkit/web/`, the same C++ engine as the Godot app compiled to WebAssembly), with Prism on keys, lead and a pad, like the app. `?synth=kit` or `?synth=web` in the address picks one too, and the choice is remembered.
+The songs play on SynthKit's own instruments through its web module (`addons/synthkit/web/`, the same C++ engine as the Godot app compiled to WebAssembly), with Prism on keys, lead and a pad, like the app. The songs' part levels are mixed for SynthKit (`MIX` in `src/song.js`; `KIT_GAIN_DB` and `PAD_MIX` in `src/kit/kitplayer.js` and `scripts/beacon/beacon_player.gd`). The **Sound** menu can still switch to the **Old browser synths** (`src/synths.js`) for comparing until they're retired; they no longer match the mix. `?synth=kit` or `?synth=web` in the address picks one too, and the choice is remembered. There's no fallback: if SynthKit can't load, Start says why.
 
 - `src/kit/kitplayer.js` is the browser twin of `scripts/beacon/beacon_player.gd`: the same instrument and base preset per part, and the pad. Phones get Prism's light voices.
 - `src/kit/parammap.js` is a port of `scripts/beacon/param_map.gd`. `web/tests/kit.test.mjs` checks it against the app's own output (`tests/fixtures/param_map.json`; after changing `param_map.gd`, re-run `godot --headless --path . -s res://tests/dump_param_map.gd`), and plays every part of every grid song through the web engine under the same shrillness limits as `tools/tone_check.gd`.

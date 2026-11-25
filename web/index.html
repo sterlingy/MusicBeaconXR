@@ -206,10 +206,10 @@ details summary { cursor: pointer; color: var(--muted); font-size: 13px; }
     <label class="inline" for="localSpacing">Beacon every
       <input id="localSpacing" type="number" inputmode="decimal" min="0.01" max="100" step="any" value="1" style="width:5em"> km
     </label>
-    <label class="inline" for="synthMode" title="Which instruments play the songs. SynthKit (beta) is the app's own engine, Prism included; the browser synths are the default while it's being tuned.">Sound
+    <label class="inline" for="synthMode" title="Which instruments play the songs. SynthKit is the app's own engine, Prism included, and the songs are mixed for it. The old browser synths are here for comparing until they're retired.">Sound
       <select id="synthMode">
-        <option value="web" selected>Browser synths</option>
-        <option value="kit">SynthKit (beta)</option>
+        <option value="kit" selected>SynthKit</option>
+        <option value="web">Old browser synths</option>
       </select>
     </label>
     <label class="inline" for="vol">Volume <input id="vol" type="range" min="0" max="1" step="0.01" value="0.8"></label>

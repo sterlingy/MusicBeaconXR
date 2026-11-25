@@ -23,6 +23,12 @@ const PARTS := ["drums", "bass", "keys", "lead", "pluck", "texture", "pad"]
 ## Moods that lean on a pad (others get less of it).
 const PAD_MOODS := ["Drift", "Glow", "Tide"]
 const DRUM_NOTE := {"kick": 36, "snare": 38, "clap": 39, "hat": 42, "open": 46}
+## The songs' part levels are mixed for SynthKit (web/src/song.js MIX). This
+## sets the whole mix so the busiest songs peak just under full scale (about
+## -1 dBFS; there's no compressor), and PAD_MIX is the pad's share of it.
+## Same values in web/src/kit/kitplayer.js.
+const KIT_GAIN_DB := 5.0
+const PAD_MIX := 0.379
 
 var field: BeaconField = BeaconField.make_grid()
 var songs := {} # beacon id -> song
@@ -146,7 +152,7 @@ func _process(delta: float) -> void:
 		# Smooth level changes so walking never clicks.
 		var want := float(mix[role].gain) if Transport.running and audible(role) else 0.0
 		_gain[role] = lerpf(_gain[role], want, minf(1.0, delta * 6.0))
-		rigs[role].set_volume_db(linear_to_db(maxf(_gain[role], 0.0001)))
+		rigs[role].set_volume_db(linear_to_db(maxf(_gain[role], 0.0001)) + KIT_GAIN_DB)
 		# A Prism part faded out of the blend sleeps: no voices, no CPU.
 		if _awake.has(role):
 			var awake: bool = _gain[role] > 0.0005
@@ -221,7 +227,7 @@ func transport_stopped() -> void:
 static func pad_level(song: Dictionary) -> float:
 	var energy := float(song.get("energy", 0.5))
 	var mood_k := 1.0 if song.get("mood", "") in PAD_MOODS else 0.6
-	return clampf(0.75 - energy * 0.6, 0.12, 0.7) * mood_k
+	return clampf(0.75 - energy * 0.6, 0.12, 0.7) * mood_k * PAD_MIX
 
 
 ## The pad holds the harmony's chord (root, third, fifth, seventh), tied across

@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import { readFileSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { toSynth } from "../src/kit/parammap.js";
-import { changedParams, padLevel, padGain, isPhone, INSTRUMENT, BASE_PRESET, PARTS, DRUM_NOTE } from "../src/kit/kitplayer.js";
+import { changedParams, padLevel, padGain, isPhone, PAD_MIX, KIT_GAIN_DB, INSTRUMENT, BASE_PRESET, PARTS, DRUM_NOTE } from "../src/kit/kitplayer.js";
 import { blend, Harmony, stepEvents } from "../src/mixer.js";
 import { chordNotes, generateSong } from "../src/song.js";
 
@@ -32,9 +32,10 @@ test("song params translate to SynthKit exactly as in the Godot app", () => {
 });
 
 test("pad level follows the app: calm songs lean on the pad", () => {
-  assert.equal(padLevel({ energy: 0.2, mood: "Drift" }).toFixed(3), "0.630");
-  assert.equal(padLevel({ energy: 0.9, mood: "Pulse" }).toFixed(3), "0.126");
-  assert.equal(padGain([{ w: 0.5, song: { energy: 0.5, mood: "Glow" } }, { w: 0.5, song: { energy: 0.5, mood: "Glow" } }]).toFixed(3), "0.450");
+  // BeaconPlayer.pad_level: clamp(0.75 - energy * 0.6, 0.12, 0.7) * mood * PAD_MIX.
+  assert.equal(padLevel({ energy: 0.2, mood: "Drift" }).toFixed(4), (0.63 * PAD_MIX).toFixed(4));
+  assert.equal(padLevel({ energy: 0.9, mood: "Pulse" }).toFixed(4), (0.126 * PAD_MIX).toFixed(4));
+  assert.equal(padGain([{ w: 0.5, song: { energy: 0.5, mood: "Glow" } }, { w: 0.5, song: { energy: 0.5, mood: "Glow" } }]).toFixed(4), (0.45 * PAD_MIX).toFixed(4));
 });
 
 test("only moved params are re-sent", () => {
@@ -133,4 +134,10 @@ test("every grid song's parts stay mellow on SynthKit's web engine", { skip: !ha
   }
   console.log("  worst above 2.5 kHz: " + Object.entries(worst).map(([r, [db, id]]) => `${r} ${db.toFixed(1)} (${id})`).join(", "));
   assert.deepEqual(over, [], "shrill parts");
+});
+
+test("the app and the website mix SynthKit the same way", () => {
+  const gd = read("scripts/beacon/beacon_player.gd");
+  assert.equal(Number(gd.match(/const KIT_GAIN_DB := ([\d.]+)/)[1]), KIT_GAIN_DB);
+  assert.equal(Number(gd.match(/const PAD_MIX := ([\d.]+)/)[1]), PAD_MIX);
 });

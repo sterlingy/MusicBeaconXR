@@ -10,6 +10,8 @@ const PRISM_WAVE = { sawtooth: 0, square: 1, triangle: 3, sine: 4 };
 const PRISM_ANALOG = 1;
 const PRISM_WAVETABLE = 2;
 const DRIFT_MODEL = { string: 0, marimba: 1, vibes: 2, kalimba: 3, bell: 4, glass: 5 };
+const DRIFT_STRING_VOLUME = 10;
+const DRIFT_MALLET_VOLUME = 1.15;
 // See PRISM_FILTER in param_map.gd: a song moves the preset's own cutoff by half
 // its distance from a typical song, within a range, so Prism never turns shrill.
 const PRISM_FILTER = {
@@ -106,7 +108,12 @@ export function toSynth(role, p = {}) {
       if (has(p, "delay.send")) o["send.echo"] = clamp(num(p["delay.send"]) * 10, 0, 10);
       break;
     case "pluck":
-      if (has(p, "model")) o["model.type"] = DRIFT_MODEL[p.model] ?? 0;
+      if (has(p, "model")) {
+        o["model.type"] = DRIFT_MODEL[p.model] ?? 0;
+        // Driftwood's string is about 17 dB quieter than its mallets at the same
+        // volume: strings play at full volume, mallets turned down to match.
+        o["out.volume"] = o["model.type"] === 0 ? DRIFT_STRING_VOLUME : DRIFT_MALLET_VOLUME;
+      }
       if (has(p, "brightness")) o["model.brightness"] = clamp(num(p.brightness) * 7, 0, 6.5);
       if (has(p, "decay")) o["model.decay"] = clamp(num(p.decay), 0.05, 20);
       if (has(p, "reverb.send")) o["reverb.mix"] = clamp(num(p["reverb.send"]) * 10, 0, 10);

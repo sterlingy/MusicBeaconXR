@@ -11,6 +11,8 @@ const PRISM_WAVE := {"sawtooth": 0, "square": 1, "triangle": 3, "sine": 4}
 const PRISM_ANALOG := 1
 const PRISM_WAVETABLE := 2
 const DRIFT_MODEL := {"string": 0, "marimba": 1, "vibes": 2, "kalimba": 3, "bell": 4, "glass": 5}
+const DRIFT_STRING_VOLUME := 10.0
+const DRIFT_MALLET_VOLUME := 1.15
 ## Prism parts: the songs' cutoffs and resonances were written for the browser's
 ## simpler synths. Prism's presets add a filter envelope and key tracking on top,
 ## so the raw values made them shrill. Instead, a song moves the preset's own
@@ -107,7 +109,11 @@ static func to_synth(role: String, p: Dictionary) -> Dictionary:
 			if p.has("delay.send"): o["send.echo"] = clampf(float(p["delay.send"]) * 10.0, 0, 10)
 
 		"pluck":
-			if p.has("model"): o["model.type"] = DRIFT_MODEL.get(p["model"], 0)
+			if p.has("model"):
+				o["model.type"] = DRIFT_MODEL.get(p["model"], 0)
+				# Driftwood's string is about 17 dB quieter than its mallets at the
+				# same volume: strings play at full volume, mallets turned down to match.
+				o["out.volume"] = DRIFT_STRING_VOLUME if o["model.type"] == 0 else DRIFT_MALLET_VOLUME
 			# The brightest strings ("Banjo Bright") get only most of the way there.
 			if p.has("brightness"): o["model.brightness"] = clampf(float(p["brightness"]) * 7.0, 0, 6.5)
 			if p.has("decay"): o["model.decay"] = clampf(float(p["decay"]), 0.05, 20)

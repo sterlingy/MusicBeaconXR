@@ -200,6 +200,16 @@ const NAME_B = ["Harbor", "Orchard", "Signal", "Lantern", "Canyon", "Garden", "C
  * A complete song for a beacon, the same every time for the same seed string.
  * `hint` can steer it: {mood: 0..4, root, mode}.
  */
+/**
+ * Each part's level scale for SynthKit (web: SynthKit mode; the Godot app),
+ * so the parts keep the balance the generator's level ranges were tuned for
+ * by ear. Measured: every part of 66 songs (grid and a globe sample) rendered
+ * on SynthKit, its median loudness matched to the median of the original
+ * browser synths; the loudest gap (pluck) is 1 and the others scale down.
+ * kitplayer.js / beacon_player.gd KIT_GAIN_DB then sets the overall level. The pad's share is in kitplayer.js padLevel().
+ */
+export const MIX = { drums: 0.214, bass: 0.602, keys: 0.441, lead: 0.716, pluck: 1, texture: 0.216 };
+
 export function generateSong(seedString, hint = {}) {
   const r = rng(hashString(seedString));
   const mood = MOODS[hint.mood ?? Math.floor(r() * MOODS.length)];
@@ -230,6 +240,8 @@ export function generateSong(seedString, hint = {}) {
   for (const role of ROLES) dressTrack(r, song.tracks[role], role, e);
   for (const role of ROLES) song.morph[role] = defaultMorph(role);
   addStructure(r, song, e);
+  // Part levels are mixed for SynthKit, the instruments every platform plays.
+  for (const role of ROLES) song.tracks[role].level = round(song.tracks[role].level * MIX[role], 3);
   return song;
 }
 
