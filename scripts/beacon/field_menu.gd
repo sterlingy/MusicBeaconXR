@@ -15,6 +15,8 @@ signal follow_changed(on: bool)
 const ACCENT := Color("ffb547")
 const MANUAL_URL := "https://sterlingy.github.io/MusicBeaconXR/manual.html"
 const FIELDS := [["grid", "Test grid"], ["globe", "Globe"], ["local", "Local grid"]]
+## How much bigger the buttons and panel are on phones (they were too small to tap).
+const PHONE_SCALE := 4.0
 
 var kind := "grid"
 var panel: PanelContainer
@@ -23,6 +25,9 @@ var _play: Button
 var _click: Button
 var _fields_btn: Button
 var _field_btns := {}
+var _row: HBoxContainer
+## 1 on desktops, PHONE_SCALE on phones (dev: --ui-scale=N).
+var ui_scale := 1.0
 
 
 func _init(p_kind: String) -> void:
@@ -42,6 +47,11 @@ func _ready() -> void:
 	row.alignment = BoxContainer.ALIGNMENT_END
 	row.add_theme_constant_override("separation", 8)
 	add_child(row)
+	_row = row
+	ui_scale = PHONE_SCALE if OS.has_feature("mobile") else 1.0
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--ui-scale="):
+			ui_scale = float(a.trim_prefix("--ui-scale="))
 	_play = _button("▶ Play", func(): Transport.toggle())
 	row.add_child(_play)
 	_click = _button("Click", func(): pass, true)
@@ -54,9 +64,23 @@ func _ready() -> void:
 
 
 func _process(_delta: float) -> void:
+	_fit()
 	_play.text = "■ Stop" if Transport.running else "▶ Play"
 	if _click.button_pressed != Transport.metronome_on:
 		_click.set_pressed_no_signal(Transport.metronome_on)
+
+
+## Scales the button row and the panel from their top-right corners; the
+## panel shrinks if it wouldn't fit on the screen at full scale.
+func _fit() -> void:
+	var view := get_viewport().get_visible_rect().size
+	var s := minf(ui_scale, (view.x - 24.0) / maxf(1.0, _row.size.x))
+	_row.pivot_offset = Vector2(_row.size.x, 0)
+	_row.scale = Vector2(s, s)
+	var ps := minf(s, minf((view.x - 24.0) / maxf(1.0, panel.size.x), (view.y - _row.size.y * s - 32.0) / maxf(1.0, panel.size.y)))
+	panel.offset_top = 12.0 + _row.size.y * s + 8.0
+	panel.pivot_offset = Vector2(panel.size.x, 0)
+	panel.scale = Vector2(ps, ps)
 
 
 func set_open(open: bool) -> void:
