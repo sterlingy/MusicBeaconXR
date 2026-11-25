@@ -549,4 +549,5 @@ test("bass notes fold into a real bass range (E1-G3)", () => {
   assert.equal(foldIntoRange("bass", 24), 36);
   assert.equal(foldIntoRange("bass", 40), 40);
   assert.equal(foldIntoRange("lead", 84), 84);
+  assert.equal(foldIntoRange("lead", 100), 88);
 });

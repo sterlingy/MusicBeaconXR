@@ -58,7 +58,7 @@ func _check_player() -> void:
 	check(player.active.size() == 3, "three active beacons")
 	var harmony_changes := []
 	player.harmony_changed.connect(func(info): harmony_changes.append(info))
-	check(BeaconMixer.fold_into_range("bass", 67) == 55 and BeaconMixer.fold_into_range("bass", 40) == 40 and BeaconMixer.fold_into_range("lead", 84) == 84, "bass notes fold into E1-G3")
+	check(BeaconMixer.fold_into_range("bass", 67) == 55 and BeaconMixer.fold_into_range("bass", 40) == 40 and BeaconMixer.fold_into_range("lead", 84) == 84 and BeaconMixer.fold_into_range("lead", 100) == 88, "bass and lead notes fold into their ranges")
 	# Mute and solo, like a mixing desk.
 	player.set_muted("drums", true)
 	check(not player.audible("drums") and player.audible("bass"), "mute silences one part")

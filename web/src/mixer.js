@@ -6,10 +6,12 @@ import { ROLES, degreeToMidi, chordNotes, chordName, romanName, keyName, hash01 
 import { sectionName } from "./form.js";
 
 const LOG_PARAM = /cutoff|tone|tune|rate|amount/;
-const ROLE_OCTAVE = { bass: 2, lead: 4, pluck: 4, texture: 3 };
+// The songs' lead notes all carry +1 octave, so the lead starts at octave 3.
+const ROLE_OCTAVE = { bass: 2, lead: 3, pluck: 4, texture: 3 };
 // Lowest and highest MIDI note a part may play; notes outside fold in by
-// octaves. A bass above G3 stops sounding like a bass (and turns shrill).
-const ROLE_RANGE = { bass: [28, 55] };
+// octaves. A bass above G3 stops sounding like a bass, and a lead above G6
+// turns piercing.
+const ROLE_RANGE = { bass: [28, 55], lead: [52, 91] };
 export function foldIntoRange(role, midi) {
   const r = ROLE_RANGE[role];
   if (!r) return midi;

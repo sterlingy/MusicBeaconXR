@@ -74,7 +74,12 @@ static func to_synth(role: String, p: Dictionary) -> Dictionary:
 			if p.has("osc2.wave"):
 				o["b.type"] = PRISM_ANALOG
 				o["b.wave"] = PRISM_WAVE.get(p["osc2.wave"], 1)
-			if p.has("osc2.semis"): o["b.coarse"] = clampi(int(p["osc2.semis"]), -24, 24)
+			if p.has("osc2.semis"):
+				# At most an octave above: +19 and +24 whistle over a bright lead.
+				var semis := int(round(float(p["osc2.semis"])))
+				while semis > 12:
+					semis -= 12
+				o["b.coarse"] = clampi(semis, -24, 12)
 			if p.has("osc2.level"): o["b.level"] = clampf(float(p["osc2.level"]) * 10.0, 0, 10)
 			if p.has("vibrato.depth"): o["lfo1.vibrato"] = clampf(float(p["vibrato.depth"]), 0, 100)
 			if p.has("vibrato.rate"): o["lfo1.rate"] = clampf(float(p["vibrato.rate"]), 0.1, 12)

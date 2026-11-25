@@ -5,10 +5,12 @@ extends RefCounted
 
 const ROLES := ["drums", "bass", "keys", "lead", "pluck", "texture"]
 const DRUM_VOICES := ["kick", "snare", "hat", "open", "clap"]
-const ROLE_OCTAVE := {"bass": 2, "lead": 4, "pluck": 4, "texture": 3}
+## The songs' lead notes all carry +1 octave, so the lead starts at octave 3.
+const ROLE_OCTAVE := {"bass": 2, "lead": 3, "pluck": 4, "texture": 3}
 ## Lowest and highest MIDI note a part may play; notes outside fold in by
-## octaves. A bass above G3 stops sounding like a bass (and turns shrill).
-const ROLE_RANGE := {"bass": [28, 55]}
+## octaves. A bass above G3 stops sounding like a bass, and a lead above G6
+## turns piercing.
+const ROLE_RANGE := {"bass": [28, 55], "lead": [52, 91]}
 const MODES := {
 	"major": [0, 2, 4, 5, 7, 9, 11], "minor": [0, 2, 3, 5, 7, 8, 10], "dorian": [0, 2, 3, 5, 7, 9, 10],
 	"mixolydian": [0, 2, 4, 5, 7, 9, 10], "lydian": [0, 2, 4, 6, 7, 9, 11], "phrygian": [0, 1, 3, 5, 7, 8, 10],

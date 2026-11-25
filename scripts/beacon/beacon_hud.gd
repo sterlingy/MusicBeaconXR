@@ -42,6 +42,9 @@ func _ready() -> void:
 	sb.set_content_margin_all(14)
 	panel.add_theme_stylebox_override("panel", sb)
 	_panel = panel
+	# Clicks and taps on the panel stay on it (containers pass them on to the
+	# world by default, which walked the listener).
+	panel.mouse_filter = Control.MOUSE_FILTER_STOP
 	panel.position = Vector2(16, 16)
 	panel.custom_minimum_size = Vector2(360, 0)
 	add_child(panel)
