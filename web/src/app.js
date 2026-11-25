@@ -1,4 +1,4 @@
-// Beacon Field UI: the map, the listener, and the readouts.
+// Chord Master XR UI: the map, the listener, and the readouts.
 
 import { makeGridField, makeGlobeField, makeLocalGridField, localGridShape, MAX_LOCAL_STEPS, KM_M, weigh, normalizeLatLon } from "./beacons.js";
 import { generateSong, validateSong, chordName, keyName, ROLES, ROLE_INSTRUMENT } from "./song.js";

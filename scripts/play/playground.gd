@@ -319,7 +319,7 @@ func _build_ui() -> void:
 	pb.pressed.connect(_toggle_patches)
 	row2.add_child(pb)
 	var back := Button.new()
-	back.text = "Beacon field"
+	back.text = "Map"
 	back.pressed.connect(func(): get_tree().change_scene_to_file("res://scenes/beacon_field.tscn"))
 	row2.add_child(back)
 

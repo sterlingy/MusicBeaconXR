@@ -1,6 +1,6 @@
 {
-  "name": "Beacon Field",
-  "short_name": "Beacons",
+  "name": "Chord Master XR",
+  "short_name": "Chord Master",
   "description": "Generative music driven by where you are between beacons.",
   "start_url": "./",
   "scope": "./",

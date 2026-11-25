@@ -3,12 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>Synths</title>
+<title>Chord Master Synths</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
-/* Synths: one instrument at a time, like a hardware front panel. Same look as Beacon Field. */
+/* Synths: one instrument at a time, like a hardware front panel. Same look as Chord Master XR. */
 :root {
   --bg: #0e131a; --panel: #151c25; --raise: #1c2531; --line: #2a3644; --fg: #e6ebf1; --muted: #8d9aab; --accent: #ffb547;
   --key-w: #e9edf2; --key-b: #1a2029;
@@ -117,11 +117,11 @@ textarea { width: 100%; min-height: 120px; background: var(--raise); border: 1px
 <body>
 <div class="app">
   <header>
-    <h1>Beacon <span>Synths</span></h1>
-    <span class="hint">The six instruments Beacon Field plays. Shape a sound, play it, copy it into a song.</span>
+    <h1>Chord Master <span>Synths</span></h1>
+    <span class="hint">The six instruments Chord Master XR plays. Shape a sound, play it, copy it into a song.</span>
     <div class="spacer"></div>
     <label class="inline" for="vol">Volume <input id="vol" type="range" min="0" max="1" step="0.01" value="0.8" style="width:100px"></label>
-    <a class="btn" href="./">← Beacon Field</a>
+    <a class="btn" href="./">← Chord Master XR</a>
   </header>
 
   <nav class="tabs" id="tabs" role="tablist" aria-label="Instruments"></nav>
@@ -172,7 +172,7 @@ textarea { width: 100%; min-height: 120px; background: var(--raise); border: 1px
       <span class="msg" id="msg" role="status"></span>
     </div>
     <textarea id="json" hidden spellcheck="false" aria-label="Sound as JSON"></textarea>
-    <p class="hint" style="margin:8px 0 0">Press ∿ next to a control to animate it: pick a shape, how many bars one sweep takes, and how far it swings. Animations run in time with the tempo. Your changes and saved presets are kept in this browser. In Beacon Field, click an instrument's name under <b>Instruments</b> to open it here with the sound it's playing right now.</p>
+    <p class="hint" style="margin:8px 0 0">Press ∿ next to a control to animate it: pick a shape, how many bars one sweep takes, and how far it swings. Animations run in time with the tempo. Your changes and saved presets are kept in this browser. In Chord Master XR, click an instrument's name under <b>Instruments</b> to open it here with the sound it's playing right now.</p>
   </section>
 </div>
 <script type="module" src="src/synthpage.js"></script>

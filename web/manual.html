@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Beacon Field User Manual</title>
+<title>Chord Master XR User Manual</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
@@ -62,13 +62,13 @@ a { color: var(--accent); }
 <body>
 <div class="wrap">
 <header>
-<a class="back" href="./">← Back to Beacon Field</a>
-<h1>Beacon Field User Manual</h1>
+<a class="back" href="./">← Back to Chord Master XR</a>
+<h1>Chord Master XR User Manual</h1>
 <p class="updated">Updated Nov 22, 2026</p>
 </header>
 <nav aria-label="Sections"><a href="#quick-start">Quick start</a><a href="#how-the-music-works">How the music works</a><a href="#song-structure">Song structure</a><a href="#the-three-fields">The three fields</a><a href="#local-grid">Local grid</a><a href="#controls">Controls</a><a href="#songs">Songs</a><a href="#synths-page">Synths page</a><a href="#phones-and-tablets">Phones and tablets</a><a href="#troubleshooting">Troubleshooting</a></nav>
 <main>
-<p>Beacon Field is a music map: walk a listener between beacons, and the three closest beacons&#x27; songs blend into one live track.</p>
+<p>Chord Master XR is a music map: walk a listener between beacons, and the three closest beacons&#x27; songs blend into one live track.</p>
 <h2 id="quick-start">Quick start</h2>
 <p>You hear music within a minute: open the page, press Start, and move the listener.</p>
 <ol><li>Open the page. On the PC, run <code>python web/serve.py</code> in the project folder and open http://127.0.0.1:8765. On a phone or tablet, see <strong>Phones and tablets</strong> below.</li><li>Pick a field at the top: <strong>Test grid</strong>, <strong>Globe</strong> or <strong>Local grid</strong>. For Local grid, <strong>set its side length and beacon spacing</strong> first.</li><li>Press <strong>▶ Start the music</strong> (or <strong>▶ Start</strong> at the top). Headphones are recommended.</li><li>Move the listener: drag or tap on the map, or use the arrow keys or WASD. In Local grid, the listener follows your real location instead.</li><li>Watch <strong>The blend</strong> panel: it shows the three beacons you hear and how much of each.</li></ol>

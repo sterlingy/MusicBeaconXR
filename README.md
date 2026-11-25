@@ -1,4 +1,4 @@
-# MusicBeaconXR
+# Chord Master XR
 
 Generative music driven by where you are. Beacons are placed in a space: a 100 m test grid, a beacon every 10° of latitude and longitude around the globe, or a local grid around your real location. Each beacon has its own song, a full 2 to 5 minute piece with verses, choruses and a bridge. As you move, the three closest beacons' songs blend into one track, and the blended sound parameters keep shifting.
 
@@ -6,7 +6,7 @@ Generative music driven by where you are. Beacons are placed in a space: a 100 m
 
 | Folder | What it is | Run / test |
 |---|---|---|
-| `web/` | **Beacon Field**, the browser playfield: test grid, globe, and a local grid (1 to 100 km a side, any beacon spacing) that follows your location; Web Audio synths with 20 presets each and parameter automation (the Synths page, `web/synths.html`); song editor with form and arrangement; shared songs. See [web/README.md](web/README.md). | `python web/serve.py`, then http://127.0.0.1:8765 (`--https` for phones) · `node --test web/tests` |
+| `web/` | **Chord Master XR**, the browser playfield: test grid, globe, and a local grid (1 to 100 km a side, any beacon spacing) that follows your location; Web Audio synths with 20 presets each and parameter automation (the Synths page, `web/synths.html`); song editor with form and arrangement; shared songs. See [web/README.md](web/README.md). | `python web/serve.py`, then http://127.0.0.1:8765 (`--https` for phones) · `node --test web/tests` |
 | `addons/synthkit/` | **SynthKit**, the AudioSyncMaster instruments as a Godot addon (engine, panels, presets, sequencer, clock). See [addons/synthkit/README.md](addons/synthkit/README.md). | `godot --headless --path . res://tests/synthkit_check.tscn` |
 | `scripts/beacon/` | The Godot beacon player: the same fields, weights and blending as the browser, playing on SynthKit's engine. Keys, lead and a pad part (which holds the blended harmony's chords) play on SynthKit's **Prism** engine. | `godot --headless --path . res://tests/beacon_check.tscn` |
 | `scenes/beacon_field.tscn` | **3D test grid** (main scene): pillars per beacon, a listener to walk, blend lines, HUD. WASD walk, click to go, T auto-walk, Space play, G globe. | F5 in Godot |
@@ -30,7 +30,7 @@ Published browser page (private until shared): https://claude.ai/artifact/FjUKz2
 | PC VR (SteamVR, Oculus / Link, any OpenXR runtime) | Godot, `Windows VR (OpenXR)` preset (opens `xr_field` with OpenXR on), or `--xr-mode on` | Built; tested without a headset (falls back to flat), the XR rig tested with `--fake-xr` |
 | Meta Quest (standalone) | Godot, `Quest (OpenXR)` preset | APK builds, but needs the OpenXR vendors plugin and a gradle build to run as XR on the headset (see Known gaps) |
 | Android phone | Godot, `Android phone (flat)` preset (landscape, tap to go, pinch zoom) | APK builds; not run on a device here |
-| Any browser, desktop or phone | `web/` (Beacon Field, Synths, AR / VR preview) | Tested here |
+| Any browser, desktop or phone | `web/` (Chord Master XR, Synths, AR / VR preview) | Tested here |
 | WebAR | `web/ar.html` → Start AR (Chrome on Android, Quest Browser) | Needs a device; preview tested here |
 | WebVR | `web/ar.html` → Start VR (Quest Browser, PC VR browsers, Vision Pro) | Needs a device; preview tested here |
 | Instruments, everywhere | Godot `instrument_table.tscn` (desktop, Android, PC VR, Quest) and `web/play.html` (browsers, phones, WebXR VR and AR) | Desktop and browser (mouse, touch, phone layout) tested here; XR hands tested with simulated input, not on a headset |

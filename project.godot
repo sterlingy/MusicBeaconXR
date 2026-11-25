@@ -3,7 +3,7 @@ config_version=5
 
 [application]
 
-config/name="MusicBeaconXR"
+config/name="Chord Master XR"
 config/description="Generative music driven by where you are between beacons."
 run/main_scene="res://scenes/beacon_field.tscn"
 run/main_scene.quest="res://scenes/xr_field.tscn"

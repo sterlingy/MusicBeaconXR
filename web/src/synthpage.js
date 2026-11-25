@@ -1,6 +1,6 @@
 // Synths page: play and shape each of the six browser instruments by hand,
 // browse their presets and animate their parameters. Uses the same
-// instrument code as Beacon Field (synths.js), so a sound made here sounds the
+// instrument code as Chord Master XR (synths.js), so a sound made here sounds the
 // same in a song. A sound is the song format's track `params` plus `automation`.
 
 import { Bus, makeInstruments } from "./synths.js";
@@ -103,7 +103,7 @@ function presetList(n) {
   return [...PRESETS[n].map((p, i) => ({ key: `f:${i}`, name: p.name, factory: true, p })), ...userPresets(n).map((p, i) => ({ key: `u:${i}`, name: p.name, factory: false, p }))];
 }
 
-// A sound handed over from Beacon Field (clicking an instrument there).
+// A sound handed over from Chord Master XR (clicking an instrument there).
 let handoffNote = "";
 try {
   const h = JSON.parse(localStorage.getItem("beacon.synthHandoff"));
@@ -114,7 +114,7 @@ try {
     state.auto[n] = cleanAuto(n, h.automation);
     state.preset[n] = null;
     save(n);
-    handoffNote = `Loaded the sound ${n} was playing in Beacon Field${h.from ? ` (${h.from})` : ""}.`;
+    handoffNote = `Loaded the sound ${n} was playing in Chord Master XR${h.from ? ` (${h.from})` : ""}.`;
   }
   localStorage.removeItem("beacon.synthHandoff");
 } catch {}
@@ -261,7 +261,7 @@ function controlRow(n, c) {
 
 function renderPanel() {
   const n = state.name, sp = SPEC[n];
-  document.title = `${n} · Synths`;
+  document.title = `${n} · Chord Master Synths`;
   $("name").textContent = n;
   $("blurb").textContent = sp.blurb;
   $("groups").innerHTML = Object.entries(sp.groups).map(([g, cs]) => `<fieldset><legend>${g}</legend>${cs.map((c) => controlRow(n, c)).join("")}</fieldset>`).join("");
@@ -535,7 +535,7 @@ $("random").addEventListener("click", () => {
 $("copy").addEventListener("click", async () => {
   const n = state.name, item = presetList(n).find((x) => x.key === state.preset[n]);
   const text = JSON.stringify({ instrument: n, preset: item?.name, params: state.params[n], automation: state.auto[n] }, null, 2);
-  try { await navigator.clipboard.writeText(text); setMsg("Copied. params and automation fit a song track (Paste JSON in Beacon Field)."); }
+  try { await navigator.clipboard.writeText(text); setMsg("Copied. params and automation fit a song track (Paste JSON in Chord Master XR)."); }
   catch { $("json").value = text; $("json").hidden = false; $("json").select(); setMsg("Copy the text below."); }
 });
 $("paste").addEventListener("click", () => {

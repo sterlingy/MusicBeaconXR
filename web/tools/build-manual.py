@@ -90,7 +90,7 @@ def block(el, toc, used):
 
 def main(src):
     root = ET.fromstring(Path(src).read_text(encoding="utf-8"))
-    title = "Beacon Field User Manual"
+    title = "Chord Master XR User Manual"
     updated = ""
     for p in root.iter("paragraph"):
         if p.get("heading") == "1":
@@ -170,7 +170,7 @@ a {{ color: var(--accent); }}
 <body>
 <div class="wrap">
 <header>
-<a class="back" href="./">← Back to Beacon Field</a>
+<a class="back" href="./">← Back to Chord Master XR</a>
 <h1>{title}</h1>
 <p class="updated">Updated {updated}</p>
 </header>
