@@ -54,8 +54,7 @@ func _check_player() -> void:
 	check(player.active.size() == 3, "three active beacons")
 	var harmony_changes := []
 	player.harmony_changed.connect(func(info): harmony_changes.append(info))
-	Transport.metronome_on = false
-	Transport.count_in_bars = 0
+	check(not Transport.metronome_on and Transport.count_in_bars == 0, "beacon music starts with no metronome or count-in")
 	Transport.start()
 	var peaks := {}
 	for i in 150:

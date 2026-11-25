@@ -64,6 +64,10 @@ func _ready() -> void:
 		_applied[role] = {}
 		_gain[role] = 0.0
 		played[role] = 0
+	# Beacon music is for listening: no metronome click and no count-in unless
+	# someone turns the click on (the field's "Click" button, or M).
+	Transport.metronome_on = false
+	Transport.count_in_bars = 0
 	Transport.register(self)
 	_refresh()
 

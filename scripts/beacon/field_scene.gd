@@ -45,6 +45,9 @@ func _ready() -> void:
 
 
 ## Touch buttons (phones have no keys): play, globe, instruments. Top right.
+var _click_btn: Button
+
+
 func _build_buttons() -> void:
 	var layer := CanvasLayer.new()
 	layer.name = "Buttons"
@@ -52,7 +55,7 @@ func _build_buttons() -> void:
 	var row := HBoxContainer.new()
 	row.anchor_left = 1.0
 	row.anchor_right = 1.0
-	row.offset_left = -330
+	row.offset_left = -420
 	row.offset_right = -12
 	row.offset_top = 12
 	row.alignment = BoxContainer.ALIGNMENT_END
@@ -74,6 +77,26 @@ func _build_buttons() -> void:
 			btn.add_theme_stylebox_override(state, sb)
 		btn.pressed.connect(b[1])
 		row.add_child(btn)
+	# Metronome click, off by default.
+	_click_btn = Button.new()
+	_click_btn.text = "Click"
+	_click_btn.toggle_mode = true
+	_click_btn.button_pressed = false # the beacon player turns the click off
+	_click_btn.focus_mode = Control.FOCUS_NONE
+	_click_btn.custom_minimum_size = Vector2(0, 40)
+	for state in ["normal", "hover", "pressed", "hover_pressed"]:
+		var sb := StyleBoxFlat.new()
+		var on: bool = state.contains("pressed")
+		sb.bg_color = Color("3a2a10") if on else Color(0.08, 0.11, 0.15, 0.88)
+		sb.border_color = Color("ffb547") if on or state == "hover" else Color("2a3644")
+		sb.set_border_width_all(1)
+		sb.set_corner_radius_all(8)
+		sb.content_margin_left = 12
+		sb.content_margin_right = 12
+		_click_btn.add_theme_stylebox_override(state, sb)
+	_click_btn.toggled.connect(func(t): Transport.metronome_on = t)
+	row.add_child(_click_btn)
+	row.move_child(_click_btn, 1)
 
 
 ## Walking comes from ListenerKit (keyboard / gamepad, click or tap, wander); this
@@ -262,12 +285,14 @@ func _update_world(delta: float) -> void:
 
 
 func help_text() -> String:
-	return "WASD walk · click to go · T auto-walk%s · wheel zoom · G globe · I instruments" % (" (on)" if input.wander else "")
+	return "WASD walk · click to go · T auto-walk%s · wheel zoom · G globe · I instruments · M click" % (" (on)" if input.wander else "")
 
 
 func _unhandled_key_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_I:
 		get_tree().change_scene_to_file("res://scenes/instrument_table.tscn")
+	elif event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_M:
+		_click_btn.button_pressed = not _click_btn.button_pressed
 
 
 func _check_shot() -> void:
