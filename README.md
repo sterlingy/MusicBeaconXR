@@ -54,8 +54,8 @@ Transport.start()
 
 ## Known gaps
 
-- SynthKit is shared with AudioSyncMaster. Its home on this PC is `D:\SynthKit` (engine source, build scripts, binaries, scripts, presets). Change the instruments there, then run `powershell -ExecutionPolicy Bypass -File tools\sync_synthkit.ps1`; don't edit `addons/synthkit` here. Building the engine needs its third-party libraries and VS 2022 (see SynthKit's README).
+- SynthKit is shared with AudioSyncMaster and lives in its own private repo (github.com/sterlingy/SynthKit), included here as a git submodule at `addons/synthkit`. Clone with `git clone --recurse-submodules`, or run `git submodule update --init` in an existing checkout. Change the instruments in SynthKit, push there, then bump the submodule here (`git -C addons/synthkit pull` and commit the new pointer); don't edit `addons/synthkit` in this repo. Building the engine needs its third-party libraries and VS 2022 (see SynthKit's README).
 - The browser synths are ports of the instrument designs, not the C++ engine.
 - The Godot player doesn't follow song forms or automation yet, and the local grid is browser-only.
 - Quest standalone: the plain export has no OpenXR loader or Quest manifest entries. Add the Godot OpenXR vendors plugin (`addons/godotopenxrvendors`), install the Android build template, and turn on gradle build and the Meta plugin in the `Quest (OpenXR)` preset. PC VR (including Quest over Link) uses the Windows VR build instead; not tried on a headset yet.
-- No Godot web export: SynthKit is a GDExtension with no web build, so the browser version is `web/`.
+- No Godot web export. SynthKit now has a web build (`addons/synthkit/web/`, the same C++ compiled to WebAssembly), but the Godot app itself isn't exported to the web; the browser version is `web/`, which still uses its own Web Audio instruments.
