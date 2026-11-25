@@ -19,10 +19,11 @@
   "b.morph": 1,
   "b.coarse": -12,
   "b.level": 3,
-  "f1.type": 1,
-  "f1.cutoff": 5000,
-  "f1.env": 2,
-  "out.tone": 7000,
+  "f1.type": 0,
+  "f1.cutoff": 1700,
+  "f1.keytrack": 1,
+  "f1.env": 1.2,
+  "out.tone": 4000,
   "env1.sustain": 9,
   "env1.release": 0.2,
   "lfo1.rate": 5.2,
@@ -39,6 +40,6 @@
   "mod2.amount": 0.5,
   "mod3.src": 7,
   "mod3.dst": 14,
-  "mod3.amount": 0.2
+  "mod3.amount": 0.1
  }
 }

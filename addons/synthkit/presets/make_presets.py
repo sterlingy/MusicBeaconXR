@@ -313,32 +313,32 @@ def mods(*slots):
 P["Prism"] = [
     ("Prism Keys", "Keys: a wavetable saw and a detuned square; Macro 1 opens the filter, Macro 2 warps the wave.", {
         "a.type": 2, "a.table": 0, "a.timbre": 0.6, "b.type": 1, "b.wave": 1, "b.level": 4,
-        "f1.cutoff": 2200, "f1.resonance": 2, "f1.env": 3, "out.tone": 8000, "env2.decay": 0.5, "env2.sustain": 2,
+        "f1.cutoff": 2200, "f1.resonance": 2, "f1.keytrack": 2.5, "f1.env": 3, "out.tone": 7000, "env2.decay": 0.5, "env2.sustain": 2,
         "env1.attack": 0.003, "env1.decay": 1.2, "env1.sustain": 6, "env1.release": 0.6,
         "lfo2.rate": 0.3, "fx1.type": 1, "fx1.amount": 3, "send.space": 3,
         **mods((7, 14, 0.25), (9, 4, 0.4), (12, 14, 0.6), (13, 5, 0.8), (5, 4, 0.1))}),
     ("Glass EP", "Keys: FM tine piano, brighter the harder you play, with a gentle tremolo.", {
-        "a.type": 3, "a.ratio": 1, "a.timbre": 0.3, "a.morph": 0.1, "b.type": 3, "b.ratio": 11, "b.timbre": 0.2, "b.level": 2,
-        "f1.type": 1, "f1.cutoff": 9000, "f1.env": 0, "out.tone": 10000, "env1.attack": 0.002, "env1.decay": 2.5, "env1.sustain": 2, "env1.release": 0.5,
+        "a.type": 3, "a.ratio": 1, "a.timbre": 0.25, "a.morph": 0.1, "b.type": 3, "b.ratio": 11, "b.timbre": 0.12, "b.level": 1.2,
+        "f1.type": 0, "f1.cutoff": 3200, "f1.keytrack": 1, "f1.env": 0, "out.tone": 5000, "env1.attack": 0.002, "env1.decay": 2.5, "env1.sustain": 2, "env1.release": 0.5,
         "env3.decay": 0.3, "lfo2.rate": 4.5, "lfo2.shape": 0, "fx1.type": 2, "fx1.amount": 2, "fx1.rate": 0.3, "send.space": 2,
-        **mods((3, 4, 0.5), (7, 4, 0.4), (5, 20, 0.3), (12, 7, 0.6))}),
+        **mods((3, 4, 0.25), (7, 4, 0.2), (5, 20, 0.3), (12, 7, 0.6))}),
     ("Drawbar Drift", "Keys: organ registrations with a rotary-style chorus; Macro 1 pulls the drawbars.", {
         "a.type": 2, "a.table": 6, "a.timbre": 0.35, "a.unison": 2, "a.detune": 6, "b.type": 0,
-        "f1.type": 1, "f1.cutoff": 8000, "f1.env": 0, "out.tone": 9000, "env1.attack": 0.005, "env1.sustain": 10, "env1.release": 0.08,
+        "f1.type": 1, "f1.cutoff": 3600, "f1.keytrack": 1, "f1.env": 0, "out.tone": 5500, "env1.attack": 0.005, "env1.sustain": 10, "env1.release": 0.08,
         "fx1.type": 1, "fx1.amount": 6, "fx1.rate": 0.9, "send.space": 2,
         **mods((12, 4, 0.65), (9, 22, 0.5), (4, 20, 0.15))}),
     ("Comet Tail", "Lead: three detuned saws through the ladder, legato glide, vibrato; pressure opens it.", {
-        "voice.mode": 2, "voice.glide": 0.06, "voice.priority": 2, "a.unison": 3, "a.detune": 14,
-        "b.type": 1, "b.wave": 1, "b.coarse": 12, "b.level": 3,
-        "f1.type": 5, "f1.cutoff": 1800, "f1.resonance": 3, "f1.env": 3.5, "out.tone": 6500, "env2.attack": 0.01, "env2.decay": 0.35, "env2.sustain": 4,
-        "env1.sustain": 9, "env1.release": 0.25, "lfo1.rate": 5.5, "lfo1.vibrato": 14, "fx1.type": 3, "fx1.amount": 2, "send.echo": 3, "send.space": 2,
+        "voice.mode": 2, "voice.glide": 0.06, "voice.priority": 2, "a.unison": 3, "a.detune": 10, "out.volume": 10,
+        "b.type": 1, "b.wave": 1, "b.coarse": 12, "b.level": 2,
+        "f1.type": 5, "f1.cutoff": 1500, "f1.resonance": 2.5, "f1.keytrack": 2, "f1.env": 2.5, "out.tone": 5000, "env2.attack": 0.01, "env2.decay": 0.35, "env2.sustain": 4,
+        "env1.sustain": 9, "env1.release": 0.25, "lfo1.rate": 5.5, "lfo1.vibrato": 14, "fx1.type": 1, "fx1.amount": 2, "send.echo": 3, "send.space": 2,
         **mods((9, 14, 0.4), (10, 14, 0.3), (12, 15, 0.5))}),
     ("Talking Lead", "Lead: a vowel wavetable that talks on its own; the mod wheel makes it speak faster.", {
         "voice.mode": 1, "voice.glide": 0.03, "voice.priority": 2, "a.type": 2, "a.table": 2, "a.timbre": 0.3, "a.level": 9, "out.volume": 10,
         "b.type": 4, "b.timbre": 0.4, "b.morph": 1, "b.coarse": -12, "b.level": 3,
-        "f1.type": 1, "f1.cutoff": 5000, "f1.env": 2, "out.tone": 7000, "env1.sustain": 9, "env1.release": 0.2,
+        "f1.type": 0, "f1.cutoff": 1700, "f1.keytrack": 1, "f1.env": 1.2, "out.tone": 4000, "env1.sustain": 9, "env1.release": 0.2,
         "lfo1.rate": 5.2, "lfo1.vibrato": 12, "lfo2.rate": 0.6, "lfo2.shape": 5, "send.echo": 2, "send.space": 2,
-        **mods((5, 4, 0.35), (9, 4, 0.5), (7, 14, 0.2))}),
+        **mods((5, 4, 0.35), (9, 4, 0.5), (7, 14, 0.1))}),
     ("Aurora Pad", "Pad: a four-voice wavetable swell over harmonics, slowly evolving; low priority so leads cut through.", {
         "voice.priority": 0, "a.type": 2, "a.table": 3, "a.timbre": 0.35, "a.unison": 4, "a.detune": 18,
         "b.type": 4, "b.timbre": 0.5, "b.morph": 0.3, "b.coarse": 12, "b.level": 4,

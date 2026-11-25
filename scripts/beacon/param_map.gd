@@ -17,8 +17,8 @@ const DRIFT_MODEL := {"string": 0, "marimba": 1, "vibes": 2, "kalimba": 3, "bell
 ## cutoff (its "home") by half the song's distance from a typical song, within
 ## a range, and its resonance is scaled down. Typical = the song packs' median.
 const PRISM_FILTER := {
-	"keys": {"home": 2200.0, "typical": 2100.0, "down": 1.5, "up": 0.75, "res": 0.35, "res_max": 3.0},
-	"lead": {"home": 1800.0, "typical": 2500.0, "down": 1.5, "up": 0.6, "res": 0.3, "res_max": 3.0},
+	"keys": {"home": 2200.0, "typical": 2100.0, "down": 1.5, "up": 0.5, "res": 0.35, "res_max": 3.0},
+	"lead": {"home": 1500.0, "typical": 2500.0, "down": 1.5, "up": 0.4, "res": 0.3, "res_max": 3.0},
 }
 
 
@@ -80,7 +80,8 @@ static func to_synth(role: String, p: Dictionary) -> Dictionary:
 				while semis > 12:
 					semis -= 12
 				o["b.coarse"] = clampi(semis, -24, 12)
-			if p.has("osc2.level"): o["b.level"] = clampf(float(p["osc2.level"]) * 10.0, 0, 10)
+			# The second oscillator (often an octave up) stays under the first.
+			if p.has("osc2.level"): o["b.level"] = clampf(float(p["osc2.level"]) * 10.0, 0, 4)
 			if p.has("vibrato.depth"): o["lfo1.vibrato"] = clampf(float(p["vibrato.depth"]), 0, 100)
 			if p.has("vibrato.rate"): o["lfo1.rate"] = clampf(float(p["vibrato.rate"]), 0.1, 12)
 			if p.has("portamento"): o["voice.glide"] = clampf(float(p["portamento"]), 0, 2)
@@ -107,7 +108,8 @@ static func to_synth(role: String, p: Dictionary) -> Dictionary:
 
 		"pluck":
 			if p.has("model"): o["model.type"] = DRIFT_MODEL.get(p["model"], 0)
-			if p.has("brightness"): o["model.brightness"] = clampf(float(p["brightness"]) * 10.0, 0, 10)
+			# The brightest strings ("Banjo Bright") get only most of the way there.
+			if p.has("brightness"): o["model.brightness"] = clampf(float(p["brightness"]) * 7.0, 0, 6.5)
 			if p.has("decay"): o["model.decay"] = clampf(float(p["decay"]), 0.05, 20)
 			if p.has("reverb.send"): o["reverb.mix"] = clampf(float(p["reverb.send"]) * 10.0, 0, 10)
 		"texture":
