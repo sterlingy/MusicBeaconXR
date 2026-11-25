@@ -11,7 +11,7 @@ The test playfield for Music Beacon XR. You walk a listener between music beacon
 - **Tests:** `node --test web/tests`
 - **Install on a phone:** pages from `serve.py` carry a web app manifest (`manifest.webmanifest`, `icon.svg`), so phones offer **Add to Home Screen** / **Install**, with AR / VR and Synths shortcuts.
 - **Gamepads:** a connected gamepad walks the listener (left stick or d-pad), A plays, Y toggles auto-walk.
-- **Godot song packs:** `node web/tools/export-songs.mjs` rebuilds `songs/grid.json` and `songs/globe.json` from the browser's generator. The Godot player plays each song's verse patterns as a loop and maps only the sound settings it knows; sections, presets' extra controls and automation are browser-only for now.
+- **Godot song packs:** `node web/tools/export_songs.mjs` rebuilds them (and the generator tables and fixtures the app's local grid is checked against); `node web/tools/export-songs.mjs` rebuilds just `songs/grid.json` and `songs/globe.json` from the browser's generator. The Godot player plays each song's verse patterns as a loop and maps only the sound settings it knows; sections, presets' extra controls and automation are browser-only for now.
 
 ## Three fields
 
@@ -202,4 +202,4 @@ Every generated song is a full song, 2 to 5 minutes long, with a form such as in
 - **Animation pauses in background tabs.** The music keeps playing, but the listener only moves while the page is visible.
 - **No GPS on the published page** (the platform doesn't offer location to pages). Use the city list or type coordinates, or run it locally.
 - **Away from home, the phone needs another way in.** `serve.py --https` is reachable on your own network or ZeroTier. Anywhere else needs the page hosted on a public HTTPS address.
-- **Local grid is browser-only for now.** The Godot player has the test grid and the globe.
+- **The app plays the local grid too,** with the same songs (its own copy of the generator, checked against this one), but not yet song forms or automation.

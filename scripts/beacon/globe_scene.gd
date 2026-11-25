@@ -15,6 +15,7 @@ const CITIES := [["London", 51.507, -0.128], ["New York", 40.713, -74.006], ["To
 
 var player: BeaconPlayer
 var hud: BeaconHud
+var menu: FieldMenu
 var camera: Camera3D
 var listener: MeshInstance3D
 var arcs: MeshInstance3D
@@ -44,6 +45,8 @@ func _ready() -> void:
 	hud = BeaconHud.new(player)
 	hud.title_text = "MUSIC BEACON XR · GLOBE"
 	add_child(hud)
+	menu = FieldMenu.new("globe")
+	add_child(menu)
 	_build_input()
 	input.jump_to(Vector2(-0.128, 51.507))
 	_parse_args()
@@ -70,7 +73,7 @@ func _on_action(name: String, arg: Variant) -> void:
 		"toggle_play":
 			Transport.toggle()
 		"switch_scene":
-			get_tree().change_scene_to_file("res://scenes/beacon_field.tscn")
+			menu.go_field("grid")
 		"zoom":
 			altitude = clampf(altitude * float(arg), 25.0, 900.0)
 		"jump":

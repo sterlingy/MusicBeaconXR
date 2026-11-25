@@ -1,21 +1,30 @@
 extends Node3D
-## 3D beacon field: the 5x5 test grid as pillars on a plane, a listener you
-## walk around, and the blend playing on SynthKit. The starting point for the
-## XR version (scenes/xr_field.tscn).
+## 3D beacon field: the 5x5 test grid, or the local grid around you, as
+## pillars on a plane, a listener you walk around, and the blend playing on
+## SynthKit. The starting point for the XR version (scenes/xr_field.tscn).
+##
+## Which one it shows comes from FieldPrefs (the ☰ Fields panel). The local
+## grid follows the device's location (GeoLocation), makes each beacon's song
+## as it comes near (SongGen, the same songs as the website), and re-centers
+## as you travel. Its beacons can be a kilometer apart, so the view is scaled
+## to the spacing (`view_scale`): the scene always looks like the test grid.
 ##
 ## Controls: WASD / arrows walk, click the ground to walk there, Space play/stop,
-## T auto-walk, mouse wheel zoom.
-## Dev: `-- --shot=<path> [--frames=N] [--pos=x,y] [--play]` saves a screenshot and quits.
+## T auto-walk, mouse wheel zoom, F the Fields panel.
+## Dev: `-- --shot=<path> [--frames=N] [--pos=x,y] [--play] [--field=grid|local] [--at=lat,lon] [--menu]`
+## saves a screenshot and quits.
 
 const MOOD_COLOR := {"Drift": Color("8fa7ff"), "Glow": Color("f5c04a"), "Tide": Color("2ec4b6"), "Pulse": Color("ff4f9a"), "Rush": Color("ff8a3d")}
 const ACCENT := Color("ffb547")
-const WALK_SPEED := 55.0 # meters per second
+const WALK_SPEED := 55.0 # view units per second (meters on the test grid)
+## Local grid: pillars are built this many rows and columns around the listener.
+const WINDOW := 4
 
 var player: BeaconPlayer
 var listener: MeshInstance3D
 var camera: Camera3D
 var lines: MeshInstance3D
-var pillars := {} # beacon id -> {mesh, mat, light, label}
+var pillars := {} # beacon id -> {root, mesh, mat, ring, rmat, label, color}
 var flashes := {} # beacon id -> seconds left
 var input: ListenerInput
 var zoom := 0.7
@@ -23,97 +32,81 @@ var env: Environment
 var ground: MeshInstance3D
 var grid_lines: MeshInstance3D
 var hud: BeaconHud
+var menu: FieldMenu
+var geo: GeoLocation
+
+## "grid" (the 5x5 test grid) or "local".
+var kind := "grid"
+## View units per meter: 1 on the test grid, 100 / spacing on a local grid.
+var view_scale := 1.0
+var _window_at := Vector2i(-1000000, 0)
+var _fixed := false # the local grid has been centered on a real location
+var _recheck := 0.0
 
 var _shot := ""
 var _frames := 60
 
 
 func _ready() -> void:
+	kind = "local" if FieldPrefs.field() == "local" else "grid"
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--field="):
+			kind = a.trim_prefix("--field=")
 	_build_world()
 	player = BeaconPlayer.new()
 	player.name = "BeaconPlayer"
+	if kind == "local":
+		player.field = _make_local(FieldPrefs.last_lat(), FieldPrefs.last_lon())
+		player.song_source = func(id: String) -> Dictionary: return SongGen.generate("local:" + id)
 	add_child(player)
-	player.load_songs("res://songs/grid.json")
+	if kind == "grid":
+		player.load_songs("res://songs/grid.json")
 	player.note_played.connect(func(_role, id): flashes[id] = 0.25)
-	_build_beacons()
 	hud = BeaconHud.new(player)
+	if kind == "local":
+		hud.title_text = "MUSIC BEACON XR · LOCAL"
 	add_child(hud)
-	_build_buttons()
+	menu = FieldMenu.new(kind)
+	add_child(menu)
 	_build_input()
-	input.jump_to(Vector2(-38, 27))
+	if kind == "grid":
+		_build_beacons()
+		input.jump_to(Vector2(-38, 27))
+	else:
+		input.jump_to(player.field.from_lat_lon(FieldPrefs.last_lat(), FieldPrefs.last_lon()))
+		_start_local()
 	_parse_args()
 
 
-## Touch buttons (phones have no keys): play, globe, instruments. Top right.
-var _click_btn: Button
-
-
-func _build_buttons() -> void:
-	var layer := CanvasLayer.new()
-	layer.name = "Buttons"
-	add_child(layer)
-	var row := HBoxContainer.new()
-	row.anchor_left = 1.0
-	row.anchor_right = 1.0
-	row.offset_left = -420
-	row.offset_right = -12
-	row.offset_top = 12
-	row.alignment = BoxContainer.ALIGNMENT_END
-	row.add_theme_constant_override("separation", 8)
-	layer.add_child(row)
-	for b in [["▶ Play", func(): Transport.toggle()], ["Globe", func(): get_tree().change_scene_to_file("res://scenes/globe_field.tscn")], ["Instruments", func(): get_tree().change_scene_to_file("res://scenes/instrument_table.tscn")]]:
-		var btn := Button.new()
-		btn.text = b[0]
-		btn.focus_mode = Control.FOCUS_NONE
-		btn.custom_minimum_size = Vector2(0, 40)
-		for state in ["normal", "hover", "pressed"]:
-			var sb := StyleBoxFlat.new()
-			sb.bg_color = Color(0.08, 0.11, 0.15, 0.88) if state != "pressed" else Color("2a3644")
-			sb.border_color = Color("ffb547") if state == "hover" else Color("2a3644")
-			sb.set_border_width_all(1)
-			sb.set_corner_radius_all(8)
-			sb.content_margin_left = 12
-			sb.content_margin_right = 12
-			btn.add_theme_stylebox_override(state, sb)
-		btn.pressed.connect(b[1])
-		row.add_child(btn)
-	# Metronome click, off by default.
-	_click_btn = Button.new()
-	_click_btn.text = "Click"
-	_click_btn.toggle_mode = true
-	_click_btn.button_pressed = false # the beacon player turns the click off
-	_click_btn.focus_mode = Control.FOCUS_NONE
-	_click_btn.custom_minimum_size = Vector2(0, 40)
-	for state in ["normal", "hover", "pressed", "hover_pressed"]:
-		var sb := StyleBoxFlat.new()
-		var on: bool = state.contains("pressed")
-		sb.bg_color = Color("3a2a10") if on else Color(0.08, 0.11, 0.15, 0.88)
-		sb.border_color = Color("ffb547") if on or state == "hover" else Color("2a3644")
-		sb.set_border_width_all(1)
-		sb.set_corner_radius_all(8)
-		sb.content_margin_left = 12
-		sb.content_margin_right = 12
-		_click_btn.add_theme_stylebox_override(state, sb)
-	_click_btn.toggled.connect(func(t): Transport.metronome_on = t)
-	row.add_child(_click_btn)
-	row.move_child(_click_btn, 1)
+func _make_local(lat: float, lon: float) -> BeaconField:
+	var f := BeaconField.make_local(lat, lon, FieldPrefs.local_km(), FieldPrefs.spacing_km())
+	view_scale = 100.0 / f.spacing
+	return f
 
 
 ## Walking comes from ListenerKit (keyboard / gamepad, click or tap, wander); this
-## scene only listens for the position and the commands.
+## scene only listens for the position and the commands. Positions are meters.
 func _build_input() -> void:
-	var m := 2.5 * player.field.spacing # half the grid plus half a spacing
 	input = ListenerInput.new()
 	input.name = "ListenerInput"
-	input.space = ListenerSpace.planar(Rect2(-m, -m, 2 * m, 2 * m), WALK_SPEED)
+	_set_space()
 	input.add_child(KeyboardSource.new())
 	var ptr := PointerSource.new()
 	ptr.camera = camera
-	ptr.pick = PointerSource.ground_picker(0.0)
+	var ground_pick := PointerSource.ground_picker(0.0)
+	ptr.pick = func(origin: Vector3, dir: Vector3) -> Variant:
+		var hit = ground_pick.call(origin, dir)
+		return null if hit == null else hit / view_scale
 	input.add_child(ptr)
 	add_child(input)
 	input.moved.connect(player.set_position)
 	input.action.connect(_on_action)
+
+
+func _set_space() -> void:
+	var f := player.field
+	var m := 2.5 * f.spacing if kind == "grid" else (f.steps / 2.0 + 0.5) * f.spacing
+	input.space = ListenerSpace.planar(Rect2(-m, -m, 2 * m, 2 * m), WALK_SPEED / view_scale)
 
 
 func _on_action(name: String, arg: Variant) -> void:
@@ -121,14 +114,108 @@ func _on_action(name: String, arg: Variant) -> void:
 		"toggle_play":
 			Transport.toggle()
 		"switch_scene":
-			get_tree().change_scene_to_file("res://scenes/globe_field.tscn")
+			menu.go_field("globe")
 		"zoom":
 			zoom = clampf(zoom * float(arg), 0.35, 2.0)
 		"select":
 			# A tap near a beacon walks onto it, like the browser playfield.
 			var near: Array = player.field.nearest(arg, 1)
-			if not near.is_empty() and near[0].d < 14.0:
+			if not near.is_empty() and near[0].d < 14.0 / view_scale:
 				input.set_target(near[0].beacon.pos)
+
+
+# ---------------------------------------------------------------- local grid
+
+func _start_local() -> void:
+	geo = GeoLocation.new()
+	add_child(geo)
+	geo.located.connect(_on_located)
+	geo.unavailable.connect(func(reason: String):
+		menu.set_status(reason + " The grid stays where it was last (London before the first fix)."))
+	menu.local_changed.connect(func(): _recenter(_here(), "Rebuilt the grid around you."))
+	menu.center_requested.connect(func():
+		_fixed = false
+		menu.set_status("Finding you…")
+		geo.start())
+	menu.follow_changed.connect(func(on: bool):
+		if on:
+			_fixed = false
+			geo.start()
+		else:
+			geo.stop()
+			menu.set_status("Not following your location: walk anywhere."))
+	if FieldPrefs.follow():
+		menu.set_status("Finding you… (allow location if Android asks)")
+		geo.start()
+
+
+## Where the listener is, as {lat, lon}.
+func _here() -> Dictionary:
+	return player.field.to_lat_lon(player.pos)
+
+
+func _on_located(lat: float, lon: float, accuracy_m: float) -> void:
+	if not FieldPrefs.follow() and _fixed:
+		return
+	FieldPrefs.set_place(lat, lon)
+	var f := player.field
+	var q := f.from_lat_lon(lat, lon)
+	var lim := maxf(0.6 * f.spacing, 0.4 * f.side_m)
+	if _fixed and absf(q.x) < lim and absf(q.y) < lim:
+		input.jump_to(q)
+		return
+	var first := not _fixed
+	_fixed = true
+	if not FieldPrefs.follow():
+		geo.stop() # "Center on me" with following off: one fix is enough
+	_recenter({"lat": lat, "lon": lon}, "Centered on you (accurate to %s). Following your location." % _dist(accuracy_m) if first else "")
+
+
+## Rebuilds the local grid around (lat, lon) and puts the listener there. Beacon
+## ids are worldwide, so beacons the old and new grids share keep their songs.
+func _recenter(at: Dictionary, message := "") -> void:
+	player.set_field(_make_local(at.lat, at.lon))
+	for id in pillars.keys():
+		pillars[id].root.queue_free()
+	pillars.clear()
+	_window_at = Vector2i(-1000000, 0)
+	_set_space()
+	input.jump_to(player.field.from_lat_lon(at.lat, at.lon))
+	if message != "":
+		menu.set_status(message)
+
+
+## Pillars only for the beacons around the listener: a local grid can have
+## thousands. Rebuilt when the listener moves to another row or column.
+func _update_window() -> void:
+	var f := player.field
+	var half := f.steps / 2.0
+	var cell := Vector2i(clampi(roundi(half + player.pos.x / f.spacing), 0, f.n - 1), clampi(roundi(half + player.pos.y / f.spacing), 0, f.n - 1))
+	if cell == _window_at:
+		return
+	_window_at = cell
+	var want := {}
+	for r in range(maxi(0, cell.y - WINDOW), mini(f.n - 1, cell.y + WINDOW) + 1):
+		for k in range(maxi(0, cell.x - WINDOW), mini(f.n - 1, cell.x + WINDOW) + 1):
+			var b: Dictionary = f.beacons[r * f.n + k]
+			want[b.id] = true
+			if not pillars.has(b.id):
+				_add_pillar(b)
+	for id in pillars.keys():
+		if not want.has(id):
+			pillars[id].root.queue_free()
+			pillars.erase(id)
+
+
+static func _dist(m: float) -> String:
+	return "%d m" % roundi(m) if m < 1000.0 else "%.1f km" % (m / 1000.0)
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_CLOSE_REQUEST or what == NOTIFICATION_APPLICATION_PAUSED:
+		if kind == "local" and player:
+			var at := _here()
+			FieldPrefs.set_place(at.lat, at.lon)
 
 
 # ---------------------------------------------------------------- world
@@ -164,7 +251,7 @@ func _build_world() -> void:
 	ground.material_override = gm
 	add_child(ground)
 
-	# Grid lines every 100 m, plus a finer 25 m grid.
+	# Grid lines every 100 view units (a beacon spacing), plus a finer quarter grid.
 	var im := ImmediateMesh.new()
 	var lm := StandardMaterial3D.new()
 	lm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
@@ -215,60 +302,84 @@ func _build_world() -> void:
 
 func _build_beacons() -> void:
 	for b in player.field.beacons:
-		var song: Dictionary = player.songs[b.id]
-		var col: Color = MOOD_COLOR.get(song.get("mood", ""), Color.WHITE)
-		var root := Node3D.new()
-		root.position = Vector3(b.pos.x, 0, b.pos.y)
-		add_child(root)
-		var mesh := MeshInstance3D.new()
-		var cyl := CylinderMesh.new()
-		cyl.top_radius = 3.5
-		cyl.bottom_radius = 5.0
-		cyl.height = 14.0
-		mesh.mesh = cyl
-		mesh.position.y = 7.0
-		var mat := StandardMaterial3D.new()
-		mat.albedo_color = col.darkened(0.3)
-		mat.emission_enabled = true
-		mat.emission = col
-		mat.emission_energy_multiplier = 0.4
-		mesh.material_override = mat
-		root.add_child(mesh)
-		var ring := MeshInstance3D.new()
-		var torus := TorusMesh.new()
-		torus.inner_radius = 9.0
-		torus.outer_radius = 10.0
-		ring.mesh = torus
-		ring.position.y = 0.3
-		var rmat := StandardMaterial3D.new()
-		rmat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-		rmat.albedo_color = Color(col, 0.0)
-		rmat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-		ring.material_override = rmat
-		root.add_child(ring)
-		var label := Label3D.new()
-		label.text = "%s\n%s" % [b.label, song.title]
-		label.position.y = 24.0
-		label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-		label.font_size = 64
-		label.pixel_size = 0.08
-		label.outline_size = 12
-		label.modulate = Color(0.9, 0.93, 0.97)
-		label.outline_modulate = Color("0b1016")
-		root.add_child(label)
-		pillars[b.id] = {"mesh": mesh, "mat": mat, "ring": ring, "rmat": rmat, "label": label, "color": col}
+		_add_pillar(b)
+
+
+func _add_pillar(b: Dictionary) -> void:
+	var song: Dictionary = player.song_for(b.id)
+	var col: Color = MOOD_COLOR.get(song.get("mood", ""), Color.WHITE)
+	var root := Node3D.new()
+	root.position = Vector3(b.pos.x * view_scale, 0, b.pos.y * view_scale)
+	add_child(root)
+	var mesh := MeshInstance3D.new()
+	var cyl := CylinderMesh.new()
+	cyl.top_radius = 3.5
+	cyl.bottom_radius = 5.0
+	cyl.height = 14.0
+	mesh.mesh = cyl
+	mesh.position.y = 7.0
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = col.darkened(0.3)
+	mat.emission_enabled = true
+	mat.emission = col
+	mat.emission_energy_multiplier = 0.4
+	mesh.material_override = mat
+	root.add_child(mesh)
+	var ring := MeshInstance3D.new()
+	var torus := TorusMesh.new()
+	torus.inner_radius = 9.0
+	torus.outer_radius = 10.0
+	ring.mesh = torus
+	ring.position.y = 0.3
+	var rmat := StandardMaterial3D.new()
+	rmat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	rmat.albedo_color = Color(col, 0.0)
+	rmat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	ring.material_override = rmat
+	root.add_child(ring)
+	var label := Label3D.new()
+	label.text = "%s\n%s" % [b.label, song.get("title", "")]
+	label.position.y = 24.0
+	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	label.font_size = 64
+	label.pixel_size = 0.08
+	label.outline_size = 12
+	label.modulate = Color(0.9, 0.93, 0.97)
+	label.outline_modulate = Color("0b1016")
+	root.add_child(label)
+	pillars[b.id] = {"root": root, "mesh": mesh, "mat": mat, "ring": ring, "rmat": rmat, "label": label, "color": col}
 
 
 # ---------------------------------------------------------------- update
 
 func _process(delta: float) -> void:
+	if kind == "local":
+		_update_window()
+		_check_edge(delta)
 	_update_camera(delta)
 	_update_world(delta)
 	_check_shot()
 
 
+## Walking (not GPS) toward the edge of a local grid re-centers it on the
+## listener, so the grid never runs out.
+func _check_edge(delta: float) -> void:
+	_recheck -= delta
+	if _recheck > 0.0:
+		return
+	_recheck = 0.5
+	var f := player.field
+	var lim := maxf(0.6 * f.spacing, 0.4 * f.side_m)
+	if absf(player.pos.x) > lim or absf(player.pos.y) > lim:
+		_recenter(_here())
+
+
+func _view_pos() -> Vector2:
+	return player.pos * view_scale
+
+
 func _update_camera(delta: float) -> void:
-	var p := player.pos
+	var p := _view_pos()
 	# Look a little left of the listener so the HUD panel doesn't cover the beacons around them.
 	var cam_target := Vector3(p.x - 40.0 * zoom, 0, p.y)
 	camera.position = camera.position.lerp(cam_target + Vector3(0, 230, 210) * zoom, minf(1.0, delta * 4.0)) if camera.position != Vector3.ZERO else cam_target + Vector3(0, 230, 210) * zoom
@@ -277,22 +388,20 @@ func _update_camera(delta: float) -> void:
 
 ## Listener marker, blend lines, beacon glow and the HUD hint: everything but the camera.
 func _update_world(delta: float) -> void:
-	var p := player.pos
+	var p := _view_pos()
 	listener.position = Vector3(p.x, 6.0 + sin(Time.get_ticks_msec() / 300.0) * 0.6, p.y)
+	if kind == "local":
+		# The floor and its lines move with the listener (snapped to a spacing).
+		var snap := Vector3(snappedf(p.x, 100.0), 0, snappedf(p.y, 100.0))
+		ground.position = snap
+		grid_lines.position = snap
 	_draw_lines()
 	_update_beacons(delta)
 	hud.help_text = help_text()
 
 
 func help_text() -> String:
-	return "WASD walk · click to go · T auto-walk%s · wheel zoom · G globe · I instruments · M click" % (" (on)" if input.wander else "")
-
-
-func _unhandled_key_input(event: InputEvent) -> void:
-	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_I:
-		get_tree().change_scene_to_file("res://scenes/instrument_table.tscn")
-	elif event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_M:
-		_click_btn.button_pressed = not _click_btn.button_pressed
+	return "WASD walk · click to go · T auto-walk%s · wheel zoom · F fields · I instruments · M click" % (" (on)" if input.wander else "")
 
 
 func _check_shot() -> void:
@@ -311,9 +420,12 @@ func _draw_lines() -> void:
 	if player.active.is_empty():
 		return
 	im.surface_begin(Mesh.PRIMITIVE_TRIANGLES)
-	var from := Vector3(player.pos.x, 0.4, player.pos.y)
+	var lp := _view_pos()
+	var from := Vector3(lp.x, 0.4, lp.y)
 	for a in player.active:
-		var to := Vector3(a.beacon.pos.x, 0.4, a.beacon.pos.y)
+		if not pillars.has(a.id):
+			continue
+		var to := Vector3(a.beacon.pos.x * view_scale, 0.4, a.beacon.pos.y * view_scale)
 		var col: Color = pillars[a.id].color
 		col.a = 0.25 + 0.7 * a.w
 		var side: Vector3 = (to - from).cross(Vector3.UP).normalized() * (0.4 + 3.5 * float(a.w))
@@ -349,6 +461,10 @@ func _parse_args() -> void:
 		elif a.begins_with("--pos="):
 			var xy := a.trim_prefix("--pos=").split(",")
 			input.jump_to(Vector2(float(xy[0]), float(xy[1])))
+		elif a.begins_with("--at=") and kind == "local":
+			var ll := a.trim_prefix("--at=").split(",")
+			_fixed = true
+			_recenter({"lat": float(ll[0]), "lon": float(ll[1])})
 		elif a == "--play":
 			Transport.metronome_on = false
 			Transport.count_in_bars = 0
@@ -357,3 +473,5 @@ func _parse_args() -> void:
 			player.set_soloed(a.trim_prefix("--solo="), true)
 		elif a == "--wander":
 			input.wander = true
+		elif a == "--menu":
+			menu.set_open(true)

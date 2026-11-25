@@ -206,7 +206,9 @@ func _process(delta: float) -> void:
 		var r: Dictionary = _rows[i]
 		if i < player.active.size():
 			var a: Dictionary = player.active[i]
-			var dist := "%d m" % roundi(a.d) if player.field.kind == "grid" else "%d km" % roundi(a.d)
+			# Meters on the test grid and local grid, kilometers on the globe.
+			var meters: float = a.d * 1000.0 if player.field.kind == "globe" else a.d
+			var dist := "%d m" % roundi(meters) if meters < 1000.0 else ("%.1f km" % (meters / 1000.0) if meters < 10000.0 else "%d km" % roundi(meters / 1000.0))
 			r.label.text = "%s  %s  %d%%  · %s%s" % [a.beacon.label, a.song.title, roundi(a.w * 100), dist, "  · key" if a.id == h.id else ""]
 			r.bar.value = a.w
 		else:

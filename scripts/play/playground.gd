@@ -50,6 +50,7 @@ var _saved_patches := []
 
 
 func _ready() -> void:
+	get_tree().quit_on_go_back = false # Android back returns to the field (see _notification)
 	_parse_args()
 	kit = MusicInput.new()
 	kit.name = "MusicInput"
@@ -256,7 +257,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			KEY_P:
 				_toggle_patches()
 			KEY_G:
-				get_tree().change_scene_to_file("res://scenes/beacon_field.tscn")
+				_back_to_field()
 			KEY_R:
 				_yaw = 0.0
 				_pitch = deg_to_rad(-38.0)
@@ -320,7 +321,7 @@ func _build_ui() -> void:
 	row2.add_child(pb)
 	var back := Button.new()
 	back.text = "Map"
-	back.pressed.connect(func(): get_tree().change_scene_to_file("res://scenes/beacon_field.tscn"))
+	back.pressed.connect(_back_to_field)
 	row2.add_child(back)
 
 	patch_box = VBoxContainer.new()
@@ -543,3 +544,14 @@ func _run_demo() -> void:
 	mb.spin(0.4)
 	(objects["Tilt"] as TiltCube).set_tilt(0.3, -0.2)
 	(objects["XY"] as XYPad).set_xy(0.7, 0.3)
+
+
+## Back to the field the player came from (Map button, G, Android's back gesture).
+func _back_to_field() -> void:
+	get_tree().quit_on_go_back = true
+	get_tree().change_scene_to_file(FieldPrefs.scene_for(FieldPrefs.field()))
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_GO_BACK_REQUEST:
+		_back_to_field()

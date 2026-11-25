@@ -32,6 +32,9 @@ const PAD_MIX := 0.379
 
 var field: BeaconField = BeaconField.make_grid()
 var songs := {} # beacon id -> song
+## Makes the song for a beacon id that has none loaded (the local grid:
+## func(id) -> song, see SongGen). Songs are made as beacons come near.
+var song_source := Callable()
 var pos := Vector2.ZERO
 var active_count := 3
 var sharpness := 1.5
@@ -107,17 +110,33 @@ func set_song(id: String, song: Dictionary) -> bool:
 	return true
 
 
+## The song for beacon `id`, made by song_source if it isn't loaded yet.
+func song_for(id: String) -> Dictionary:
+	if not songs.has(id) and song_source.is_valid():
+		songs[id] = song_source.call(id)
+	return songs.get(id, {})
+
+
+## Moves to another field (a local grid re-centered as someone travels). The
+## music carries on: beacons both fields share keep their songs.
+func set_field(f: BeaconField) -> void:
+	field = f
+	if songs.size() > 600 and song_source.is_valid():
+		songs.clear() # made again on demand
+	_refresh()
+
+
 func set_position(p: Vector2) -> void:
 	pos = field.clamp_pos(p)
 	_refresh()
 
 
 func _refresh() -> void:
-	if songs.is_empty():
+	if songs.is_empty() and not song_source.is_valid():
 		return
 	active = []
 	for n in field.weigh(pos, active_count, sharpness):
-		if songs.has(n.id):
+		if not song_for(n.id).is_empty():
 			active.append({"id": n.id, "w": n.w, "d": n.d, "beacon": n.beacon, "song": songs[n.id]})
 	mix = BeaconMixer.blend(active)
 	var pad := 0.0
