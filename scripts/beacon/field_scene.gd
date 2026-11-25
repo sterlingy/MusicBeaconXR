@@ -353,5 +353,7 @@ func _parse_args() -> void:
 			Transport.metronome_on = false
 			Transport.count_in_bars = 0
 			Transport.start()
+		elif a.begins_with("--solo="):
+			player.solo = a.trim_prefix("--solo=")
 		elif a == "--wander":
 			input.wander = true

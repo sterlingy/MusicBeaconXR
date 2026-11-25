@@ -40,6 +40,7 @@ var _param_t := 0.0
 var _gain := {} # role -> smoothed linear gain
 var _pad_notes: Array = [] # the chord the pad is holding
 var _awake := {} # role -> Prism part awake (out.gain 1) or asleep (0)
+var solo := "" # dev: hear only this part (--solo=<role>)
 
 
 func _ready() -> void:
@@ -125,7 +126,8 @@ func _process(delta: float) -> void:
 		return
 	for role in rigs:
 		# Smooth level changes so walking never clicks.
-		_gain[role] = lerpf(_gain[role], float(mix[role].gain) if Transport.running else 0.0, minf(1.0, delta * 6.0))
+		var want := float(mix[role].gain) if Transport.running and (solo == "" or solo == role) else 0.0
+		_gain[role] = lerpf(_gain[role], want, minf(1.0, delta * 6.0))
 		rigs[role].set_volume_db(linear_to_db(maxf(_gain[role], 0.0001)))
 		# A Prism part faded out of the blend sleeps: no voices, no CPU.
 		if _awake.has(role):

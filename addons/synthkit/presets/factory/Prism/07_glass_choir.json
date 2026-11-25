@@ -24,6 +24,7 @@
   "f1.keytrack": 0,
   "f2.type": 1,
   "f2.cutoff": 6000,
+  "out.tone": 8000,
   "env1.attack": 1.2,
   "env1.sustain": 9,
   "env1.release": 3,

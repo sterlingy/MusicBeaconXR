@@ -17,6 +17,7 @@
   "f1.type": 1,
   "f1.cutoff": 9000,
   "f1.env": 0,
+  "out.tone": 10000,
   "env1.attack": 0.002,
   "env1.decay": 2.5,
   "env1.sustain": 2,

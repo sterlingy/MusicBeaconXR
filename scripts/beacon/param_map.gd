@@ -6,7 +6,20 @@ extends RefCounted
 
 const UNDERTOW_WAVE := {"triangle": 0, "sawtooth": 2, "square": 4}
 const OSC_WAVE := {"sawtooth": 0, "square": 1, "triangle": 3, "sine": 4}
+## Prism's Analog engine waves (a.wave / b.wave): Saw 0, Square 1, Pulse 2, Triangle 3, Sine 4.
+const PRISM_WAVE := {"sawtooth": 0, "square": 1, "triangle": 3, "sine": 4}
+const PRISM_ANALOG := 1
+const PRISM_WAVETABLE := 2
 const DRIFT_MODEL := {"string": 0, "marimba": 1, "vibes": 2, "kalimba": 3, "bell": 4, "glass": 5}
+## Prism parts: the songs' cutoffs and resonances were written for the browser's
+## simpler synths. Prism's presets add a filter envelope and key tracking on top,
+## so the raw values made them shrill. Instead, a song moves the preset's own
+## cutoff (its "home") by half the song's distance from a typical song, within
+## a range, and its resonance is scaled down. Typical = the song packs' median.
+const PRISM_FILTER := {
+	"keys": {"home": 2200.0, "typical": 2100.0, "down": 1.5, "up": 0.75, "res": 0.35, "res_max": 3.0},
+	"lead": {"home": 1800.0, "typical": 2500.0, "down": 1.5, "up": 0.6, "res": 0.3, "res_max": 3.0},
+}
 
 
 static func to_synth(role: String, p: Dictionary) -> Dictionary:
@@ -17,12 +30,17 @@ static func to_synth(role: String, p: Dictionary) -> Dictionary:
 			if p.has("kick.decay"): o["kick.decay"] = clampf(float(p["kick.decay"]) * 10.0, 0, 10)
 			if p.has("snare.tone"): o["snare.tune"] = clampf(12.0 * log(float(p["snare.tone"]) / 200.0) / log(2.0), -12, 12)
 			if p.has("snare.decay"): o["snare.decay"] = clampf(float(p["snare.decay"]) * 25.0, 0, 10)
+			o["snare.tone"] = 3.0 # its noise centred near 3.6 kHz, like the browser's, not 5 kHz and up
 			if p.has("hat.decay"):
 				o["chat.decay"] = clampf(float(p["hat.decay"]) * 50.0, 0, 10)
 				o["ohat.decay"] = clampf(float(p["hat.decay"]) * 60.0, 0, 10)
 			if p.has("hat.tone"):
-				o["chat.tone"] = clampf((float(p["hat.tone"]) - 4000.0) / 800.0, 0, 10)
+				# Pulsar's hats ring at 9-13 kHz and sit louder than the browser's,
+				# which made them sizzle: keep them low in that range, and quieter.
+				o["chat.tone"] = clampf((float(p["hat.tone"]) - 6000.0) / 2000.0, 0, 5)
 				o["ohat.tone"] = o["chat.tone"]
+				o["chat.level"] = 3.5
+				o["ohat.level"] = 3.2
 			if p.has("master.drive"): o["master.drive"] = clampf(float(p["master.drive"]) * 10.0, 0, 10)
 		"bass":
 			if p.has("osc.wave"):
@@ -41,8 +59,16 @@ static func to_synth(role: String, p: Dictionary) -> Dictionary:
 			if p.has("glide"): o["ctrl.glide"] = clampf(float(p["glide"]), 0, 5)
 		"lead":
 			# Prism: the base preset makes the sound; the song sets its tone, motion and space.
-			if p.has("filter.cutoff"): o["f1.cutoff"] = clampf(float(p["filter.cutoff"]), 30, 18000)
-			if p.has("filter.resonance"): o["f1.resonance"] = clampf(float(p["filter.resonance"]), 0, 10)
+			_prism_filter("lead", p, o)
+			# The song's own oscillators: many leads are soft sines and triangles.
+			if p.has("osc.wave"):
+				o["a.type"] = PRISM_ANALOG
+				o["a.wave"] = PRISM_WAVE.get(p["osc.wave"], 0)
+			if p.has("osc2.wave"):
+				o["b.type"] = PRISM_ANALOG
+				o["b.wave"] = PRISM_WAVE.get(p["osc2.wave"], 1)
+			if p.has("osc2.semis"): o["b.coarse"] = clampi(int(p["osc2.semis"]), -24, 24)
+			if p.has("osc2.level"): o["b.level"] = clampf(float(p["osc2.level"]) * 10.0, 0, 10)
 			if p.has("vibrato.depth"): o["lfo1.vibrato"] = clampf(float(p["vibrato.depth"]), 0, 100)
 			if p.has("vibrato.rate"): o["lfo1.rate"] = clampf(float(p["vibrato.rate"]), 0.1, 12)
 			if p.has("portamento"): o["voice.glide"] = clampf(float(p["portamento"]), 0, 2)
@@ -51,8 +77,15 @@ static func to_synth(role: String, p: Dictionary) -> Dictionary:
 			if p.has("aenv.release"): o["env1.release"] = clampf(float(p["aenv.release"]), 0.005, 15)
 
 		"keys":
-			if p.has("filter.cutoff"): o["f1.cutoff"] = clampf(float(p["filter.cutoff"]), 30, 18000)
-			if p.has("filter.resonance"): o["f1.resonance"] = clampf(float(p["filter.resonance"]), 0, 10)
+			_prism_filter("keys", p, o)
+			# Soft songs (sine, triangle) get the Analog engine with their wave;
+			# the rest keep the preset's wavetable.
+			if p.has("osc.wave"):
+				var soft: bool = p["osc.wave"] in ["sine", "triangle"]
+				o["a.type"] = PRISM_ANALOG if soft else PRISM_WAVETABLE
+				o["a.wave"] = PRISM_WAVE.get(p["osc.wave"], 0)
+			if p.has("osc2.wave"): o["b.wave"] = PRISM_WAVE.get(p["osc2.wave"], 1)
+			if p.has("osc2.octave"): o["b.coarse"] = clampi(int(p["osc2.octave"]) * 12, -24, 24)
 			if p.has("osc.detune"): o["b.fine"] = clampf(float(p["osc.detune"]), -50, 50)
 			if p.has("aenv.attack"): o["env1.attack"] = clampf(float(p["aenv.attack"]), 0.001, 10)
 			if p.has("aenv.release"): o["env1.release"] = clampf(float(p["aenv.release"]), 0.005, 15)
@@ -68,3 +101,12 @@ static func to_synth(role: String, p: Dictionary) -> Dictionary:
 		"texture":
 			pass # Tangle is a patch: the base preset makes the sound, the blend sets its level.
 	return o
+
+
+static func _prism_filter(role: String, p: Dictionary, o: Dictionary) -> void:
+	var f: Dictionary = PRISM_FILTER[role]
+	if p.has("filter.cutoff"):
+		var octaves := 0.5 * log(maxf(float(p["filter.cutoff"]), 30.0) / f.typical) / log(2.0)
+		o["f1.cutoff"] = f.home * pow(2.0, clampf(octaves, -f.down, f.up))
+	if p.has("filter.resonance"):
+		o["f1.resonance"] = clampf(float(p["filter.resonance"]) * f.res, 0.0, f.res_max)

@@ -22,6 +22,7 @@
   "f1.type": 1,
   "f1.cutoff": 5000,
   "f1.env": 2,
+  "out.tone": 7000,
   "env1.sustain": 9,
   "env1.release": 0.2,
   "lfo1.rate": 5.2,

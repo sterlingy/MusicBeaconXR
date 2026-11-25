@@ -25,6 +25,7 @@
   "f2.resonance": 3,
   "filter.routing": 1,
   "filter.balance": 0.25,
+  "out.tone": 7000,
   "env1.attack": 1.6,
   "env1.decay": 2,
   "env1.sustain": 8,

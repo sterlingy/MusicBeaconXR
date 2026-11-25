@@ -50,6 +50,10 @@ func _check_player() -> void:
 	var globe := BeaconField.make_globe()
 	var globe_songs = JSON.parse_string(FileAccess.get_file_as_string("res://songs/globe.json"))
 	check(globe_songs.songs.size() == 614, "globe song pack has 614 songs")
+	# Prism parts follow the song's own sound and stay tame.
+	var soft := ParamMap.to_synth("lead", {"osc.wave": "sine", "osc2.wave": "triangle", "filter.cutoff": 12000, "filter.resonance": 9.9})
+	check(soft["a.type"] == ParamMap.PRISM_ANALOG and soft["a.wave"] == 4 and soft["b.wave"] == 3, "a sine lead plays sines on Prism")
+	check(soft["f1.cutoff"] <= 1800.0 * pow(2.0, 0.6) + 1.0 and soft["f1.resonance"] <= 3.0, "a bright song opens the lead's filter only a little")
 	player.set_position(Vector2(-38, 27))
 	check(player.active.size() == 3, "three active beacons")
 	var harmony_changes := []
