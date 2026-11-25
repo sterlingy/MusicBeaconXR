@@ -13,7 +13,7 @@ const ROLE_COLOR := {"drums": Color("ff8a3d"), "bass": Color("2ec4b6"), "keys": 
 
 var player: BeaconPlayer
 var help_text := ""
-var title_text := "BEACON FIELD"
+var title_text := "CHORD MASTER XR"
 
 var _now: Label
 var _sub: Label
