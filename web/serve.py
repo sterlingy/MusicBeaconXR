@@ -1,4 +1,4 @@
-"""Local server for Chord Master XR.
+"""Local server for Music Beacon XR.
 
     python web/serve.py [port]            http://127.0.0.1:8765, this PC only
     python web/serve.py --https [port]    https on every network address (default 8443),
@@ -138,7 +138,7 @@ def ensure_cert(ips):
     if cert.exists() and key.exists() and names.exists() and names.read_text() == san:
         return cert, key
     subprocess.run([find_openssl(), "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-sha256", "-days", "825",
-                    "-keyout", str(key), "-out", str(cert), "-subj", "/CN=Chord Master XR (local)",
+                    "-keyout", str(key), "-out", str(cert), "-subj", "/CN=Music Beacon XR (local)",
                     "-addext", f"subjectAltName={san}"], check=True, capture_output=True)
     names.write_text(san)
     return cert, key
@@ -149,7 +149,7 @@ if __name__ == "__main__":
     https = "--https" in sys.argv
     port = int(args[0]) if args else (8443 if https else 8765)
     if not https:
-        print(f"Chord Master XR on http://127.0.0.1:{port}")
+        print(f"Music Beacon XR on http://127.0.0.1:{port}")
         http.server.ThreadingHTTPServer(("127.0.0.1", port), Handler).serve_forever()
     ips = local_ips()
     cert, key = ensure_cert(ips)
@@ -172,7 +172,7 @@ if __name__ == "__main__":
             return tls, addr
 
     server = TLSServer(("0.0.0.0", port), Handler)
-    print("Chord Master XR over HTTPS. Open one of these on your phone (same network),")
+    print("Music Beacon XR over HTTPS. Open one of these on your phone (same network),")
     print("accept the certificate warning once, then choose Local grid:")
     for ip in ips:
         print(f"  https://{ip}:{port}")

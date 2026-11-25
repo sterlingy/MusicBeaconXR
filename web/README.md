@@ -1,6 +1,6 @@
-# Chord Master XR (browser)
+# Music Beacon XR (browser)
 
-The test playfield for Chord Master XR. You walk a listener between music beacons; the three closest beacons' songs blend into one live track. Everything runs in the browser with Web Audio, with no samples and no server.
+The test playfield for Music Beacon XR. You walk a listener between music beacons; the three closest beacons' songs blend into one live track. Everything runs in the browser with Web Audio, with no samples and no server.
 
 - **Published page:** https://claude.ai/artifact/FjUKz2qaULZhrvxKuq7EbN (private to you until you share it)
 - **User manual:** [manual.html](manual.html), served with the page (the **Manual ↗** button). It is built from the Claude Docs source (https://claude.ai/artifact/1MCvFAJCSEtb4kNtWKFcrr) with `python web/tools/build-manual.py <doc.xml>`; edit the doc, then rebuild.
@@ -82,7 +82,7 @@ The test playfield for Chord Master XR. You walk a listener between music beacon
 - **Spaces:** `planarSpace` (meters, the test grid), `localSpace(field)` (a local grid's flat map), `geoSpace` (lat/lon on the globe). A move direction is always (right, forward).
 - **ListenerInput:** position, walk target, wander; events `moved`, `action`, `wander`, `manual`. Each tick: a source that drives the position (an XR pose, GPS) wins, then the first source with a move intent (which cancels the target), then the target, then wander.
 - **Sources:** `keyboardSource` (WASD / arrows, gamepad stick and d-pad; Space, T and 1–9 as actions; ignores typing in form fields), `pointerSource` (press to walk there, drag to steer, tap to select), `geolocationSource` (follows the device; stops on a hand move), `poseSource` (a WebXR or other tracked pose).
-- Chord Master XR (`app.js`) and the AR page (`ar.js`) both walk through it. Tests: `web/tests/input.test.mjs`.
+- Music Beacon XR (`app.js`) and the AR page (`ar.js`) both walk through it. Tests: `web/tests/input.test.mjs`.
 
 ## Sound: SynthKit
 
@@ -95,7 +95,7 @@ The songs play on SynthKit's own instruments through its web module (`addons/syn
 
 ## Synths page
 
-`synths.html` (the **Synths ↗** button in Chord Master XR's header) has a front panel for each of the six instruments: every sound control, an on-screen keyboard (or drum pads for Pulsar), a computer-keyboard row (A W S E D F T G Y H U J K; Z and X change octave), a 4-bar demo loop with tempo, a waveform scope, and Reset, Random, Copy JSON and Paste JSON. Link straight to one with `synths.html#Lumen` (or any instrument name).
+`synths.html` (the **Synths ↗** button in Music Beacon XR's header) has a front panel for each of the six instruments: every sound control, an on-screen keyboard (or drum pads for Pulsar), a computer-keyboard row (A W S E D F T G Y H U J K; Z and X change octave), a 4-bar demo loop with tempo, a waveform scope, and Reset, Random, Copy JSON and Paste JSON. Link straight to one with `synths.html#Lumen` (or any instrument name).
 
 - **Presets:** 20 factory presets per instrument (`src/presets.js`), in a picker under the instrument's name with ◀ ▶ to step through them. **Save as…** keeps your own presets in this browser (they appear under "Yours"); **Delete** removes one of yours. Any change shows the sound as "(edited)".
 - **Automation:** the ∿ button beside a control animates it. Pick a shape (sine, triangle, saw up, saw down, square, random steps, drift), how long one cycle takes (1/4 bar to 32 bars) and how far it swings (a share of the control's range; frequencies swing evenly in octaves). Animations follow the tempo; an animated control shows its live value and a marker on its slider. Every continuous control can be animated: filters, resonance, envelopes, detune, levels, FM depths, LFOs, drum tunes and decays, sends, chorus and drive. Steps (semitones, octaves, FM ratios), choices and glide times can't.
@@ -103,7 +103,7 @@ The songs play on SynthKit's own instruments through its web module (`addons/syn
 - **Random** starts from a random preset, moves every control somewhere new and sometimes animates one or two of them.
 
 - It uses the same instrument code as the field (`src/synths.js`), so a sound made here plays the same in a song. Copy JSON gives `{instrument, params}`; the `params` block drops into a song track.
-- In Chord Master XR, click an instrument's name under **Instruments** to open it on the Synths page with the sound it's playing right then (the current blend).
+- In Music Beacon XR, click an instrument's name under **Instruments** to open it on the Synths page with the sound it's playing right then (the current blend).
 - Each instrument's settings are kept in the browser (localStorage) until you reset them.
 - The Godot versions of the panels (the real C++ SynthKit engine, with presets and a sequencer) are in `scenes/studio.tscn`: open it in Godot and press F6.
 

@@ -23,7 +23,7 @@ var xr_active := false
 
 func _ready() -> void:
 	super._ready()
-	hud.title_text = "CHORD MASTER XR"
+	hud.title_text = "MUSIC BEACON XR"
 	xr = XRServer.find_interface("OpenXR")
 	if xr != null and xr.is_initialized():
 		_start_xr()

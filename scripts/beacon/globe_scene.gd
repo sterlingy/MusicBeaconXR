@@ -42,7 +42,7 @@ func _ready() -> void:
 	player.load_songs("res://songs/globe.json")
 	_build_beacons()
 	hud = BeaconHud.new(player)
-	hud.title_text = "CHORD MASTER XR · GLOBE"
+	hud.title_text = "MUSIC BEACON XR · GLOBE"
 	add_child(hud)
 	_build_input()
 	input.jump_to(Vector2(-0.128, 51.507))

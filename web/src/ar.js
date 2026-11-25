@@ -1,4 +1,4 @@
-// Chord Master XR in AR and VR (WebXR), with a plain 3D preview for screens.
+// Music Beacon XR in AR and VR (WebXR), with a plain 3D preview for screens.
 //
 // AR (immersive-ar: Chrome on Android, Quest Browser with passthrough): the
 // test grid is laid on your floor at a scale you pick, and your phone or

@@ -3,7 +3,7 @@ config_version=5
 
 [application]
 
-config/name="Chord Master XR"
+config/name="Music Beacon XR"
 config/use_custom_user_dir=true
 config/custom_user_dir_name="MusicBeaconXR"
 config/description="Generative music driven by where you are between beacons."
