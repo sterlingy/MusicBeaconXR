@@ -21,6 +21,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # SynthKit (addons/synthkit) is a private repo: fetch it with a read-only
+      # token that can see only SynthKit (secret SYNTHKIT_TOKEN, renew yearly).
+      - name: Fetch SynthKit
+        env:
+          TOKEN: ${{ secrets.SYNTHKIT_TOKEN }}
+        run: |
+          git -c "url.https://x-access-token:${TOKEN}@github.com/.insteadOf=https://github.com/" submodule update --init --depth 1 addons/synthkit
+          test -f addons/synthkit/web/synthkit.wasm
+          echo "SynthKit $(git -C addons/synthkit rev-parse --short HEAD)"
       - uses: actions/setup-node@v4
         with:
           node-version: 20
