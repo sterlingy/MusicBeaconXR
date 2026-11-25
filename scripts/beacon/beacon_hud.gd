@@ -6,6 +6,9 @@ extends CanvasLayer
 
 const ACCENT := Color("ffb547")
 const MUTE_COLOR := Color("e0565b")
+## The expand button scales the panel up to this (less if the screen is smaller).
+const LARGE_SCALE := 1.6
+const PREFS := "user://beacon_hud.cfg"
 const ROLE_COLOR := {"drums": Color("ff8a3d"), "bass": Color("2ec4b6"), "keys": Color("f5c04a"), "lead": Color("ff4f9a"), "pluck": Color("9ccc65"), "texture": Color("8b6cf0"), "pad": Color("7ad7ff")}
 
 var player: BeaconPlayer
@@ -20,6 +23,9 @@ var _names := {} # role -> its label
 var _buttons := {} # role -> [mute, solo]
 var _help: Label
 var _flash := 0.0
+var _panel: PanelContainer
+var _expand: Button
+var large := false
 
 
 func _init(p_player: BeaconPlayer) -> void:
@@ -35,14 +41,20 @@ func _ready() -> void:
 	sb.set_corner_radius_all(10)
 	sb.set_content_margin_all(14)
 	panel.add_theme_stylebox_override("panel", sb)
+	_panel = panel
 	panel.position = Vector2(16, 16)
 	panel.custom_minimum_size = Vector2(360, 0)
 	add_child(panel)
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 8)
 	panel.add_child(v)
+	var head := HBoxContainer.new()
 	var title := _label(title_text, 13, ACCENT)
-	v.add_child(title)
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	head.add_child(title)
+	_expand = _expand_button()
+	head.add_child(_expand)
+	v.add_child(head)
 	_now = _label("", 22, Color.WHITE)
 	v.add_child(_now)
 	_sub = _label("", 13, Color(1, 1, 1, 0.6))
@@ -89,6 +101,52 @@ func _ready() -> void:
 	_help.custom_minimum_size.x = 330
 	v.add_child(_help)
 	player.harmony_changed.connect(func(_i): _flash = 1.0)
+	var cfg := ConfigFile.new()
+	if cfg.load(PREFS) == OK:
+		large = bool(cfg.get_value("panel", "large", false))
+
+
+## Toggles the panel between its normal size and a larger one that is easier
+## to read and tap. Remembered between runs.
+func set_large(on: bool) -> void:
+	large = on
+	var cfg := ConfigFile.new()
+	cfg.set_value("panel", "large", on)
+	cfg.save(PREFS)
+
+
+## A square button with corner arrows drawn on it: outward to expand, inward
+## to go back to normal size.
+func _expand_button() -> Button:
+	var b := Button.new()
+	b.focus_mode = Control.FOCUS_NONE
+	b.custom_minimum_size = Vector2(28, 24)
+	b.tooltip_text = "Larger panel"
+	for state in ["normal", "hover", "pressed"]:
+		var sb := StyleBoxFlat.new()
+		sb.bg_color = Color(0.13, 0.16, 0.2) if state != "pressed" else Color(0.2, 0.24, 0.3)
+		sb.border_color = ACCENT if state == "hover" else Color(0.25, 0.3, 0.38)
+		sb.set_border_width_all(1)
+		sb.set_corner_radius_all(5)
+		b.add_theme_stylebox_override(state, sb)
+	b.draw.connect(func():
+		var c := b.size / 2.0
+		var r := 6.0
+		var t := 3.5
+		var col := Color(1, 1, 1, 0.85)
+		for sx in [-1.0, 1.0]:
+			for sy in [-1.0, 1.0]:
+				var corner := c + Vector2(sx, sy) * r
+				# Expand: corner brackets point outward. Shrink: they point inward.
+				var d := Vector2(-sx, -sy) * t if not large else Vector2(sx, sy) * t
+				var tip := corner if not large else corner - Vector2(sx, sy) * t
+				b.draw_line(tip, tip + Vector2(d.x, 0), col, 1.6, true)
+				b.draw_line(tip, tip + Vector2(0, d.y), col, 1.6, true))
+	b.pressed.connect(func():
+		set_large(not large)
+		b.tooltip_text = "Normal size" if large else "Larger panel"
+		b.queue_redraw())
+	return b
 
 
 ## A small square toggle (touch friendly) that lights up in its colour when on.
@@ -114,6 +172,15 @@ func _toggle(text: String, on_color: Color, on_toggle: Callable) -> Button:
 	return b
 
 
+func _fit_scale() -> void:
+	var k := 1.0
+	if large and _panel.size.y > 0.0:
+		var room := get_viewport().get_visible_rect().size - Vector2(32, 32)
+		k = maxf(1.0, minf(LARGE_SCALE, minf(room.x / _panel.size.x, room.y / _panel.size.y)))
+	if not is_equal_approx(_panel.scale.x, k):
+		_panel.scale = Vector2(k, k)
+
+
 func _label(t: String, size: int, color: Color) -> Label:
 	var l := Label.new()
 	l.text = t
@@ -123,6 +190,7 @@ func _label(t: String, size: int, color: Color) -> Label:
 
 
 func _process(delta: float) -> void:
+	_fit_scale()
 	var h := player.harmony
 	if h.song.is_empty():
 		return

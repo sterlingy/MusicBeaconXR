@@ -7,6 +7,16 @@ import { sectionName } from "./form.js";
 
 const LOG_PARAM = /cutoff|tone|tune|rate|amount/;
 const ROLE_OCTAVE = { bass: 2, lead: 4, pluck: 4, texture: 3 };
+// Lowest and highest MIDI note a part may play; notes outside fold in by
+// octaves. A bass above G3 stops sounding like a bass (and turns shrill).
+const ROLE_RANGE = { bass: [28, 55] };
+export function foldIntoRange(role, midi) {
+  const r = ROLE_RANGE[role];
+  if (!r) return midi;
+  while (midi > r[1]) midi -= 12;
+  while (midi < r[0]) midi += 12;
+  return midi;
+}
 const DRUM_VOICES = ["kick", "snare", "hat", "open", "clap"];
 /** Params that follow a section's energy: brighter in a chorus, darker in a breakdown. */
 const BRIGHT = { bass: "filter.cutoff", keys: "filter.cutoff", lead: "filter.cutoff", texture: "filter.cutoff" };
@@ -171,7 +181,7 @@ export function stepEvents(active, mix, harmony, bar, step) {
       const oct = Math.round(m.params.octave ?? 4);
       events.push({ role, id, notes: chordNotes(key, chordDeg, oct, Math.round(m.params.voicing ?? 3)), vel: ev.v, gate: ev.g });
     } else {
-      const midi = degreeToMidi(key, chordDeg + ev.d, ROLE_OCTAVE[role] + (ev.o || 0) + lift);
+      const midi = foldIntoRange(role, degreeToMidi(key, chordDeg + ev.d, ROLE_OCTAVE[role] + (ev.o || 0) + lift));
       events.push({ role, id, notes: [midi], vel: ev.v, gate: ev.g });
     }
   });

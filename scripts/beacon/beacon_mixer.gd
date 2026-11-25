@@ -6,6 +6,9 @@ extends RefCounted
 const ROLES := ["drums", "bass", "keys", "lead", "pluck", "texture"]
 const DRUM_VOICES := ["kick", "snare", "hat", "open", "clap"]
 const ROLE_OCTAVE := {"bass": 2, "lead": 4, "pluck": 4, "texture": 3}
+## Lowest and highest MIDI note a part may play; notes outside fold in by
+## octaves. A bass above G3 stops sounding like a bass (and turns shrill).
+const ROLE_RANGE := {"bass": [28, 55]}
 const MODES := {
 	"major": [0, 2, 4, 5, 7, 9, 11], "minor": [0, 2, 3, 5, 7, 8, 10], "dorian": [0, 2, 3, 5, 7, 9, 10],
 	"mixolydian": [0, 2, 4, 5, 7, 9, 10], "lydian": [0, 2, 4, 6, 7, 9, 11], "phrygian": [0, 1, 3, 5, 7, 8, 10],
@@ -21,6 +24,18 @@ static func degree_to_midi(key: Dictionary, degree: int, octave := 4) -> int:
 	var oct := floori(float(degree) / n)
 	var idx := posmod(degree, n)
 	return 12 * (octave + 1 + oct) + int(key.root) + int(scale[idx])
+
+
+## Moves a note by octaves into the role's range (if it has one).
+static func fold_into_range(role: String, midi: int) -> int:
+	var r: Array = ROLE_RANGE.get(role, [])
+	if r.is_empty():
+		return midi
+	while midi > r[1]:
+		midi -= 12
+	while midi < r[0]:
+		midi += 12
+	return midi
 
 
 static func chord_notes(key: Dictionary, degree: int, octave := 4, size := 3) -> Array:
@@ -201,7 +216,7 @@ static func step_events(active: Array, mix: Dictionary, harmony: Harmony, bar: i
 		if role == "keys":
 			events.append({"role": role, "id": sid, "notes": chord_notes(key, chord_deg, int(round(m.params.get("octave", 4))), int(round(m.params.get("voicing", 3)))), "vel": float(ev.v), "gate": float(ev.g)})
 		else:
-			var midi := degree_to_midi(key, chord_deg + int(ev.d), ROLE_OCTAVE[role] + int(ev.get("o", 0)))
+			var midi := fold_into_range(role, degree_to_midi(key, chord_deg + int(ev.d), ROLE_OCTAVE[role] + int(ev.get("o", 0))))
 			events.append({"role": role, "id": sid, "notes": [midi], "vel": float(ev.v), "gate": float(ev.g)})
 	return events
 

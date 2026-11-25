@@ -3,7 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makeGridField, makeGlobeField, makeLocalGridField, localGridShape, MAX_LOCAL_STEPS, KM_M, weigh, greatCircleKm, nearest, normalizeLatLon } from "../src/beacons.js";
 import { generateSong, validateSong, degreeToMidi, chordName, ROLES } from "../src/song.js";
-import { blend, Harmony, stepEvents, targetTempo, pickSource } from "../src/mixer.js";
+import { blend, Harmony, stepEvents, targetTempo, pickSource, foldIntoRange } from "../src/mixer.js";
 
 const grid = makeGridField(5, 100);
 const globe = makeGlobeField(10);
@@ -541,4 +541,12 @@ test("a part that enters partway is silent until then", () => {
   assert.equal(early.layers.bass, 0);
   assert.ok(late.layers.bass > 0);
   assert.ok(early.layers.keys > 0);
+});
+
+test("bass notes fold into a real bass range (E1-G3)", () => {
+  assert.equal(foldIntoRange("bass", 67), 55);
+  assert.equal(foldIntoRange("bass", 80), 56 - 12);
+  assert.equal(foldIntoRange("bass", 24), 36);
+  assert.equal(foldIntoRange("bass", 40), 40);
+  assert.equal(foldIntoRange("lead", 84), 84);
 });

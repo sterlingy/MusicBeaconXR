@@ -53,8 +53,15 @@ static func to_synth(role: String, p: Dictionary) -> Dictionary:
 				o["osc3.range"] = 1 # 32', an octave under osc 1 and 2
 				o["mix.osc3"] = clampf(float(p["sub.level"]) * 10.0, 0, 10)
 			if p.has("filter.cutoff"): o["filter.cutoff"] = clampf(float(p["filter.cutoff"]), 20, 18000)
-			if p.has("filter.emphasis"): o["filter.emphasis"] = clampf(float(p["filter.emphasis"]), 0, 10)
-			if p.has("fenv.amount"): o["filter.contour"] = clampf(float(p["fenv.amount"]) / 300.0, 0, 10)
+			# Emphasis 10 is close to self-oscillation on Undertow; the songs' values
+			# (up to 12) were for the browser's gentler filter.
+			if p.has("filter.emphasis"): o["filter.emphasis"] = clampf(float(p["filter.emphasis"]) * 0.5, 0, 5)
+			if p.has("fenv.amount"):
+				# The browser sweeps from the cutoff up to cutoff + amount (Hz).
+				# Undertow's contour is in octaves (10 = 5 octaves): match the browser.
+				var cut := clampf(float(p.get("filter.cutoff", 500.0)), 40, 16000)
+				var octaves := log(minf(16000.0, cut + float(p["fenv.amount"])) / cut) / log(2.0)
+				o["filter.contour"] = clampf(octaves * 2.0, 0, 10)
 			if p.has("fenv.decay"): o["fenv.decay"] = clampf(float(p["fenv.decay"]), 0.004, 10)
 			if p.has("glide"): o["ctrl.glide"] = clampf(float(p["glide"]), 0, 5)
 		"lead":
