@@ -1,12 +1,17 @@
 // The audio engine: a look-ahead clock that, every 16th step, asks the mixer
 // what the current beacon blend should play and schedules it sample-accurately
-// on the Web Audio instruments.
+// on the Web Audio instruments, or (synthMode "kit") on SynthKit's own
+// instruments through its web module, the same engine as the Godot app.
 
 import { weigh } from "./beacons.js";
-import { generateSong, ROLES } from "./song.js";
+import { chordNotes, generateSong, ROLES } from "./song.js";
 import { blend, Harmony, stepEvents, targetTempo } from "./mixer.js";
 import { Bus, makeInstruments } from "./synths.js";
 import { songPosition } from "./form.js";
+import { makeKitInstruments, padGain } from "./kit/kitplayer.js";
+
+/** "web": the browser's own instruments (synths.js). "kit": SynthKit's, as in the app. */
+export const SYNTH_MODES = ["web", "kit"];
 
 /** Wall-clock seconds: the shared clock every beacon's song runs on. */
 const wallNow = () => Date.now() / 1000;
@@ -31,6 +36,7 @@ export class BeaconEngine {
     this.clockT = null; // song-clock time sampled at the last bar line (while playing)
     this.anchor = { t: 0, beat: 0, bpm: 108 }; // audio time -> beats, for automation
     this.beatAt = (t) => this.anchor.beat + ((t - this.anchor.t) * this.anchor.bpm) / 60;
+    this.synthMode = "web";
     this.setField(field);
   }
 
@@ -96,9 +102,9 @@ export class BeaconEngine {
     if (!this.ctx) {
       this.ctx = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: "interactive" });
       this.bus = new Bus(this.ctx);
-      this.inst = makeInstruments(this.bus);
     }
     await this.ctx.resume();
+    if (!this.inst) await this._makeInstruments();
     this.bus.master.gain.value = this.volume;
     this.running = true;
     this.step = 0;
@@ -106,7 +112,7 @@ export class BeaconEngine {
     this.clockT = null;
     this.refresh();
     this.bpm = targetTempo(this.active);
-    this.bus.setTempo(this.bpm);
+    this._setTempo(this.bpm);
     this._applyMix(0.01);
     this._timer = setInterval(() => this._tick(), 25);
     this._emit();
@@ -133,8 +139,55 @@ export class BeaconEngine {
   stop() {
     this.running = false;
     clearInterval(this._timer);
-    if (this.inst) for (const r of ROLES) this.inst.channels[r].set("level", 0, 0.05);
+    if (this.inst) {
+      for (const r of this._parts()) this.inst.channels[r].set("level", 0, 0.05);
+      this.inst.stop?.();
+    }
     this._emit();
+  }
+
+  /**
+   * Picks the instruments ("web" or "kit"). Takes effect at once: a playing
+   * engine restarts on the new set. If SynthKit can't load, it stays on "web".
+   */
+  async setSynthMode(mode) {
+    if (!SYNTH_MODES.includes(mode) || mode === this.synthMode) return this.synthMode;
+    const was = this.running;
+    if (was) this.stop();
+    this._dropInstruments();
+    this.synthMode = mode;
+    if (was) await this.start();
+    else this._emit();
+    return this.synthMode;
+  }
+
+  async _makeInstruments() {
+    if (this.synthMode === "kit") {
+      try {
+        this.inst = await makeKitInstruments(this.bus);
+        return;
+      } catch (err) {
+        console.warn("SynthKit couldn't load; using the browser instruments", err);
+        this.synthMode = "web";
+        this._note("synthError", String(err?.message || err));
+      }
+    }
+    this.inst = makeInstruments(this.bus);
+  }
+
+  _dropInstruments() {
+    if (!this.inst) return;
+    if (this.inst.dispose) this.inst.dispose();
+    else for (const r of ROLES) this.inst.channels[r].level.disconnect();
+    this.inst = null;
+  }
+
+  /** Parts with a channel: the six song parts, plus SynthKit's pad. */
+  _parts() { return this.inst?.parts || ROLES; }
+
+  _setTempo(bpm) {
+    this.bus.setTempo(bpm);
+    this.inst?.setTempo?.(bpm);
   }
 
   setVolume(v) {
@@ -151,6 +204,7 @@ export class BeaconEngine {
       this.inst.channels[role].set("level", m.gain, tc);
       inst.applyChannel(this.ctx.currentTime, tc);
     }
+    if (this.inst.pad) this.inst.channels.pad.set("level", padGain(this.active), tc);
   }
 
   _tick() {
@@ -178,7 +232,11 @@ export class BeaconEngine {
       const target = targetTempo(this.active);
       this.bpm += (target - this.bpm) * this.tempoGlide;
       if (Math.abs(target - this.bpm) < 0.05) this.bpm = target;
-      this.bus.setTempo(this.bpm);
+      this._setTempo(this.bpm);
+      // SynthKit's pad holds the harmony's chord (root, third, fifth, seventh).
+      if (this.inst.pad && this.harmony.song && padGain(this.active) > 0.001) {
+        this.inst.pad.hold(chordNotes(this.harmony.song.key, this.harmony.chordDegree(bar), 3, 4), t);
+      }
     }
     const stepDur = 60 / this.bpm / 4;
     this.anchor = { t, beat: n / 4, bpm: this.bpm };
@@ -215,6 +273,7 @@ export class BeaconEngine {
     const bar = this.position?.bar ?? 0;
     return {
       running: this.running,
+      synthMode: this.synthMode,
       bpm: this.bpm,
       targetBpm: targetTempo(this.active),
       bar, step: this.position?.step ?? 0,

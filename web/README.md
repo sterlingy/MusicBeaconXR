@@ -84,6 +84,15 @@ The test playfield for Chord Master XR. You walk a listener between music beacon
 - **Sources:** `keyboardSource` (WASD / arrows, gamepad stick and d-pad; Space, T and 1–9 as actions; ignores typing in form fields), `pointerSource` (press to walk there, drag to steer, tap to select), `geolocationSource` (follows the device; stops on a hand move), `poseSource` (a WebXR or other tracked pose).
 - Chord Master XR (`app.js`) and the AR page (`ar.js`) both walk through it. Tests: `web/tests/input.test.mjs`.
 
+## Sound: browser synths or SynthKit (beta)
+
+The **Sound** menu in the header picks which instruments play the songs. **Browser synths** (the default) are `src/synths.js`, Web Audio versions of the instruments. **SynthKit (beta)** plays them on SynthKit's own instruments through its web module (`addons/synthkit/web/`, the same C++ engine as the Godot app compiled to WebAssembly), with Prism on keys, lead and a pad, like the app. `?synth=kit` or `?synth=web` in the address picks one too, and the choice is remembered.
+
+- `src/kit/kitplayer.js` is the browser twin of `scripts/beacon/beacon_player.gd`: the same instrument and base preset per part, and the pad. Phones get Prism's light voices.
+- `src/kit/parammap.js` is a port of `scripts/beacon/param_map.gd`. `web/tests/kit.test.mjs` checks it against the app's own output (`tests/fixtures/param_map.json`; after changing `param_map.gd`, re-run `godot --headless --path . -s res://tests/dump_param_map.gd`), and plays every part of every grid song through the web engine under the same shrillness limits as `tools/tone_check.gd`.
+- Not yet in SynthKit mode, as in the app: song automation, and the browser's drive and chorus channels. The Synths page and the Instrument Table still use the browser synths.
+- `web/serve.py` and `web/tools/build_site.py` serve SynthKit's engine files and factory presets under `synthkit/`.
+
 ## Synths page
 
 `synths.html` (the **Synths ↗** button in Chord Master XR's header) has a front panel for each of the six instruments: every sound control, an on-screen keyboard (or drum pads for Pulsar), a computer-keyboard row (A W S E D F T G Y H U J K; Z and X change octave), a 4-bar demo loop with tempo, a waveform scope, and Reset, Random, Copy JSON and Paste JSON. Link straight to one with `synths.html#Lumen` (or any instrument name).

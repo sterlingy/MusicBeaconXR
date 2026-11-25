@@ -3,7 +3,8 @@
     python web/tools/build_site.py [out_dir]     default: build/site
 
 Copies the pages, scripts, manifest and icon; leaves out tests, tools, the dev
-server and Godot's import files. index.html is a fragment (it's also published
+server and Godot's import files. SynthKit's web module (the addons/synthkit submodule)
+goes under synthkit/: its three engine files and the factory presets. index.html is a fragment (it's also published
 as an artifact), so it gets the same <!doctype html> skeleton web/serve.py
 serves it in, without the local-only dev flag.
 """
@@ -12,6 +13,8 @@ import shutil
 import sys
 
 WEB = pathlib.Path(__file__).resolve().parents[1]
+SYNTHKIT = WEB.parent / "addons" / "synthkit"
+SYNTHKIT_FILES = ("synthkit.js", "synthkit-worklet.js", "synthkit.wasm")
 SKIP_DIRS = {"tests", "tools", ".cert", "__pycache__"}
 SKIP_FILES = {"serve.py", "README.md"}
 HEAD = ('<!doctype html><html lang="en"><head><meta charset="utf-8">'
@@ -38,6 +41,17 @@ def build(out: pathlib.Path) -> list[str]:
         else:
             shutil.copy2(src, dst)
         copied.append(rel.as_posix())
+    kit = out / "synthkit"
+    if (SYNTHKIT / "web" / "synthkit.wasm").exists():
+        kit.mkdir()
+        for name in SYNTHKIT_FILES:
+            shutil.copy2(SYNTHKIT / "web" / name, kit / name)
+            copied.append(f"synthkit/{name}")
+        shutil.copytree(SYNTHKIT / "presets" / "factory", kit / "presets" / "factory",
+                        ignore=shutil.ignore_patterns("*.import", "*.py"))
+        copied.append("synthkit/presets/factory/")
+    else:
+        print("note: addons/synthkit is not checked out; the site plays without SynthKit")
     (out / ".nojekyll").write_text("")  # serve files as they are
     return copied
 

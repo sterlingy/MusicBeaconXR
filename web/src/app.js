@@ -456,6 +456,34 @@ window.addEventListener("focus", () => engine.resume());
 $("play").addEventListener("click", togglePlay);
 $("play2").addEventListener("click", togglePlay);
 $("vol").addEventListener("input", (e) => engine.setVolume(+e.target.value));
+
+// Sound: the browser synths (default) or SynthKit's instruments, as in the app.
+// ?synth=kit or ?synth=web in the address picks one; the choice is remembered.
+{
+  const url = new URLSearchParams(location.search).get("synth");
+  let saved = null;
+  try { saved = localStorage.getItem("beacon.synthMode"); } catch {}
+  const pick = ["web", "kit"].includes(url) ? url : saved === "kit" ? "kit" : "web";
+  engine.synthMode = pick;
+  $("synthMode").value = pick;
+  $("synthMode").addEventListener("change", async (e) => {
+    const want = e.target.value;
+    e.target.disabled = true;
+    try {
+      const got = await engine.setSynthMode(want);
+      e.target.value = got;
+      try { localStorage.setItem("beacon.synthMode", got); } catch {}
+    } catch (err) {
+      setMsg("fieldMsg", "Couldn't switch the sound: " + err.message, true);
+    }
+    e.target.disabled = false;
+  });
+  engine.on((type, data) => {
+    if (type !== "synthError") return;
+    $("synthMode").value = "web";
+    setMsg("fieldMsg", "SynthKit couldn't load, so the browser synths are playing. (" + data + ")", true);
+  });
+}
 $("wander").addEventListener("change", (e) => { input.wander = e.target.checked; });
 $("speed").addEventListener("input", (e) => { ui.speed = +e.target.value; });
 $("zones").addEventListener("change", (e) => { ui.zones = e.target.checked; });

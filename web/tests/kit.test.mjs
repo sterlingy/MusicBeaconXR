@@ -1,0 +1,136 @@
+// The browser's SynthKit mode: the song -> SynthKit translation must match the
+// Godot app's exactly, and every part of every grid song, played through
+// SynthKit's web engine the way the browser plays it, must stay mellow (the
+// same limits as tools/tone_check.gd in the app).
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { readFileSync, existsSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { toSynth } from "../src/kit/parammap.js";
+import { changedParams, padLevel, padGain, isPhone, INSTRUMENT, BASE_PRESET, PARTS, DRUM_NOTE } from "../src/kit/kitplayer.js";
+import { blend, Harmony, stepEvents } from "../src/mixer.js";
+import { chordNotes, generateSong } from "../src/song.js";
+
+const root = new URL("../../", import.meta.url);
+const read = (rel) => readFileSync(fileURLToPath(new URL(rel, root)), "utf-8");
+const KIT = new URL("addons/synthkit/", root);
+const hasKit = existsSync(fileURLToPath(new URL("web/synthkit.wasm", KIT)));
+
+test("song params translate to SynthKit exactly as in the Godot app", () => {
+  const { cases } = JSON.parse(read("tests/fixtures/param_map.json"));
+  assert.ok(cases.length > 500);
+  let checked = 0;
+  for (const c of cases) {
+    const got = toSynth(c.role, c.params);
+    assert.deepEqual(Object.keys(got).sort(), Object.keys(c.synth).sort(), `${c.song} ${c.role}: same params`);
+    for (const [id, v] of Object.entries(c.synth)) {
+      assert.ok(Math.abs(got[id] - v) <= 1e-4 * Math.max(1, Math.abs(v)), `${c.song} ${c.role} ${id}: ${got[id]} vs app ${v}`);
+      checked++;
+    }
+  }
+  assert.ok(checked > 2000);
+});
+
+test("pad level follows the app: calm songs lean on the pad", () => {
+  assert.equal(padLevel({ energy: 0.2, mood: "Drift" }).toFixed(3), "0.630");
+  assert.equal(padLevel({ energy: 0.9, mood: "Pulse" }).toFixed(3), "0.126");
+  assert.equal(padGain([{ w: 0.5, song: { energy: 0.5, mood: "Glow" } }, { w: 0.5, song: { energy: 0.5, mood: "Glow" } }]).toFixed(3), "0.450");
+});
+
+test("only moved params are re-sent", () => {
+  const done = {};
+  assert.deepEqual(changedParams(done, { a: 1, b: 1000 }), { a: 1, b: 1000 });
+  assert.deepEqual(changedParams(done, { a: 1.001, b: 1001 }), {});
+  assert.deepEqual(changedParams(done, { a: 1.01, b: 1000 }), { a: 1.01 });
+});
+
+test("phones get the light Prism tier", () => {
+  assert.equal(isPhone({ userAgent: "Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro) Mobile" }), true);
+  assert.equal(isPhone({ userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" }), false);
+});
+
+// ---------------------------------------------------------------- tone check
+
+const SR = 48000;
+const LIMIT = { drums: -8, bass: -30, keys: -22, lead: -22, pluck: -15, texture: -22, pad: -25 };
+
+/** Energy above 2.5 kHz relative to all energy, in dB (as tools/tone_check.gd). */
+function hfDb(l, r) {
+  const a = Math.exp((-2 * Math.PI * 2500) / SR);
+  const lp = [0, 0, 0, 0];
+  let all = 0, hi = 0;
+  for (let i = 0; i < l.length; i++) {
+    let x = (l[i] + r[i]) * 0.5;
+    all += x * x;
+    for (let k = 0; k < 4; k++) { lp[k] = x + a * (lp[k] - x); x -= lp[k]; }
+    hi += x * x;
+  }
+  return (10 * Math.log10(Math.max(hi, 1e-15) / Math.max(all, 1e-12)));
+}
+
+test("every grid song's parts stay mellow on SynthKit's web engine", { skip: !hasKit && "addons/synthkit not checked out" }, async () => {
+  const { SynthKitCore } = await import(new URL("web/synthkit-worklet.js", KIT).href);
+  const module = await WebAssembly.compile(readFileSync(fileURLToPath(new URL("web/synthkit.wasm", KIT))));
+  const index = JSON.parse(readFileSync(fileURLToPath(new URL("presets/factory/index.json", KIT)), "utf-8"));
+  const preset = (role) => {
+    const e = index[INSTRUMENT[role]].find((p) => p.name === BASE_PRESET[role]);
+    return JSON.parse(readFileSync(fileURLToPath(new URL(`presets/factory/${e.file}`, KIT)), "utf-8"));
+  };
+  const presets = Object.fromEntries(PARTS.map((r) => [r, preset(r)]));
+  const worst = {};
+  const over = [];
+  for (let gy = 0; gy < 5; gy++) for (let gx = 0; gx < 5; gx++) {
+    const id = `g${gx}${gy}`;
+    const song = generateSong(`grid:${id}`);
+    const active = [{ id, w: 1, song }];
+    const mix = blend(active);
+    const harmony = new Harmony();
+    harmony.update(active, 0);
+    const stepFrames = Math.round((SR * 60) / song.bpm / 4);
+    for (const role of PARTS) {
+      if (role !== "pad" && mix.roles[role].gain <= 0.001) continue;
+      const s = new SynthKitCore(module, SR, { log: () => {}, isolated: true });
+      s.setInstrument(INSTRUMENT[role]);
+      s.applyPreset(presets[role]);
+      if (INSTRUMENT[role] === "Prism") s.setParam("voice.quality", 0);
+      for (const [k, v] of Object.entries(toSynth(role, role === "pad" ? {} : mix.roles[role].params))) s.setParam(k, v);
+      for (const k of ["send.space", "send.echo", "reverb.mix"]) s.setParam(k, 0); // the dry part
+      const ons = []; // [frame, note, vel, offFrame]
+      for (let bar = 0; bar < 2; bar++) {
+        if (role === "pad") {
+          const f = bar * 16 * stepFrames;
+          for (const n of chordNotes(song.key, harmony.chordDegree(bar), 3, 4)) ons.push([f, n, 0.7, f + 16 * stepFrames - 1]);
+          continue;
+        }
+        for (let step = 0; step < 16; step++) {
+          const f = (bar * 16 + step) * stepFrames;
+          for (const ev of stepEvents(active, mix, harmony, bar, step)) {
+            if (ev.role !== role) continue;
+            if (role === "drums") ons.push([f, DRUM_NOTE[ev.voice], ev.vel, f + Math.round(0.1 * SR)]);
+            else for (const n of ev.notes) ons.push([f, n, ev.vel, f + Math.round(ev.gate * stepFrames * 0.95)]);
+          }
+        }
+      }
+      const total = 32 * stepFrames;
+      const L = new Float32Array(total), R = new Float32Array(total);
+      const BLOCK = 512;
+      for (let f = 0; f < total; f += BLOCK) {
+        const n = Math.min(BLOCK, total - f);
+        for (const [on, note, vel, off] of ons) {
+          if (off >= f && off < f + n) s.noteOff(note, off - f);
+          if (on >= f && on < f + n) s.noteOn(note, vel, on - f);
+        }
+        const [l, r] = s.render(n);
+        L.set(l, f);
+        R.set(r, f);
+      }
+      s.destroy();
+      if (!ons.length) continue;
+      const db = hfDb(L, R);
+      if (!(role in worst) || db > worst[role][0]) worst[role] = [db, id];
+      if (db > LIMIT[role]) over.push(`${id} ${role} ${db.toFixed(1)} dB (limit ${LIMIT[role]})`);
+    }
+  }
+  console.log("  worst above 2.5 kHz: " + Object.entries(worst).map(([r, [db, id]]) => `${r} ${db.toFixed(1)} (${id})`).join(", "));
+  assert.deepEqual(over, [], "shrill parts");
+});

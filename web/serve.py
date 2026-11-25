@@ -22,6 +22,10 @@ import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent
 CERT_DIR = ROOT / ".cert"
+# SynthKit's web module (the git submodule), served under /synthkit/ just as
+# web/tools/build_site.py publishes it: the engine files and factory presets only.
+SYNTHKIT = ROOT.parent / "addons" / "synthkit"
+SYNTHKIT_FILES = ("synthkit.js", "synthkit-worklet.js", "synthkit.wasm")
 HEAD = ('<!doctype html><html lang="en"><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">'
         '<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}'
@@ -35,7 +39,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     extensions_map = {**http.server.SimpleHTTPRequestHandler.extensions_map,
                       ".js": "text/javascript; charset=utf-8", ".mjs": "text/javascript; charset=utf-8",
                       ".html": "text/html; charset=utf-8", ".json": "application/json; charset=utf-8",
-                      ".webmanifest": "application/manifest+json", ".svg": "image/svg+xml"}
+                      ".webmanifest": "application/manifest+json", ".svg": "image/svg+xml",
+                      ".wasm": "application/wasm"}
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=str(ROOT), **kwargs)
@@ -77,6 +82,16 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         self.end_headers()
 
     def translate_path(self, path):
+        clean = path.split("?")[0].split("#")[0]
+        if clean.startswith("/synthkit/"):
+            rel = clean[len("/synthkit/"):]
+            if rel in SYNTHKIT_FILES:
+                return str(SYNTHKIT / "web" / rel)
+            base = (SYNTHKIT / "presets").resolve()
+            p = (SYNTHKIT / rel).resolve()
+            if rel.startswith("presets/") and base in p.parents:
+                return str(p)
+            return str(ROOT / "__not_found__")
         # Never serve the certificate's private key, however the path is spelled.
         p = pathlib.Path(super().translate_path(path)).resolve()
         if p == CERT_DIR or CERT_DIR in p.parents:
