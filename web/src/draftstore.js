@@ -7,14 +7,15 @@ import { emptyDoc, normalizeDoc, validateDoc } from "./drafts.js";
 
 const DB = "music-beacon-xr", STORE = "drafts", KEY = "doc", LS_KEY = "beacon.drafts";
 // Version 2 adds the shared map's cache: tiles and songs (src/shared.js).
-const TILES = "tiles", SONGS = "songs";
+// Version 3 adds walk recordings (src/walk.js).
+const TILES = "tiles", SONGS = "songs", WALKS = "walks";
 
 function openDb() {
   return new Promise((resolve, reject) => {
     if (typeof indexedDB === "undefined") return reject(new Error("no IndexedDB"));
-    const req = indexedDB.open(DB, 2);
+    const req = indexedDB.open(DB, 3);
     req.onupgradeneeded = () => {
-      for (const name of [STORE, TILES, SONGS]) if (!req.result.objectStoreNames.contains(name)) req.result.createObjectStore(name);
+      for (const name of [STORE, TILES, SONGS, WALKS]) if (!req.result.objectStoreNames.contains(name)) req.result.createObjectStore(name);
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
@@ -79,6 +80,24 @@ export class DraftStore {
    * The shared map's device cache (src/shared.js expects getTile, putTile,
    * getSong, putSong). Without IndexedDB it keeps nothing between visits.
    */
+  /**
+   * Walk recordings, by id. Without IndexedDB they last until the page closes.
+   */
+  walks() {
+    const mem = new Map();
+    const all = () => new Promise((resolve, reject) => {
+      const tx = this.db.transaction(WALKS, "readonly");
+      const req = tx.objectStore(WALKS).getAll();
+      req.onsuccess = () => resolve(req.result || []);
+      req.onerror = () => reject(req.error);
+    });
+    return {
+      list: async () => (this.db ? await all() : [...mem.values()]).sort((a, b) => b.createdAt - a.createdAt),
+      put: (rec) => this.db ? idb(this.db, "readwrite", (s) => s.put(rec, rec.id), WALKS) : Promise.resolve(void mem.set(rec.id, rec)),
+      remove: (id) => this.db ? idb(this.db, "readwrite", (s) => s.delete(id), WALKS) : Promise.resolve(void mem.delete(id)),
+    };
+  }
+
   tileCache() {
     const mem = { t: new Map(), s: new Map() };
     const get = (store, k, m) => this.db ? idb(this.db, "readonly", (s) => s.get(k), store).then((v) => v ?? null) : Promise.resolve(m.get(k) ?? null);

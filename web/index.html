@@ -62,7 +62,7 @@ input[type="range"] { accent-color: var(--accent); width: 110px; }
 canvas#field { display: block; width: 100%; aspect-ratio: 1 / 1; touch-action: none; cursor: crosshair; }
 .fieldwrap.globe canvas#field { aspect-ratio: 2 / 1; }
 .fieldwrap.globe.g3d canvas#field { aspect-ratio: 4 / 3; cursor: grab; }
-#viewSeg[hidden] { display: none !important; }
+#viewSeg[hidden], #wReplay[hidden] { display: none !important; }
 .overlay { position: absolute; left: 12px; top: 10px; right: 12px; display: flex; flex-wrap: wrap; gap: 8px; pointer-events: none; font: 12px/1.3 var(--f-mono); color: var(--muted); }
 .overlay b { color: var(--fg); font-weight: 500; }
 .fieldbar { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; padding: 10px 12px; border-top: 1px solid var(--line); background: var(--panel); }
@@ -384,6 +384,26 @@ details summary { cursor: pointer; color: var(--muted); font-size: 13px; }
           <div class="row"><button class="btn primary" value="accept">I agree, share it</button><button class="btn" value="cancel">Not now</button></div>
         </form>
       </dialog>
+      <section class="unit" id="walkUnit" aria-label="Walks">
+        <h2>Walks · trail, recordings, audio</h2>
+        <div class="dtools">
+          <button class="btn primary" id="wRecord" title="Records your path, what you heard and the songs, to play again later (a few KB a minute)">● Record walk</button>
+          <label class="inline" for="wTrail" title="The line of where you've been, coloured by what you heard. Only on this device."><input type="checkbox" id="wTrail" checked> Trail</label>
+          <button class="btn small" id="wClearTrail">Clear trail</button>
+        </div>
+        <div class="dtools">
+          <button class="btn" id="wAudio" title="Records the music as you hear it, then saves it as a file">● Record what I hear</button>
+          <label class="inline" for="wFormat">as <select id="wFormat"><option value="wav">WAV</option><option value="mp3">MP3</option></select></label>
+        </div>
+        <div class="doffer" id="wReplay" hidden>
+          <span><b id="wReplayName"></b> · <span id="wTime" class="hint"></span></span>
+          <input type="range" id="wSeek" min="0" max="1" step="0.001" value="0" aria-label="Replay position" style="width:100%">
+          <div class="row"><button class="btn small" id="wStopReplay">■ Stop</button></div>
+        </div>
+        <div class="ditems" id="wList"></div>
+        <div class="dtools"><button class="btn small" id="wImport">Import a walk…</button><input type="file" id="wFile" accept=".json,application/json" hidden></div>
+        <div class="msg" id="wMsg"></div>
+      </section>
       <section class="unit">
         <details>
           <summary>Blend settings</summary>

@@ -729,6 +729,7 @@ export function initDrafts(ctx) {
   return {
     isUser, findBeacon, setSong, regenerate, inspectorHtml, placeAt, beaconAt, draw, tick,
     noteFix(fix) { st.lastFix = { ...fix, at: Date.now() }; },
+    get store() { return store; },
     get placing() { return st.placing; },
     get state() { return st; },
   };

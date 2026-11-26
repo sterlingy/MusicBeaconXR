@@ -8,6 +8,7 @@ import { SongEditor } from "./editor.js";
 import { ListenerInput, planarSpace, geoSpace, localSpace, keyboardSource, pointerSource } from "./input/listener.js";
 import { initDrafts } from "./draftsui.js";
 import { Globe3D } from "./globe3d.js";
+import { initWalks, drawLines } from "./walkui.js";
 
 const $ = (id) => document.getElementById(id);
 const MOOD_COLOR = { Drift: "#8fa7ff", Glow: "#f5c04a", Tide: "#2ec4b6", Pulse: "#ff4f9a", Rush: "#ff8a3d" };
@@ -62,6 +63,8 @@ const ui = {
 };
 const is3d = () => ui.mode === "globe" && ui.view3d;
 let globe3d = null, lastDraw = performance.now();
+// Walks (src/walkui.js): trail, recordings, replay, audio export. Set up once the page is.
+let walk = { frame: () => false, lines: () => [], setSong: () => false, findBeacon: () => null, replaying: false };
 
 // ------------------------------------------------------------------ setup
 
@@ -207,6 +210,11 @@ function draw(now) {
     g.drawImage(zoneImage(v), 0, 0, W, H);
   }
   drawGraticule(v, d);
+  // Your trail (and a replaying walk's path), under the beacons.
+  drawLines(g, walk.lines(), (p) => {
+    const s = v.toScreen(p);
+    return s[0] < -W || s[0] > 2 * W || s[1] < -H || s[1] > 2 * H ? null : s;
+  }, (m) => MOOD_COLOR[m] || "#888888", d);
 
   const active = engine.active;
   const activeIds = new Map(active.map((a) => [a.id, a.w]));
@@ -756,7 +764,7 @@ engine.on((type, data) => {
 
 // ------------------------------------------------------------------ inspector
 
-function findBeacon(id) { return drafts.findBeacon(id) || engine.field.beacons.find((b) => b.id === id); }
+function findBeacon(id) { return walk.findBeacon(id) || drafts.findBeacon(id) || engine.field.beacons.find((b) => b.id === id); }
 function beaconLabel(id) { return findBeacon(id)?.label ?? id; }
 function esc(s) { return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
 function setMsg(id, text, err = false) { const el = $(id); el.textContent = text; el.classList.toggle("err", err); }
@@ -810,7 +818,7 @@ function renderInspector() {
 let editorId = null;
 const editor = new SongEditor($("editor"), {
   onChange: (song) => {
-    if (!drafts.setSong(editorId, song)) engine.setSong(editorId, song);
+    if (!walk.setSong(editorId, song) && !drafts.setSong(editorId, song)) engine.setSong(editorId, song);
     engine.songRev = (engine.songRev || 0) + 1;
     $("editorTitle").textContent = `Editing ${song.title} (${beaconLabel(editorId)})`;
     renderInspector();
@@ -879,7 +887,7 @@ $("loadJson").addEventListener("click", () => {
   if (errs.length) return setMsg("inspMsg", "Song not loaded: " + errs.join("; "), true);
   const id = needBeacon();
   if (!id) return;
-  if (!drafts.setSong(id, s)) engine.setSong(id, s);
+  if (!walk.setSong(id, s) && !drafts.setSong(id, s)) engine.setSong(id, s);
   engine.songRev = (engine.songRev || 0) + 1;
   if (editorId === id) openEditor(id);
   $("jsonBox").hidden = true;
@@ -963,7 +971,7 @@ function renderPanels() {
   $("nChord").textContent = h ? `${h.chord}` : "–";
   $("nChord").title = h ? h.roman : "";
   $("nBpm").textContent = st.running ? `${Math.round(st.bpm)}` : `${Math.round(st.targetBpm)}`;
-  const now = Date.now() / 1000;
+  const now = engine.musicNow(); // the songs' clock (shifted while replaying a walk)
   const hp = h ? songPosition(engine.harmony.song, now) : null;
   $("nBar").textContent = hp ? sectionName(hp) : "–";
   $("nBar").title = hp ? `Bar ${hp.barInSection + 1} of ${hp.bars}` : "";
@@ -1041,7 +1049,9 @@ if (window.BEACON_DEV_LOG) window.__beacon = { engine, input, ui, step, setMode 
 function frame(now) {
   const dt = Math.min(0.1, (now - last) / 1000);
   last = now;
-  step(dt);
+  // A replaying walk drives the listener; otherwise walking does, and the trail and any recording follow.
+  if (walk.replaying) walk.frame();
+  else { step(dt); walk.frame(); }
   for (const ev of engine.takeSounding()) ui.flashes.set(ev.id, now);
   draw(now);
   if (now - ui.lastPanel > 120) { ui.lastPanel = now; renderPanels(); }
@@ -1081,7 +1091,13 @@ globe3d = new Globe3D({
   label,
   select,
   place: (lat, lon) => !!drafts.placing && drafts.placeAt({ lat, lon }),
+  lines: () => walk.lines(),
   travel: (lat, lon) => { stopFollow("Flew somewhere else, so the map stopped following your location."); input.target = null; engine.setPosition({ lat, lon }); },
+});
+walk = initWalks({
+  engine, ui, $, esc, setMsg, setMode, centerLocal, select, stopFollow, togglePlay,
+  store: () => drafts.store,
+  moodColor: (m) => MOOD_COLOR[m] || "#888888",
 });
 engine.setPosition({ x: -38, y: 27 });
 resize();
@@ -1091,7 +1107,7 @@ requestAnimationFrame(frame);
 connectShared();
 
 // For debugging and automated checks.
-window.beaconField = { engine, ui, setMode, select, centerLocal, setZoom, setView3d, get drafts() { return drafts; }, get globe3d() { return globe3d; } };
+window.beaconField = { engine, ui, setMode, select, centerLocal, setZoom, setView3d, get walk() { return walk; }, get drafts() { return drafts; }, get globe3d() { return globe3d; } };
 
 // ------------------------------------------------------------------ synths page
 

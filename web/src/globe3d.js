@@ -15,6 +15,7 @@
 // the camera back to you.
 
 import { LOWER_48 } from "./drafts.js";
+import { drawLines } from "./walkui.js";
 
 const D2R = Math.PI / 180, R2D = 180 / Math.PI;
 const EARTH_KM = 6371.0088;
@@ -324,6 +325,9 @@ export class Globe3D {
     g.beginPath(); g.arc(cx, cy, Math.max(0, R - 0.5), 0, Math.PI * 2); g.clip();
     this._drawGraticule(g, d, light);
     this._drawOutline(g, LOWER_48, d, light ? "rgba(180,110,20,0.55)" : "rgba(255,181,71,0.42)");
+    // Your trail, and a replaying walk's path.
+    const lines = this.h.lines?.() || [];
+    if (lines.length) drawLines(g, lines, (p) => this.toScreen(p), this.h.moodColor, d);
     g.restore();
 
     this._drawGlobeBeacons(g, now, d);

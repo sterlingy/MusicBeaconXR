@@ -44,6 +44,12 @@ export class BeaconEngine {
     this.layer = null;
     this.layerSong = null;
     this.layerInfo = null;
+    // Replaying a walk (src/walk.js): the blend comes from the recording, not
+    // the map. `replay` is {active: [{id, w, d, beacon, song}]} for this moment.
+    this.replay = null;
+    // Seconds added to the wall clock for the songs' shared clock (a replay
+    // sets it so songs are where they were when the walk was recorded).
+    this.timeOffset = 0;
     this.setField(field);
   }
 
@@ -91,13 +97,22 @@ export class BeaconEngine {
    * (sampled mid-bar, see _playStep), so walking around never jumps a song
    * to a different bar in the middle of one.
    */
-  _position(t = this.running && this.clockT != null ? this.clockT : wallNow()) {
+  _position(t = this.running && this.clockT != null ? this.clockT : wallNow() + this.timeOffset) {
     for (const a of this.active) a.pos = songPosition(a.song, t);
     if (this.harmony.song) this.harmony.pos = this.active.find((a) => a.id === this.harmony.id)?.pos || songPosition(this.harmony.song, t);
   }
 
   /** Recomputes weights and the blended mix for the current position. */
   refresh() {
+    if (this.replay) {
+      this.layerInfo = null;
+      this.active = this.replay.active;
+      this._position();
+      this.mix = blend(this.active);
+      if (this.harmony.id === null) this.harmony.update(this.active, 0);
+      if (this.running) this._applyMix();
+      return;
+    }
     this.weights = weigh(this.field, this.pos, this.opts);
     this.active = this.weights.map((n) => ({ id: n.id, w: n.w, d: n.d, beacon: n.beacon, song: this.songFor(n.beacon) }));
     // The globe layer and the user's beacons, crossfaded (weights still sum
@@ -196,6 +211,35 @@ export class BeaconEngine {
     this.inst?.setTempo?.(bpm);
   }
 
+  /** The songs' shared clock now (seconds since 1970, shifted while replaying). */
+  musicNow() { return wallNow() + this.timeOffset; }
+
+  /**
+   * Taps the final mix (after the compressor) for recording: `onChunk` gets
+   * [left, right] Float32Arrays as the audio plays. Returns a function that
+   * stops the tap. Needs the audio started.
+   */
+  async tapOutput(onChunk) {
+    const ctx = this.ctx;
+    if (!ctx) throw new Error("start the music first");
+    if (!this._tapReady) {
+      const code = `registerProcessor("beacon-tap", class extends AudioWorkletProcessor {
+        process(inputs) { const i = inputs[0]; if (i && i.length) this.port.postMessage(i.map((c) => c.slice())); return true; }
+      });`;
+      const url = URL.createObjectURL(new Blob([code], { type: "text/javascript" }));
+      await ctx.audioWorklet.addModule(url);
+      URL.revokeObjectURL(url);
+      this._tapReady = true;
+    }
+    const node = new AudioWorkletNode(ctx, "beacon-tap", { numberOfInputs: 1, numberOfOutputs: 1, channelCount: 2, channelCountMode: "explicit" });
+    node.port.onmessage = (e) => onChunk(e.data);
+    const sink = ctx.createGain();
+    sink.gain.value = 0; // keeps the tap running without doubling the sound
+    this.bus.analyser.connect(node);
+    node.connect(sink).connect(ctx.destination);
+    return () => { try { this.bus.analyser.disconnect(node); node.disconnect(); sink.disconnect(); } catch {} node.port.onmessage = null; };
+  }
+
   setVolume(v) {
     this.volume = v;
     if (this.bus) this.bus.master.gain.setTargetAtTime(v, this.ctx.currentTime, 0.05);
@@ -229,7 +273,7 @@ export class BeaconEngine {
     if (s === 0) {
       // Move every song to the bar it's on at the middle of this bar, then
       // re-blend: sections change layers, brightness and chords on bar lines.
-      this.clockT = wallNow() + (t - this.ctx.currentTime) + 120 / this.bpm;
+      this.clockT = wallNow() + this.timeOffset + (t - this.ctx.currentTime) + 120 / this.bpm;
       this._position();
       this.mix = blend(this.active);
       this._applyMix(0.25);
