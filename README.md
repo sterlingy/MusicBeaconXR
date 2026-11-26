@@ -29,7 +29,7 @@ Published browser page (private until shared): https://claude.ai/artifact/FjUKz2
 | Windows desktop | Godot, `Windows Desktop` preset, or F5 in the editor | Built and run here |
 | PC VR (SteamVR, Oculus / Link, any OpenXR runtime) | Godot, `Windows VR (OpenXR)` preset (opens `xr_field` with OpenXR on), or `--xr-mode on` | Built; tested without a headset (falls back to flat), the XR rig tested with `--fake-xr` |
 | Meta Quest (standalone) | Godot, `Quest (OpenXR)` preset | APK builds, but needs the OpenXR vendors plugin and a gradle build to run as XR on the headset (see Known gaps) |
-| Android phone | Godot, `Android phone (flat)` preset (landscape, tap to go, pinch zoom) | v0.9 (code 9): `build/MusicBeaconXR-android-v0.9.apk`; needs the INTERNET permission (shared map, sign-in, flights) and location. Earlier versions ran on a Pixel; v0.8 and v0.9 not yet run on a device |
+| Android phone | Godot, `Android phone (flat)` preset (landscape, tap to go, pinch zoom) | v0.10 (code 10): `build/MusicBeaconXR-android-v0.10.apk`; needs the INTERNET permission (shared map, sign-in, flights) and location. Earlier versions ran on a Pixel; v0.8–v0.10 not yet run on a device |
 | Any browser, desktop or phone | `web/` (Music Beacon XR, Synths, AR / VR preview) | Tested here |
 | WebAR | `web/ar.html` → Start AR (Chrome on Android, Quest Browser) | Needs a device; preview tested here |
 | WebVR | `web/ar.html` → Start VR (Quest Browser, PC VR browsers, Vision Pro) | Needs a device; preview tested here |

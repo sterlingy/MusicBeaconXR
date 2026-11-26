@@ -93,6 +93,8 @@ def main(argv: list[str]) -> int:
     ap.add_argument("--model", default="htdemucs_6s", choices=["htdemucs_6s", "htdemucs", "htdemucs_ft"])
     args = ap.parse_args(argv)
     INPUT.mkdir(parents=True, exist_ok=True)
+    # Keep Godot from importing (and exporting into the app) the songs and their parts.
+    (ROOT / "analysis" / ".gdignore").touch()
     files = [pathlib.Path(f) for f in args.files] or sorted(p for p in INPUT.iterdir() if p.suffix.lower() in AUDIO)
     if not files:
         print(f"No songs: put WAV, FLAC, MP3 or OGG files in {INPUT}")
