@@ -7,6 +7,9 @@ import * as D from "./drafts.js";
 import { DraftStore } from "./draftstore.js";
 import { SharedMap, supabaseFetcher } from "./shared.js";
 import { SUPABASE_URL, SUPABASE_KEY } from "./config.js";
+import { Auth } from "./auth.js";
+import * as S from "./submit.js";
+import { tilesAround } from "./shared.js";
 
 const KIND_LABEL = { gen: "generated", edited: "edited", plant: "planted song", map: "map beacon" };
 /** How often the shared map checks the tiles around you, and how far you move before it checks sooner. */
@@ -37,6 +40,15 @@ export function initDrafts(ctx) {
     sharedPos: null,
   };
   st.shared = new SharedMap({ fetcher: supabaseFetcher({ url: SUPABASE_URL, key: SUPABASE_KEY }), cache: store.tileCache() });
+  const auth = new Auth({ url: SUPABASE_URL, key: SUPABASE_KEY });
+  const rest = (...a) => auth.rest(...a);
+  /** Reads public rows without signing in. */
+  const publicGet = async (path) => {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, { headers: { apikey: SUPABASE_KEY } });
+    if (!r.ok) throw new Error(`${r.status}`);
+    return r.json();
+  };
+  const favCounts = new Map(); // shared beacon key -> how many people favorited it
   let songTimer = 0;
   st.shared.onSong = () => { clearTimeout(songTimer); songTimer = setTimeout(() => changed({ save: false }), 150); };
   const msg = (t, err = false) => setMsg("dMsg", t, err);
@@ -224,9 +236,11 @@ export function initDrafts(ctx) {
         return msg(`Made ${c.name}.`);
       }
       case "export": return exportItem(item);
+      case "share": return shareItem(item);
       case "delete": {
         const what = item === "plants" ? `all ${st.doc.plants.length} planted songs` : item.name;
-        if (!confirm(`Delete ${what} from this device? This can't be undone (export it first to keep a copy).`)) return;
+        const still = item === "plants" ? st.doc.plants.some((p) => p.sharedId) : !!item.sharedId;
+        if (!confirm(`Delete ${what} from this device? This can't be undone (export it first to keep a copy).${still ? " It stays on the shared map: unshare it first to take it off." : ""}`)) return;
         if (item === "plants") st.doc.plants = [];
         else if (item.beacons) st.doc.maps = st.doc.maps.filter((m) => m !== item);
         else st.doc.grids = st.doc.grids.filter((g) => g !== item);
@@ -298,9 +312,14 @@ export function initDrafts(ctx) {
     const e = entryOf(id);
     if (!e) return;
     const fav = st.doc.prefs.favorites;
-    if (fav[e.point] === e.key) delete fav[e.point];
+    const off = fav[e.point] === e.key;
+    if (off) delete fav[e.point];
     else fav[e.point] = e.key;
     changed();
+    // Favorites of shared beacons count for everyone (when signed in).
+    if (auth.user && e.shared) {
+      S.setFavorite(rest, e.point, off ? null : e).then(() => { favCounts.delete(S.sharedBeaconKey(e)); loadCounts(e); }, () => {});
+    }
   }
 
   function setRange(id, m) {
@@ -321,7 +340,10 @@ export function initDrafts(ctx) {
     const playing = st.pool.playing.find((x) => x.point === e.point);
     const favKey = st.doc.prefs.favorites[e.point];
     const isFav = favKey === e.key;
-    const favs = Object.values(st.doc.prefs.favorites).filter((k) => k === e.key).length;
+    const local = Object.values(st.doc.prefs.favorites).filter((k) => k === e.key).length;
+    if (e.shared) loadCounts(e);
+    const remote = e.shared ? favCounts.get(S.sharedBeaconKey(e)) : null;
+    const favs = remote ?? local;
     const rows = at.length > 1 ? `<div class="dspot"><small>${at.length} songs at this spot · playing by <b>${esc(D.PLAY_MODE_LABEL[st.doc.prefs.playMode])}</b></small>${at.map((x) =>
       `<button class="etab" data-insp="${esc(UID + x.key)}" aria-pressed="${x.key === e.key}">${x.key === playing?.key ? "▶ " : ""}${esc(x.song()?.title || "loading…")}${x.shared ? " · shared" : ""}${favKey === x.key ? " ★" : ""} <small>${esc(KIND_LABEL[x.kind])}</small></button>`).join("")}</div>` : "";
     const ranged = !e.shared && (e.kind === "plant" || e.kind === "map");
@@ -329,11 +351,14 @@ export function initDrafts(ctx) {
         <span class="chip" style="border-color:${e.tint}"><b>${esc(e.source.name)}</b></span>
         <span class="chip">${esc(KIND_LABEL[e.kind])}</span>
         <span class="chip">heard within <b>${esc(ctx.fmtDist(e.rangeM))}</b></span>
-        <span class="chip" title="On this device, favorites are yours alone; counts from everyone come when beacons are shared">♥ favorited <b>${favs}</b>×</span>
+        <span class="chip" title="${e.shared ? "How many people favorited it" : "Only you, until it's shared"}">♥ favorited <b>${favs ?? "…"}</b>×</span>
+        ${e.plant?.sharedId ? `<span class="chip"><b>shared</b></span>` : ""}
         ${e.key !== playing?.key ? `<span class="chip"><b>not playing</b> (another song here plays)</span>` : ""}
       </div>${rows}
       <div class="row">
         <button class="btn small" data-dact="fav">${isFav ? "★ Unfavorite" : "☆ Favorite"}</button>
+        ${e.kind === "plant" && !e.shared ? `<button class="btn small" data-dact="${e.plant.sharedId ? "unshareplant" : "shareplant"}">${e.plant.sharedId ? "Unshare" : "Share this song"}</button>` : ""}
+        ${e.shared ? `<label class="inline">Report <select data-dact="reason">${S.REPORT_REASONS.map((r) => `<option>${r}</option>`).join("")}</select></label><button class="btn small" data-dact="report">Report</button>` : ""}
         ${ranged ? `<label class="inline">Range <input type="number" min="${D.MIN_RANGE_M}" max="${D.MAX_RANGE_M}" step="100" value="${e.rangeM}" data-dact="range" style="width:6em"> m</label>
         <button class="btn small" data-dact="remove">Remove</button>` : ""}
       </div>`;
@@ -351,6 +376,8 @@ export function initDrafts(ctx) {
     const id = ctx.inspectedId();
     if (t.dataset.dact === "fav") favorite(id);
     else if (t.dataset.dact === "remove") removeBeacon(id);
+    else if (t.dataset.dact === "shareplant" || t.dataset.dact === "unshareplant") sharePlantEntry(entryOf(id), t.dataset.dact === "shareplant");
+    else if (t.dataset.dact === "report") reportEntry(entryOf(id), $("insp").querySelector("[data-dact=reason]").value);
   });
   $("insp").addEventListener("change", (ev) => {
     const t = ev.target.closest("[data-dact=range]");
@@ -363,6 +390,142 @@ export function initDrafts(ctx) {
     return e ? beaconOf(e) : null;
   }
 
+  // ---------------------------------------------------------------- sharing (step 3)
+
+  /** Asks for the terms once, in a dialog. Resolves true when accepted. */
+  function askTerms() {
+    const dlg = $("dTerms");
+    $("dTermsText").innerHTML = S.TERMS_TEXT.map((t) => `<p>${esc(t)}</p>`).join("");
+    return new Promise((resolve) => {
+      dlg.onclose = () => resolve(dlg.returnValue === "accept");
+      dlg.showModal();
+    });
+  }
+
+  /** Runs `fn` signed in and with the terms accepted; says why not otherwise. */
+  async function asSharer(what, fn) {
+    if (!auth.user) {
+      msg(`Sign in (under Account, below) to ${what}.`, true);
+      $("dEmail").focus();
+      return false;
+    }
+    try {
+      if (!(await S.hasConsent(rest))) {
+        if (!(await askTerms())) { msg("Not shared: the terms weren't accepted."); return false; }
+        await S.acceptTerms(rest);
+      }
+      await fn();
+      return true;
+    } catch (err) {
+      msg(`Couldn't ${what}: ${err.message}`, true);
+      return false;
+    }
+  }
+
+  async function shareItem(item) {
+    const table = item === "plants" ? "plants" : item.beacons ? "maps" : "grids";
+    if (item === "plants") {
+      const todo = st.doc.plants.filter((p) => !p.sharedId);
+      if (!todo.length) return msg("All your planted songs are shared already.");
+      if (await asSharer("share your planted songs", async () => { for (const p of todo) await S.sharePlant(rest, p); })) {
+        changed();
+        msg(`Shared ${todo.length} planted song${todo.length === 1 ? "" : "s"}. Everyone near them hears them now.`);
+      }
+      return;
+    }
+    if (item.sharedId) {
+      if (!confirm(`Unshare ${item.name}? It comes off the shared map for everyone; it stays on this device.`)) return;
+      if (await asSharer(`unshare ${item.name}`, () => S.unshare(rest, table, item))) { changed(); msg(`${item.name} is no longer shared.`); }
+      return;
+    }
+    if (await asSharer(`share ${item.name}`, () => (table === "maps" ? S.shareMap(rest, item) : S.shareGrid(rest, item)))) {
+      changed();
+      msg(table === "maps" ? `Shared ${item.name}: it's listed for everyone to find.` : `Shared ${item.name}: everyone near it hears it now.`);
+    }
+  }
+
+  async function sharePlantEntry(e, on) {
+    const p = e.plant;
+    if (on && !p.sharedId) { if (await asSharer("share this song", () => S.sharePlant(rest, p))) { changed(); msg(`Shared "${p.song.title}".`); } }
+    else if (!on && p.sharedId) { if (await asSharer("unshare this song", () => S.unshare(rest, "plants", p))) { changed(); msg(`"${p.song.title}" is no longer shared.`); } }
+  }
+
+  async function reportEntry(e, reason) {
+    if (await asSharer("report it", () => S.report(rest, e, reason))) msg("Thanks: reported. After reports from 3 people it's hidden until it's reviewed.");
+  }
+
+  async function loadCounts(e) {
+    if (!e?.shared) return;
+    const key = S.sharedBeaconKey(e);
+    if (favCounts.has(key)) return;
+    favCounts.set(key, null);
+    try {
+      const c = await S.favoriteCounts(publicGet, [key]);
+      favCounts.set(key, c[key] || 0);
+      ctx.renderInspector();
+    } catch { favCounts.delete(key); }
+  }
+
+  async function findMaps() {
+    try {
+      const rows = await S.findMaps(publicGet, tilesAround(engine.pos));
+      const have = new Set(st.doc.maps.map((m) => m.copiedFrom || m.sharedId).filter(Boolean));
+      $("dMaps").innerHTML = rows.length ? rows.map((r) => `<div class="ditem" data-map="${esc(r.id)}"><span>${esc(r.name)}<small class="hint"> · ${r.beacons.length} beacon${r.beacons.length === 1 ? "" : "s"}${r.exclusive ? " · exclusive" : ""}</small></span>
+        <div class="dbtns"><button class="btn small" data-addmap="${esc(r.id)}" ${have.has(r.id) ? "disabled" : ""}>${have.has(r.id) ? "Added" : "Add to my beacons"}</button></div></div>`).join("")
+        : `<p class="hint">No shared maps around here yet.</p>`;
+      st.foundMaps = rows;
+    } catch (err) { msg("Couldn't look for shared maps: " + err.message, true); }
+  }
+
+  async function addMap(id) {
+    const row = (st.foundMaps || []).find((r) => r.id === id);
+    if (!row) return;
+    const n = st.doc.nextNumber || 1;
+    st.doc.nextNumber = n + 1;
+    const m = await S.mapFromRow(row, async (sid) => { await st.shared.want(sid); return st.shared.songs.get(sid) || null; }, n, D.TINTS[(n - 1) % D.TINTS.length]);
+    st.doc.maps.push(m);
+    changed();
+    findMaps();
+    msg(`Added ${m.name} to your beacons (your own copy: turn it on or off, or make it exclusive).`);
+  }
+
+  function renderAccount() {
+    const u = auth.user;
+    $("dSignedOut").hidden = !!u;
+    $("dSignedIn").hidden = !u;
+    if (u) $("dWho").textContent = u.email || "signed in";
+  }
+
+  auth.on(renderAccount);
+  $("dSendLink").addEventListener("click", async () => {
+    const email = $("dEmail").value.trim();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return msg("Type your email address first.", true);
+    try {
+      await auth.sendEmail(email, location.origin + location.pathname);
+      $("dCodeRow").hidden = false;
+      msg(`Sent: open the email and tap its link, or type its 6-digit code here.`);
+    } catch (err) { msg("Couldn't send the email: " + err.message, true); }
+  });
+  $("dVerify").addEventListener("click", async () => {
+    try { await auth.verifyCode($("dEmail").value, $("dCode").value); msg("Signed in. You can share your beacons now."); renderList(); }
+    catch (err) { msg("Couldn't sign in: " + err.message, true); }
+  });
+  $("dSignOut").addEventListener("click", async () => { await auth.signOut(); msg("Signed out. Your beacons stay on this device."); renderList(); });
+  $("dDeleteAccount").addEventListener("click", async () => {
+    if (!confirm("Delete your account and everything you shared, favorited and reported? Your beacons stay on this device, unshared. This can't be undone.")) return;
+    try {
+      await S.deleteAccount(rest);
+      for (const x of [...st.doc.grids, ...st.doc.plants, ...st.doc.maps]) delete x.sharedId;
+      await auth.signOut();
+      changed();
+      msg("Your account and everything you shared are deleted.");
+    } catch (err) { msg("Couldn't delete it: " + err.message, true); }
+  });
+  $("dFindMaps").addEventListener("click", findMaps);
+  $("dMaps").addEventListener("click", (ev) => { const b = ev.target.closest("[data-addmap]"); if (b) addMap(b.dataset.addmap); });
+  auth.fromUrl().then((u) => { if (u) msg(`Signed in as ${u.email}. You can share your beacons now.`); }, (err) => msg("The sign-in link didn't work: " + err.message, true));
+  renderAccount();
+
   // ---------------------------------------------------------------- list
 
   function renderList() {
@@ -373,14 +536,15 @@ export function initDrafts(ctx) {
       <div class="dbtns">${buttons.map(([a, l]) => `<button class="btn small" data-act="${a}"${a === "place" && st.placing === id ? ' aria-pressed="true"' : ""}>${l}</button>`).join("")}</div></div>`;
     const grids = doc.grids.map((g) => {
       const s = D.gridStats(g);
-      return row(g.id, g.on, g.tint, g.name, `${s.beacons} beacons · every ${ctx.fmtDist(g.spacingM)} · ${s.sideKm} km a side${s.edited ? ` · ${s.edited} edited` : ""}`,
-        [["go", "Go"], ["regen", "New songs"], ["rename", "Rename"], ["dup", "Duplicate"], ["export", "Export"], ["delete", "Delete"]]);
+      return row(g.id, g.on, g.tint, g.name, `${s.beacons} beacons · every ${ctx.fmtDist(g.spacingM)} · ${s.sideKm} km a side${s.edited ? ` · ${s.edited} edited` : ""}${g.sharedId ? " · shared" : ""}`,
+        [["go", "Go"], ["share", g.sharedId ? "Unshare" : "Share"], ["regen", "New songs"], ["rename", "Rename"], ["dup", "Duplicate"], ["export", "Export"], ["delete", "Delete"]]);
     });
-    const maps = doc.maps.map((m) => row(m.id, m.on, m.tint, m.name, `custom map · ${m.beacons.length} beacon${m.beacons.length === 1 ? "" : "s"}${m.exclusive ? " · exclusive" : ""}`,
-      [["go", "Go"], ["place", st.placing === m.id ? "Done placing" : "Place beacons"], ["rename", "Rename"], ["dup", "Duplicate"], ["export", "Export"], ["delete", "Delete"]],
+    const maps = doc.maps.map((m) => row(m.id, m.on, m.tint, m.name, `${m.copiedFrom ? "shared map (a copy)" : "custom map"} · ${m.beacons.length} beacon${m.beacons.length === 1 ? "" : "s"}${m.exclusive ? " · exclusive" : ""}${m.sharedId ? " · shared" : ""}`,
+      [["go", "Go"], ...(m.copiedFrom ? [] : [["share", m.sharedId ? "Unshare" : "Share"]]), ["place", st.placing === m.id ? "Done placing" : "Place beacons"], ["rename", "Rename"], ["dup", "Duplicate"], ["export", "Export"], ["delete", "Delete"]],
       `<label class="inline dex" title="Exclusive: while this map is on, only its beacons play, and there's silence away from them"><input type="checkbox" data-act="exclusive" ${m.exclusive ? "checked" : ""}> Exclusive</label>`));
-    const plants = doc.plants.length ? [row("plants", doc.prefs.plantsOn !== false, D.PLANT_TINT, "Planted songs", `${doc.plants.length} song${doc.plants.length === 1 ? "" : "s"} planted where you were`,
-      [["go", "Go to latest"], ["export", "Export"], ["delete", "Delete all"]])] : [];
+    const sharedPlants = doc.plants.filter((p) => p.sharedId).length;
+    const plants = doc.plants.length ? [row("plants", doc.prefs.plantsOn !== false, D.PLANT_TINT, "Planted songs", `${doc.plants.length} song${doc.plants.length === 1 ? "" : "s"} planted where you were${sharedPlants ? ` · ${sharedPlants} shared` : ""}`,
+      [["go", "Go to latest"], ...(sharedPlants < doc.plants.length ? [["share", "Share all"]] : []), ["export", "Export"], ["delete", "Delete all"]])] : [];
     const all = [...grids, ...maps, ...plants];
     $("dList").innerHTML = all.length ? all.join("") : `<p class="hint">Nothing yet. Generate a grid or plant a song where you are, or start a custom map.</p>`;
     $("dWhere").textContent = store.where === "memory" ? "not saved: this browser blocks storage" : "on this device";

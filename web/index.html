@@ -193,6 +193,12 @@ details summary { cursor: pointer; color: var(--muted); font-size: 13px; }
 .dspot > small { width: 100%; color: var(--muted); }
 .dspot b { color: var(--fg); font-weight: 500; }
 .doffer { border: 1px solid var(--accent); border-radius: 10px; padding: 10px; display: grid; gap: 8px; }
+#dTerms { max-width: 520px; background: var(--panel); color: var(--fg); border: 1px solid var(--line); border-radius: 12px; padding: 18px; }
+#dTerms::backdrop { background: rgba(0, 0, 0, 0.55); }
+#dTerms p { color: var(--muted); font-size: 13.5px; }
+#dEmail { background: var(--raise); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; min-width: 0; flex: 1 1 180px; }
+#dCode { background: var(--raise); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; font-family: var(--f-mono); }
+#dSignedOut[hidden], #dSignedIn[hidden], #dCodeRow[hidden] { display: none !important; }
 .doffer[hidden], #draftsUnit[hidden], #sources[hidden], #plantWrap[hidden], #zoomClose[hidden] { display: none !important; }
 @media (max-width: 960px) {
   .main { grid-template-columns: minmax(0, 1fr); }
@@ -346,7 +352,32 @@ details summary { cursor: pointer; color: var(--muted); font-size: 13px; }
         <label class="inline" for="dSharedOn" title="Beacons other people shared, read in 1° tiles around you and saved on this device for offline"><input type="checkbox" id="dSharedOn" checked> Shared map: <span id="dShared">…</span></label>
         <div class="ditems" id="dList"></div>
         <div class="msg" id="dMsg"></div>
+        <details>
+          <summary>Shared maps near you</summary>
+          <div class="dtools" style="margin-top:8px"><button class="btn small" id="dFindMaps">Look for maps</button></div>
+          <div class="ditems" id="dMaps"></div>
+        </details>
+        <details id="dAccount">
+          <summary>Account (for sharing)</summary>
+          <div id="dSignedOut" class="ditems" style="margin-top:8px">
+            <p class="hint">Listening never needs an account. To share your beacons, sign in with your email: no password, just a link or code we email you.</p>
+            <div class="dtools"><input id="dEmail" type="email" autocomplete="email" placeholder="you@example.com" aria-label="Email"><button class="btn small" id="dSendLink">Email me a sign-in link</button></div>
+            <div class="dtools" id="dCodeRow" hidden><input id="dCode" inputmode="numeric" autocomplete="one-time-code" placeholder="6-digit code" aria-label="Code from the email" style="width:9em"><button class="btn small" id="dVerify">Sign in</button></div>
+          </div>
+          <div id="dSignedIn" class="dtools" style="margin-top:8px" hidden>
+            <span>Signed in as <b id="dWho"></b></span>
+            <button class="btn small" id="dSignOut">Sign out</button>
+            <button class="btn small" id="dDeleteAccount" title="Deletes your account and everything you shared, favorited and reported">Delete my account…</button>
+          </div>
+        </details>
       </section>
+      <dialog id="dTerms">
+        <form method="dialog">
+          <h2 style="margin-top:0">Before you share</h2>
+          <div id="dTermsText"></div>
+          <div class="row"><button class="btn primary" value="accept">I agree, share it</button><button class="btn" value="cancel">Not now</button></div>
+        </form>
+      </dialog>
       <section class="unit">
         <details>
           <summary>Blend settings</summary>
