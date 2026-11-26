@@ -1107,7 +1107,7 @@ function renderFlight() {
 
 async function startFlight() {
   const q = $("flightQ").value.trim();
-  if (!q) return setMsg("fieldMsg", "Type a tail number (like N733YX) or a flight number (like UAL123).", true);
+  if (!q) return setMsg("fieldMsg", "Type a tail number (like N733YX) or a flight number (like DL934 or DAL934).", true);
   if (ui.mode !== "globe") setMode("globe");
   stopFollow();
   input.wander = false;

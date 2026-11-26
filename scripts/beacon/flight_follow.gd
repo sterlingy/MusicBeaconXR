@@ -6,6 +6,10 @@ extends Node
 ## asks adsb.lol directly (the website has to go through the database,
 ## because adsb.lol doesn't allow calls from web pages). Data: adsb.lol, ODbL 1.0.
 
+## Ticket flight numbers use two-letter IATA airline codes (DL934); planes
+## broadcast the three-letter ICAO code (DAL934). Same table as
+## supabase/migrations/0004_airline_codes.sql.
+const AIRLINE_ICAO := {"AA": "AAL", "DL": "DAL", "UA": "UAL", "WN": "SWA", "B6": "JBU", "AS": "ASA", "NK": "NKS", "F9": "FFT", "G4": "AAY", "HA": "HAL", "SY": "SCX", "MX": "MXY", "XP": "VXP", "QX": "QXE", "OO": "SKW", "YX": "RPA", "9E": "EDV", "MQ": "ENY", "OH": "JIA", "PT": "PDT", "ZW": "AWI", "C5": "UCA", "G7": "GJS", "YV": "ASH", "AC": "ACA", "WS": "WJA", "TS": "TSC", "PD": "POE", "F8": "FLE", "WG": "SWG", "FX": "FDX", "5X": "UPS", "5Y": "GTI", "K4": "CKS", "3S": "PAC", "AM": "AMX", "Y4": "VOI", "VB": "VIV", "CM": "CMP", "AV": "AVA", "LA": "LAN", "JJ": "TAM", "G3": "GLO", "AD": "AZU", "AR": "ARG", "H2": "SKU", "B7": "UIA", "BA": "BAW", "VS": "VIR", "U2": "EZY", "FR": "RYR", "LH": "DLH", "AF": "AFR", "KL": "KLM", "IB": "IBE", "VY": "VLG", "LX": "SWR", "OS": "AUA", "SN": "BEL", "SK": "SAS", "AY": "FIN", "DY": "NOZ", "D8": "IBK", "EI": "EIN", "TP": "TAP", "AZ": "ITY", "LO": "LOT", "W6": "WZZ", "EW": "EWG", "DE": "CFG", "TK": "THY", "PC": "PGT", "A3": "AEE", "FI": "ICE", "BT": "BTI", "OU": "CTN", "JU": "ASL", "EK": "UAE", "QR": "QTR", "EY": "ETD", "SV": "SVA", "GF": "GFA", "WY": "OMA", "RJ": "RJA", "LY": "ELY", "MS": "MSR", "ET": "ETH", "KQ": "KQA", "SA": "SAA", "AT": "RAM", "FZ": "FDB", "SQ": "SIA", "CX": "CPA", "JL": "JAL", "NH": "ANA", "KE": "KAL", "OZ": "AAR", "CI": "CAL", "BR": "EVA", "CA": "CCA", "MU": "CES", "CZ": "CSN", "HU": "CHH", "TG": "THA", "MH": "MAS", "GA": "GIA", "PR": "PAL", "VN": "HVN", "AI": "AIC", "6E": "IGO", "UK": "VTI", "QF": "QFA", "VA": "VOZ", "NZ": "ANZ", "JQ": "JST", "TR": "TGW", "AK": "AXM", "5J": "CEB", "MM": "APJ", "GK": "JJP", "HX": "CRK", "UO": "HKE", "7C": "JJA"}
 const POLL_S := 20.0
 const MAX_AHEAD_S := 90.0
 const EASE_S := 4.0
@@ -117,15 +121,29 @@ func lookup(q: String) -> Dictionary:
 		if (c >= "A" and c <= "Z") or (c >= "0" and c <= "9") or c == "-":
 			clean += c
 	if clean.length() < 2 or clean.length() > 10:
-		return {"found": false, "reason": "Type a tail number (like N733YX) or a flight number (like UAL123)."}
-	var re := RegEx.create_from_string("^[A-Z]{3}[0-9]{1,4}[A-Z]?$")
-	var kinds := ["callsign", "reg"] if re.search(clean) else ["reg", "callsign"]
+		return {"found": false, "reason": "Type a tail number (like N733YX) or a flight number (like DAL934 or DL934)."}
+	# What to ask for, in order: [kind, value].
+	var tries := []
+	var ticket := RegEx.create_from_string("^([A-Z0-9]{2})([0-9]{1,4}[A-Z]?)$").search(clean)
+	if ticket and AIRLINE_ICAO.has(ticket.get_string(1)):
+		var num := ticket.get_string(2)
+		var trimmed := num.lstrip("0")
+		tries.append(["callsign", AIRLINE_ICAO[ticket.get_string(1)] + trimmed])
+		if trimmed != num:
+			tries.append(["callsign", AIRLINE_ICAO[ticket.get_string(1)] + num])
+		tries.append(["reg", clean])
+	elif RegEx.create_from_string("^[A-Z]{3}[0-9]{1,4}[A-Z]?$").search(clean):
+		tries = [["callsign", clean], ["reg", clean]]
+	else:
+		tries = [["reg", clean], ["callsign", clean]]
 	var last := {}
-	for kind in kinds:
+	for tr in tries:
+		var kind: String = tr[0]
+		var value: String = tr[1]
 		var http := HTTPRequest.new()
 		http.timeout = 10.0
 		add_child(http)
-		if http.request("https://api.adsb.lol/v2/%s/%s" % [kind, clean], ["User-Agent: MusicBeaconXR"]) != OK:
+		if http.request("https://api.adsb.lol/v2/%s/%s" % [kind, value], ["User-Agent: MusicBeaconXR"]) != OK:
 			http.queue_free()
 			return {"found": false, "reason": "Couldn't reach the flight data service."}
 		var res: Array = await http.request_completed
@@ -138,7 +156,7 @@ func lookup(q: String) -> Dictionary:
 			if a.has("lat") and (best == null or float(a.get("seen_pos", 99)) < float(best.get("seen_pos", 99))):
 				best = a
 		if best == null:
-			last = {"found": false, "reason": "%s isn't sending its position right now (on the ground, out of coverage, or not found)." % clean}
+			last = {"found": false, "reason": "%s%s isn't sending its position right now: it may be on the ground, out of coverage, or not flying today." % [clean, (" (%s)" % value) if value != clean else ""]}
 			continue
 		var alt = best.get("alt_baro", 0)
 		return {"found": true, "reg": best.get("r", ""), "flight": String(best.get("flight", "")).strip_edges(), "type": best.get("t", ""),

@@ -413,7 +413,7 @@ func _build() -> void:
 
 	var fl := HBoxContainer.new()
 	_flight_q = LineEdit.new()
-	_flight_q.placeholder_text = "Tail or flight no."
+	_flight_q.placeholder_text = "DL934 or N733YX"
 	_flight_q.custom_minimum_size = Vector2(150, 0)
 	fl.add_child(_flight_q)
 	_flight_btn = menu._button("✈ Follow flight", _toggle_flight)
