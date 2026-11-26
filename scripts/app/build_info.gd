@@ -3,7 +3,7 @@ extends RefCounted
 ## Shown at the bottom of the Fields panel, so it's clear which build is installed.
 ## Updated before each APK export.
 
-const BUILD := "2026-11-25 19:00"
+const BUILD := "2026-11-25 19:30"
 
 
 ## Phones and tablets: Android or iOS (not touchscreen laptops).
