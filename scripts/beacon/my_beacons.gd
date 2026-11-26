@@ -23,6 +23,15 @@ var _shared_at := -1e9
 var _shared_pos := Vector2(INF, INF)
 var _shared_label: Label
 var _shared_on: CheckBox
+## Signing in and sharing (step 3).
+var account: BeaconAccount
+var _email: LineEdit
+var _code: LineEdit
+var _signed_out: VBoxContainer
+var _signed_in: HBoxContainer
+var _who: Label
+var _reason: OptionButton
+var _terms: ConfirmationDialog
 var geo: GeoLocation
 ## The latest location fix {lat, lon, accuracy, at}; dev: --fakegps=lat,lon[,accuracy].
 var fix := {}
@@ -70,6 +79,8 @@ func _ready() -> void:
 			_wanted = "")
 	shared_map = SharedMap.new()
 	add_child(shared_map)
+	account = BeaconAccount.new()
+	add_child(account)
 	shared_map.changed.connect(func(): _rebuild(false))
 	player.layer = _layer
 	_build()
@@ -234,6 +245,9 @@ func _find(id: String) -> Dictionary:
 
 func _act(action: String, id: String) -> void:
 	var item := _find(id)
+	if action == "share":
+		_share(id)
+		return
 	match action:
 		"toggle":
 			if id == "plants":
@@ -432,7 +446,160 @@ func _build() -> void:
 	v.add_child(scroll)
 	_msg = menu._small("")
 	v.add_child(_msg)
+
+	# Reporting a shared beacon you hear.
+	var rep_row := HBoxContainer.new()
+	rep_row.add_child(menu._button("Report what's playing", _report_here))
+	_reason = OptionButton.new()
+	_reason.focus_mode = Control.FOCUS_NONE
+	for r in BeaconAccount.REPORT_REASONS:
+		_reason.add_item(r)
+	rep_row.add_child(_reason)
+	v.add_child(rep_row)
+
+	# Account: email sign-in with the code from the email.
+	v.add_child(menu._heading("ACCOUNT (FOR SHARING)"))
+	_signed_out = VBoxContainer.new()
+	_signed_out.add_child(menu._small("Listening never needs an account. To share, sign in with the 6-digit code we email you."))
+	var er := HBoxContainer.new()
+	_email = LineEdit.new()
+	_email.placeholder_text = "you@example.com"
+	_email.custom_minimum_size = Vector2(200, 0)
+	_email.virtual_keyboard_type = LineEdit.KEYBOARD_TYPE_EMAIL_ADDRESS
+	er.add_child(_email)
+	er.add_child(menu._button("Email me a code", _send_code))
+	_signed_out.add_child(er)
+	var cr := HBoxContainer.new()
+	_code = LineEdit.new()
+	_code.placeholder_text = "6-digit code"
+	_code.custom_minimum_size = Vector2(130, 0)
+	_code.virtual_keyboard_type = LineEdit.KEYBOARD_TYPE_NUMBER
+	cr.add_child(_code)
+	cr.add_child(menu._button("Sign in", _verify_code))
+	_signed_out.add_child(cr)
+	v.add_child(_signed_out)
+	_signed_in = HBoxContainer.new()
+	_who = menu._small("")
+	_signed_in.add_child(_who)
+	_signed_in.add_child(menu._button("Sign out", func(): await account.sign_out(); _say("Signed out. Your beacons stay on this device.")))
+	_signed_in.add_child(menu._button("Delete account", _delete_account))
+	v.add_child(_signed_in)
+	account.signed_in_changed.connect(func(_e): _render_account())
+	_render_account()
+
+	_terms = ConfirmationDialog.new()
+	_terms.title = "Before you share"
+	_terms.dialog_text = BeaconAccount.TERMS_TEXT
+	_terms.dialog_autowrap = true
+	_terms.size = Vector2i(520, 360)
+	_terms.ok_button_text = "I agree, share it"
+	_terms.cancel_button_text = "Not now"
+	add_child(_terms)
 	menu.free()
+
+
+# ---------------------------------------------------------------- sharing (step 3)
+
+func _render_account() -> void:
+	_signed_out.visible = not account.signed_in()
+	_signed_in.visible = account.signed_in()
+	_who.text = "Signed in as %s" % account.email()
+
+
+func _send_code() -> void:
+	if not _email.text.contains("@"):
+		_say("Type your email address first.", true)
+		return
+	var r := await account.send_email(_email.text)
+	_say("Sent: type the 6-digit code from the email." if r.ok else "Couldn't send the email: " + r.error, not r.ok)
+
+
+func _verify_code() -> void:
+	var r := await account.verify_code(_email.text, _code.text)
+	_say("Signed in. You can share your beacons now." if r.ok else "Couldn't sign in: " + r.error, not r.ok)
+	_render_list()
+
+
+## Signed in and terms accepted (asks once). Returns false after saying why not.
+func _ready_to_share(what: String) -> bool:
+	if not account.signed_in():
+		_say("Sign in (under Account) to %s." % what, true)
+		return false
+	if not await account.has_consent():
+		_terms.popup_centered()
+		var accepted := [false]
+		var on_ok := func(): accepted[0] = true
+		_terms.confirmed.connect(on_ok, CONNECT_ONE_SHOT)
+		await _terms.visibility_changed
+		if _terms.confirmed.is_connected(on_ok):
+			_terms.confirmed.disconnect(on_ok)
+		if not accepted[0]:
+			_say("Not shared: the terms weren't accepted.")
+			return false
+		var a := await account.accept_terms()
+		if not a.ok:
+			_say("Couldn't save that: " + a.error, true)
+			return false
+	return true
+
+
+func _share(id: String) -> void:
+	if id == "plants":
+		var todo: Array = drafts.doc.plants.filter(func(p): return not p.has("sharedId"))
+		if todo.is_empty():
+			_say("All your planted songs are shared already.")
+			return
+		if not await _ready_to_share("share your planted songs"):
+			return
+		for p in todo:
+			var r := await account.share_plant(p)
+			if not r.ok:
+				_say("Couldn't share: " + r.error, true)
+				_changed()
+				return
+		_changed()
+		_say("Shared %d planted songs." % todo.size())
+		return
+	var item := _find(id)
+	var table := "maps" if item.has("beacons") else "grids"
+	if not await _ready_to_share("share " + item.name):
+		return
+	var r: Dictionary
+	if item.has("sharedId"):
+		r = await account.unshare(table, item)
+	elif table == "maps":
+		r = await account.share_map(item)
+	else:
+		r = await account.share_grid(item)
+	_changed()
+	if not r.ok:
+		_say("Couldn't do that: " + r.error, true)
+	else:
+		_say("%s is %s." % [item.name, "shared" if item.has("sharedId") else "no longer shared"])
+
+
+func _report_here() -> void:
+	var best := {}
+	for a in player.active:
+		var e: Dictionary = a.get("beacon", {}).get("entry", {})
+		if e.get("shared", false) and (best.is_empty() or a.w > best.w):
+			best = a
+	if best.is_empty():
+		_say("No shared beacon is playing here.", true)
+		return
+	if not await _ready_to_share("report it"):
+		return
+	var r := await account.report(best.beacon.entry, BeaconAccount.REPORT_REASONS[_reason.selected])
+	_say("Thanks: reported. After reports from 3 people it's hidden until it's reviewed." if r.ok else "Couldn't report it: " + r.error, not r.ok)
+
+
+func _delete_account() -> void:
+	var r := await account.delete_account()
+	if r.ok:
+		for x in drafts.doc.grids + drafts.doc.plants + drafts.doc.maps:
+			x.erase("sharedId")
+		_changed()
+	_say("Your account and everything you shared are deleted." if r.ok else "Couldn't delete it: " + r.error, not r.ok)
 
 
 func _render_list() -> void:
@@ -443,16 +610,16 @@ func _render_list() -> void:
 	var menu := FieldMenu.new("globe")
 	var rows := 0
 	for g in drafts.doc.grids:
-		_row(menu, g.id, g.on, g.tint, g.name, "441 beacons · every %s · %s km a side" % [_dist(g.spacingM), FieldMenu._num(20.0 * g.spacingM / 1000.0)],
-			[["Go", "go"], ["New songs", "regen"], ["Copy", "dup"], ["Delete", "delete"]])
+		_row(menu, g.id, g.on, g.tint, g.name, "441 beacons · every %s · %s km a side%s" % [_dist(g.spacingM), FieldMenu._num(20.0 * g.spacingM / 1000.0), " · shared" if g.has("sharedId") else ""],
+			[["Go", "go"], ["Unshare" if g.has("sharedId") else "Share", "share"], ["New songs", "regen"], ["Copy", "dup"], ["Delete", "delete"]])
 		rows += 1
 	for m in drafts.doc.maps:
-		_row(menu, m.id, m.on, m.tint, m.name, "custom map · %d beacons%s" % [m.beacons.size(), " · exclusive" if m.exclusive else ""],
-			[["Go", "go"], ["Done" if placing == m.id else "Place", "place"], ["Exclusive", "exclusive"], ["Copy", "dup"], ["Delete", "delete"]])
+		_row(menu, m.id, m.on, m.tint, m.name, "custom map · %d beacons%s%s" % [m.beacons.size(), " · exclusive" if m.exclusive else "", " · shared" if m.has("sharedId") else ""],
+			[["Go", "go"], ["Unshare" if m.has("sharedId") else "Share", "share"], ["Done" if placing == m.id else "Place", "place"], ["Exclusive", "exclusive"], ["Copy", "dup"], ["Delete", "delete"]])
 		rows += 1
 	if not drafts.doc.plants.is_empty():
 		_row(menu, "plants", drafts.doc.prefs.get("plantsOn", true), BeaconDrafts.PLANT_TINT, "Planted songs", "%d planted where you were" % drafts.doc.plants.size(),
-			[["Go", "go"], ["Delete all", "delete"]])
+			[["Go", "go"], ["Share all", "share"], ["Delete all", "delete"]])
 		rows += 1
 	if rows == 0:
 		_list.add_child(menu._small("Nothing yet. Generate a grid or plant a song where you are, or start a custom map."))
