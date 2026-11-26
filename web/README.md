@@ -171,6 +171,19 @@ The browser instruments are ports of the SynthKit designs, not the C++ engine it
 | Pluck | Driftwood | Karplus-Strong string (plain, steel, nylon), or modal marimba, kalimba, vibes, glass and bell, through a resonant body filter with an attack click |
 | Texture | Tangle | A carrier (four waves) with two FM modulators, an LFO on the first modulator's depth, glide and a resonant low-pass (the modular as one patch) |
 
+## Song families and borrowed chords (generator v2)
+
+The generator was reshaped by six reference songs studied with `tools/analyze.py` (warm chord-rich songs, drone journeys, an ambient piece, a downtempo groove). Every song now belongs to a **family**, shown in the Beacon song panel, and each mood leans towards some of them:
+
+| Family | Tempo | Harmony | Beat and bass | Shape |
+|---|---|---|---|---|
+| Song | the mood's | the mode's progressions, half the time with borrowed chords | the classic styles | verses, choruses, a bridge |
+| Journey | 120–132 | one chord or a slow two-chord sway | four-on-the-floor, off-beat open hats, a rolling 16th bass | builds from a lone pad to a big peak, a deep drop, and back |
+| Ambient | 64–92 | gentle, sometimes borrowed | usually none; at most a soft kick heartbeat; rare long bass notes | long pads, no chorus |
+| Groove | 104–122 | minor 4-bar loops, often borrowed | a busy syncopated kick with ghosted snares, a held sub-bass | the beat, bass and synth bed stay on; tops come and go |
+
+**Borrowed chords:** a progression entry can be `{ "d": 6, "m": "mixolydian" }`, degree d of mode m on the key's root (here B♭ in C major, ♭VII). The generator uses ♭VII, ♭III, iv, v, ♭VI and II in major keys, and IV and V in minor ones; melodies over a borrowed chord follow its scale, the readouts name it (♭VII), and the song editor's chord picker offers them.
+
 ## Song structure
 
 Every generated song is a full song, 2 to 5 minutes long, with a form such as intro, verse, chorus, verse, chorus, bridge, chorus, outro (four templates, some with a pre-chorus, a breakdown or a double last chorus). Sections are 4, 8 or 16 bars, fitted so the whole song lands between 2:00 and 5:00.

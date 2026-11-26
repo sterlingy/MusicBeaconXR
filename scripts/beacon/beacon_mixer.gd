@@ -40,14 +40,31 @@ static func fold_into_range(role: String, midi: int) -> int:
 	return midi
 
 
-static func chord_notes(key: Dictionary, degree: int, octave := 4, size := 3) -> Array:
+## A progression chord as [key, degree]: a plain degree is in the song's key; a
+## borrowed chord {d, m} is degree d of mode m on the same root (as
+## web/src/song.js chordRef), and melodies over it use that mode's scale.
+static func chord_ref(key: Dictionary, c: Variant) -> Array:
+	if typeof(c) == TYPE_DICTIONARY:
+		var m: String = c.get("m", key.mode)
+		return [{"root": key.root, "mode": m if MODES.has(m) else key.mode}, int(c.get("d", 0))]
+	return [key, int(c)]
+
+
+## MIDI note `deg` scale steps above a chord's root, in the chord's own scale.
+static func chord_tone(key: Dictionary, c: Variant, deg: int, octave := 4) -> int:
+	var ref := chord_ref(key, c)
+	return degree_to_midi(ref[0], ref[1] + deg, octave)
+
+
+static func chord_notes(key: Dictionary, chord: Variant, octave := 4, size := 3) -> Array:
+	var ref := chord_ref(key, chord)
 	var out := []
 	for i in size:
-		out.append(degree_to_midi(key, degree + 2 * i, octave))
+		out.append(degree_to_midi(ref[0], ref[1] + 2 * i, octave))
 	return out
 
 
-static func chord_name(key: Dictionary, degree: int) -> String:
+static func chord_name(key: Dictionary, degree: Variant) -> String:
 	var c := chord_notes(key, degree)
 	var third: int = c[1] - c[0]
 	var fifth: int = c[2] - c[0]
@@ -75,6 +92,15 @@ static func validate(s) -> PackedStringArray:
 		errs.append("bpm must be 40-220")
 	if typeof(s.get("progression")) != TYPE_ARRAY or s.progression.is_empty():
 		errs.append("progression missing")
+	else:
+		for c in s.progression:
+			if typeof(c) == TYPE_DICTIONARY:
+				if not MODES.has(c.get("m", "")):
+					errs.append("a borrowed chord needs a known mode")
+					break
+			elif typeof(c) != TYPE_INT and typeof(c) != TYPE_FLOAT:
+				errs.append("progression entries must be degrees or {d, m} chords")
+				break
 	if typeof(s.get("tracks")) != TYPE_DICTIONARY:
 		errs.append("tracks missing")
 	return errs
@@ -190,7 +216,7 @@ static func step_events(active: Array, mix: Dictionary, harmony: Harmony, bar: i
 	for a in active:
 		by_id[a.id] = a.song
 	var key: Dictionary = harmony.song.key
-	var chord_deg := harmony.chord_degree(bar)
+	var chord_deg: Variant = harmony.chord_degree(bar)
 	var events := []
 	for ri in ROLES.size():
 		var role: String = ROLES[ri]
@@ -218,7 +244,7 @@ static func step_events(active: Array, mix: Dictionary, harmony: Harmony, bar: i
 		if role == "keys":
 			events.append({"role": role, "id": sid, "notes": chord_notes(key, chord_deg, int(round(m.params.get("octave", 4))), int(round(m.params.get("voicing", 3)))), "vel": float(ev.v), "gate": float(ev.g)})
 		else:
-			var midi := fold_into_range(role, degree_to_midi(key, chord_deg + int(ev.d), ROLE_OCTAVE[role] + int(ev.get("o", 0))))
+			var midi := fold_into_range(role, chord_tone(key, chord_deg, int(ev.d), ROLE_OCTAVE[role] + int(ev.get("o", 0))))
 			events.append({"role": role, "id": sid, "notes": [midi], "vel": float(ev.v), "gate": float(ev.g)})
 	return events
 
@@ -257,6 +283,8 @@ class Harmony:
 		id = a.id
 		song = a.song
 
-	func chord_degree(bar: int) -> int:
+	## This bar's chord: a degree (int) or a borrowed chord ({d, m}).
+	func chord_degree(bar: int) -> Variant:
 		var p: Array = song.progression
-		return int(p[bar % p.size()])
+		var c = p[bar % p.size()]
+		return c if typeof(c) == TYPE_DICTIONARY else int(c)

@@ -131,7 +131,9 @@ func render(role: String, song: Dictionary) -> PackedVector2Array:
 		else:
 			var pat: Array = t.pattern
 			bar_pat = pat[bar % pat.size()]
-		var chord := int(song.progression[bar % song.progression.size()])
+		var chord: Variant = song.progression[bar % song.progression.size()] # a degree or a borrowed chord {d, m}
+		if typeof(chord) != TYPE_DICTIONARY:
+			chord = int(chord)
 		for step in 16:
 			var ev = null
 			if role == "drums":
@@ -150,7 +152,7 @@ func render(role: String, song: Dictionary) -> PackedVector2Array:
 				elif role == "keys":
 					notes = BeaconMixer.chord_notes(song.key, chord, int(round(t.params.get("octave", 4))), int(round(t.params.get("voicing", 3))))
 				else:
-					notes = [BeaconMixer.fold_into_range(role, BeaconMixer.degree_to_midi(song.key, chord + int(ev.d), BeaconMixer.ROLE_OCTAVE[role] + int(ev.get("o", 0))))]
+					notes = [BeaconMixer.fold_into_range(role, BeaconMixer.chord_tone(song.key, chord, int(ev.d), BeaconMixer.ROLE_OCTAVE[role] + int(ev.get("o", 0))))]
 				for n in notes:
 					s.note_on(n, float(ev.v))
 				var off := frame + int(step_frames * float(ev.g) * 0.95)

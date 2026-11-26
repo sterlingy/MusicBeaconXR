@@ -16,6 +16,14 @@ const $ = (id) => document.getElementById(id);
 const MOOD_COLOR = { Drift: "#8fa7ff", Glow: "#f5c04a", Tide: "#2ec4b6", Pulse: "#ff4f9a", Rush: "#ff8a3d" };
 const ROLE_COLOR = { drums: "#ff8a3d", bass: "#2ec4b6", keys: "#f5c04a", lead: "#ff4f9a", pluck: "#9ccc65", texture: "#8b6cf0" };
 const ROLE_LABEL = { drums: "Drums", bass: "Bass", keys: "Keys", lead: "Lead", pluck: "Pluck", texture: "Texture" };
+// Generator v2 song families (song.js FAMILIES).
+const FAMILY_LABEL = { song: "Song", journey: "Journey", ambient: "Ambient", groove: "Groove" };
+const FAMILY_TIP = {
+  song: "A classic song: verses, choruses, a bridge",
+  journey: "A drone that builds over minutes, with a rolling bass and a driving beat",
+  ambient: "Long pads, little or no beat or bass",
+  groove: "A steady downtempo loop: busy beat, sub-bass, a wide synth bed",
+};
 const CITIES = [
   ["London", 51.507, -0.128], ["New York", 40.713, -74.006], ["Tokyo", 35.68, 139.69], ["Lagos", 6.524, 3.379],
   ["São Paulo", -23.55, -46.63], ["Sydney", -33.87, 151.21], ["Reykjavík", 64.147, -21.94], ["Cairo", 30.044, 31.236],
@@ -824,7 +832,7 @@ function renderInspector() {
   $("insp").innerHTML = `
     <div class="title"><strong>${esc(s.title)}</strong><span class="hint">${esc(b.label)} · ${ui.selected ? "selected" : "closest"}</span></div>
     <div class="chips">
-      <span class="chip" style="border-color:${MOOD_COLOR[s.mood] || "var(--line)"}">${esc(s.mood || "Custom")}</span>
+      <span class="chip" style="border-color:${MOOD_COLOR[s.mood] || "var(--line)"}">${esc(s.mood || "Custom")}</span>${s.family ? `<span class="chip" title="${esc(FAMILY_TIP[s.family] || "")}">${esc(FAMILY_LABEL[s.family] || s.family)}</span>` : ""}
       <span class="chip">Key <b>${esc(keyName(s.key))}</b></span>
       <span class="chip"><b>${s.bpm}</b> BPM</span>
       <span class="chip">${hasForm(s) ? "Verse " : ""}<b>${esc(chords)}</b></span>${sectionChords}${own}

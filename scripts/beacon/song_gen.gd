@@ -27,6 +27,24 @@ const PROGRESSIONS := {
 }
 const PRE_PROGRESSIONS := [[3, 4, 3, 4], [1, 3, 4, 4], [5, 3, 4, 4], [3, 3, 4, 4]]
 const BRIDGE_PROGRESSIONS := [[3, 4, 5, 4], [5, 3, 1, 4], [3, 0, 4, 4], [5, 4, 3, 4], [1, 5, 3, 4]]
+# Generator v2 (as web/src/song.js): borrowed chords {d, m}, drone sways, families.
+const BORROWED := {
+	"major": [[0, {"d": 6, "m": "mixolydian"}, 3, 0], [0, {"d": 4, "m": "mixolydian"}, 3, {"d": 2, "m": "minor"}], [0, {"d": 2, "m": "minor"}, 3, 4],
+		[0, 3, {"d": 3, "m": "minor"}, 0], [0, {"d": 5, "m": "minor"}, {"d": 6, "m": "minor"}, 0], [0, {"d": 1, "m": "lydian"}, 3, 0], [3, {"d": 6, "m": "mixolydian"}, 0, 0]],
+	"minor": [[0, 6, 3, 0], [0, {"d": 3, "m": "dorian"}, 0, 6], [0, 5, 6, {"d": 4, "m": "harmonicMinor"}], [0, 6, 2, {"d": 4, "m": "harmonicMinor"}], [0, {"d": 3, "m": "dorian"}, 6, 0]],
+	"dorian": [[0, {"d": 4, "m": "harmonicMinor"}, 3, 0]],
+	"mixolydian": [[0, {"d": 2, "m": "minor"}, 6, 0]],
+}
+const SWAYS := [[0, 0, 0, 0], [0, 0, 6, 6], [0, 0, 5, 5], [0, 0, 3, 3], [0, 6, 0, 6], [0, 0, 1, 1]]
+const FAMILY_BPM := {"journey": [120, 132], "ambient": [64, 92], "groove": [104, 122]}
+const BORROW_ODDS := {"song": 0.5, "journey": 0.0, "ambient": 0.35, "groove": 0.6}
+const FAMILY_FORMS := {
+	"journey": [["intro", "verse", "pre", "chorus", "break", "pre", "chorus", "outro"], ["intro", "verse", "verse", "pre", "chorus", "break", "chorus", "outro"]],
+	"ambient": [["intro", "verse", "break", "verse", "outro"], ["intro", "verse", "bridge", "verse", "outro"]],
+	"groove": [["intro", "verse", "chorus", "verse", "chorus", "break", "chorus", "outro"], ["intro", "verse", "verse", "chorus", "verse", "chorus", "chorus", "outro"]],
+}
+const JOURNEY_ENERGY := {"intro": 0.3, "verse": 0.6, "pre": 0.8, "chorus": 1.25, "break": 0.3, "outro": 0.4}
+const AMBIENT_ENERGY := {"intro": 0.35, "verse": 0.55, "break": 0.3, "bridge": 0.5, "outro": 0.3}
 const FORMS := [
 	["intro", "verse", "chorus", "verse", "chorus", "bridge", "chorus", "outro"],
 	["intro", "verse", "pre", "chorus", "verse", "pre", "chorus", "bridge", "chorus", "chorus", "outro"],
@@ -37,11 +55,11 @@ const SECTION_SIZES := {"intro": [4, 8], "verse": [8, 16], "pre": [4, 8], "choru
 const MIN_SONG_SECONDS := 120.0
 const MAX_SONG_SECONDS := 300.0
 const MOODS := [
-	{"name": "Drift", "energy": 0.25, "bpm": [72, 90], "modes": ["lydian", "major", "dorian"]},
-	{"name": "Glow", "energy": 0.4, "bpm": [84, 100], "modes": ["major", "mixolydian", "lydian"]},
-	{"name": "Tide", "energy": 0.55, "bpm": [96, 112], "modes": ["minor", "dorian"]},
-	{"name": "Pulse", "energy": 0.75, "bpm": [110, 124], "modes": ["minor", "phrygian", "harmonicMinor"]},
-	{"name": "Rush", "energy": 0.9, "bpm": [120, 132], "modes": ["mixolydian", "minor", "dorian"]},
+	{"name": "Drift", "energy": 0.25, "bpm": [72, 90], "modes": ["lydian", "major", "dorian"], "families": ["ambient", "ambient", "song"]},
+	{"name": "Glow", "energy": 0.4, "bpm": [80, 100], "modes": ["major", "mixolydian", "lydian"], "families": ["song", "song", "ambient"]},
+	{"name": "Tide", "energy": 0.55, "bpm": [96, 112], "modes": ["minor", "dorian"], "families": ["song", "groove", "groove"]},
+	{"name": "Pulse", "energy": 0.75, "bpm": [110, 124], "modes": ["minor", "phrygian", "harmonicMinor"], "families": ["groove", "journey", "song"]},
+	{"name": "Rush", "energy": 0.9, "bpm": [120, 132], "modes": ["mixolydian", "minor", "dorian"], "families": ["journey", "journey", "groove"]},
 ]
 const NAME_A := ["Amber", "Cobalt", "Salt", "Cedar", "Neon", "Paper", "Velvet", "Iron", "Moss", "Silver", "Ember", "Glass", "Coral", "Dusk", "Lunar", "Copper"]
 const NAME_B := ["Harbor", "Orchard", "Signal", "Lantern", "Canyon", "Garden", "Circuit", "Meadow", "Station", "Shore", "Ridge", "Hollow", "Bloom", "Current", "Atlas", "Field"]
@@ -204,40 +222,53 @@ static func automatable(n: String) -> Array:
 # ---------------------------------------------------------------- generator
 
 ## A complete song for a beacon, the same as song.js generateSong(seed).
-static func generate(seed: String) -> Dictionary:
+static func generate(seed: String, hint := {}) -> Dictionary:
 	var g := SongGen.new()
 	g._a = hash_string(seed)
-	return g._song()
+	return g._song(hint)
 
 
-func _song() -> Dictionary:
+func _song(hint := {}) -> Dictionary:
 	var mood: Dictionary = MOODS[int(floorf(r() * MOODS.size()))]
+	var family: String = hint.family if hint.has("family") else pick(mood.families)
 	var mode: String = pick(mood.modes)
 	var key := {"root": int(floorf(r() * 12)), "mode": mode}
 	var e := clampf(mood.energy + rng_range(-0.1, 0.1), 0.0, 1.0)
+	var bpm: Array = FAMILY_BPM.get(family, mood.bpm)
 	var title := "%s %s" % [pick(NAME_A), pick(NAME_B)]
 	var song := {"format": "beacon-song", "version": 2, "title": title, "author": "generator", "mood": mood.name,
-		"energy": rnd(e), "key": key}
-	song.bpm = int(js_round(rng_range(mood.bpm[0], mood.bpm[1])))
+		"family": family, "energy": rnd(e), "key": key}
+	song.bpm = int(js_round(rng_range(bpm[0], bpm[1])))
 	song.bars = 4
 	song.steps = 16
-	song.progression = (pick(PROGRESSIONS.get(mode, PROGRESSIONS.major)) as Array).duplicate()
+	song.progression = _pick_progression(family, mode).duplicate()
 	song.tracks = {}
 	song.morph = {}
-	song.tracks.drums = _drums(e)
-	song.tracks.bass = _bass(e)
-	song.tracks.keys = _keys(e)
-	song.tracks.lead = _lead(e)
-	song.tracks.pluck = _pluck(e)
-	song.tracks.texture = _texture(e)
+	song.tracks.drums = _drums(e, family)
+	song.tracks.bass = _bass(e, family)
+	song.tracks.keys = _keys(e, family)
+	song.tracks.lead = _lead(e, family)
+	song.tracks.pluck = _pluck(e, family)
+	song.tracks.texture = _texture(e, family)
 	for role in ROLES:
 		_dress(song.tracks[role], role, e)
+	if family == "ambient":
+		var dp: Dictionary = song.tracks.drums.params
+		dp["hat.tone"] = minf(float(dp["hat.tone"]), 4500.0)
 	for role in ROLES:
 		song.morph[role] = _morph(role)
 	_structure(song, e)
 	for role in ROLES:
 		song.tracks[role].level = rnd(float(song.tracks[role].level) * MIX[role], 3)
 	return song
+
+
+func _pick_progression(family: String, mode: String) -> Array:
+	if family == "journey":
+		return pick(SWAYS)
+	if BORROWED.has(mode) and r() < BORROW_ODDS[family]:
+		return pick(BORROWED[mode])
+	return pick(PROGRESSIONS.get(mode, PROGRESSIONS.major))
 
 
 func _dress(t: Dictionary, role: String, e: float) -> void:
@@ -352,7 +383,119 @@ func _fit_form(sections: Array, bpm: float, target_sec: float) -> Array:
 	return form
 
 
+func _lineup(on: Array) -> Dictionary:
+	var out := {}
+	for x in ROLES:
+		out[x] = rnd(rng_range(0.75, 1.0)) if x in on else 0
+	return out
+
+
+func _use_palette(song: Dictionary, palette: Array) -> void:
+	for role in ROLES:
+		if not role in palette:
+			song.tracks[role].level = 0
+		elif float(song.tracks[role].level) < 0.3:
+			song.tracks[role].level = rnd(rng_range(0.35, 0.7))
+
+
+static func _uniq(a: Array) -> Array:
+	var out := []
+	for x in a:
+		if not x in out:
+			out.append(x)
+	return out
+
+
+func _arrange_journey(song: Dictionary) -> void:
+	var palette := ["drums", "bass", "texture", pick(["keys", "pluck"])]
+	if r() < 0.6:
+		palette.append("lead")
+	if r() < 0.4:
+		palette.append("keys")
+	var uniq := _uniq(palette)
+	_use_palette(song, uniq)
+	var melodic := uniq.filter(func(x): return x in ["keys", "pluck", "texture"])
+	for f in song.form:
+		var on: Array
+		match f.section:
+			"intro":
+				on = melodic.slice(0, 1 + int(floorf(r() * melodic.size())))
+			"verse":
+				on = melodic + ["bass"]
+			"pre":
+				on = melodic + ["bass", "drums"]
+				f.enter = {"drums": pick([0.25, 0.5])}
+			"chorus":
+				on = uniq.duplicate()
+			"break":
+				on = melodic.filter(func(x): return x != "pluck" or r() < 0.5)
+				if r() < 0.3:
+					on.append("bass")
+			_:
+				on = [pick(melodic), "drums"]
+				if r() < 0.5:
+					on.append("bass")
+		if on.is_empty():
+			on = [pick(melodic)]
+		f.layers = _lineup(_uniq(on))
+	for k in JOURNEY_ENERGY:
+		var spec: Dictionary = song.sections.get(k, {}).duplicate()
+		spec.energy = JOURNEY_ENERGY[k]
+		song.sections[k] = spec
+
+
+func _arrange_ambient(song: Dictionary) -> void:
+	var palette := ["texture", "keys"]
+	if r() < 0.6:
+		palette.append("pluck")
+	if r() < 0.45:
+		palette.append("lead")
+	if r() < 0.3:
+		palette.append("bass")
+	if float(song.tracks.drums.level) > 0 and r() < 0.7:
+		palette.append("drums")
+	_use_palette(song, palette)
+	for f in song.form:
+		var brk: bool = f.section == "break"
+		var on := palette.filter(func(x): return r() < 0.9 if (x == "texture" or x == "keys") else r() < (0.25 if brk else 0.55))
+		f.layers = _lineup(on if not on.is_empty() else ["texture"])
+	for k in AMBIENT_ENERGY:
+		var spec: Dictionary = song.sections.get(k, {}).duplicate()
+		spec.energy = AMBIENT_ENERGY[k]
+		song.sections[k] = spec
+
+
+func _arrange_groove(song: Dictionary) -> void:
+	var core := ["drums", "bass", pick(["keys", "texture"])]
+	var shuffled := shuffle(["keys", "lead", "pluck", "texture"].filter(func(x): return not x in core))
+	var tops := shuffled.slice(0, 1 + int(floorf(r() * 2)))
+	_use_palette(song, core + tops)
+	for f in song.form:
+		var on: Array
+		match f.section:
+			"intro":
+				on = core.filter(func(x): return x != "bass" or r() < 0.5)
+			"break":
+				on = [core[2]] + tops.filter(func(_x): return r() < 0.5)
+			"outro":
+				on = core.filter(func(_x): return r() < 0.8)
+			_:
+				var odds := 0.9 if f.section == "chorus" else 0.45
+				on = core + tops.filter(func(_x): return r() < odds)
+		f.layers = _lineup(on if not on.is_empty() else core)
+
+
 func _arrange(song: Dictionary) -> void:
+	match song.family:
+		"journey":
+			_arrange_journey(song)
+			return
+		"ambient":
+			_arrange_ambient(song)
+			return
+		"groove":
+			_arrange_groove(song)
+			return
 	var count: int = pick([2, 3, 3, 4, 4, 4, 5, 5, 5, 6, 6, 6])
 	var palette := [pick(["keys", "lead", "pluck", "texture"])]
 	for role in shuffle(ROLES.filter(func(x): return x != palette[0])):
@@ -405,15 +548,23 @@ func _arrange(song: Dictionary) -> void:
 
 func _structure(song: Dictionary, e: float) -> void:
 	var mode: String = song.key.mode
-	var progs: Array = PROGRESSIONS.get(mode, PROGRESSIONS.major)
+	var fam: String = song.family
+	var progs: Array
+	if fam == "journey":
+		progs = SWAYS
+	else:
+		progs = (PROGRESSIONS.get(mode, PROGRESSIONS.major) as Array).duplicate()
+		if fam != "song" or r() < 0.5:
+			progs += BORROWED.get(mode, [])
 	var options := progs.filter(func(p): return p != song.progression)
 	var chorus: Array
 	if not options.is_empty():
 		chorus = (pick(options) as Array).duplicate()
 	else:
 		chorus = song.progression.slice(2) + song.progression.slice(0, 2)
-	var sections: Array = pick(FORMS)
-	song.form = _fit_form(sections, song.bpm, rng_range(150, 270))
+	var sections: Array = pick(FAMILY_FORMS.get(fam, FORMS))
+	var target := rng_range(200, 290) if fam == "journey" or fam == "ambient" else rng_range(150, 270)
+	song.form = _fit_form(sections, song.bpm, target)
 	song.sections = {"chorus": {"progression": chorus}}
 	song.sections.pre = {"progression": (pick(PRE_PROGRESSIONS) as Array).duplicate()}
 	song.sections.bridge = {"progression": (pick(BRIDGE_PROGRESSIONS) as Array).duplicate()}
@@ -421,17 +572,17 @@ func _structure(song: Dictionary, e: float) -> void:
 	if r() < 0.3:
 		song.sections.outro = {"fade": false}
 	var up := func(x: float) -> float: return minf(1.0, e + x)
-	song.tracks.drums.patternB = _drums(up.call(0.2)).pattern
-	song.tracks.bass.patternB = _bass(up.call(0.15)).pattern
-	song.tracks.keys.patternB = _keys(up.call(0.3)).pattern
-	var hook: Array = _lead(up.call(0.2)).pattern
+	song.tracks.drums.patternB = _drums(up.call(0.2), fam).pattern
+	song.tracks.bass.patternB = _bass(up.call(0.15), fam).pattern
+	song.tracks.keys.patternB = _keys(up.call(0.3), fam).pattern
+	var hook: Array = _lead(up.call(0.2), fam).pattern
 	var notes := hook.filter(func(b): return b.any(func(s): return s != null))
 	var pb := []
 	for i in hook.size():
 		var b: Array = hook[i]
 		pb.append(b if b.any(func(s): return s != null) else (notes[i % notes.size()] if not notes.is_empty() else b))
 	song.tracks.lead.patternB = pb
-	song.tracks.pluck.patternB = _pluck(up.call(0.2)).pattern
+	song.tracks.pluck.patternB = _pluck(up.call(0.2), fam).pattern
 	var pad := []
 	pad.resize(16)
 	pad[0] = {"d": 0, "o": 0, "v": 0.6, "g": 8}
@@ -453,7 +604,58 @@ static func _rests() -> Array:
 	return a
 
 
-func _drums(e: float) -> Dictionary:
+func _family_drums(e: float, fam: String) -> Dictionary:
+	var kick := _zeros()
+	var snare := _zeros()
+	var hat := _zeros()
+	var open := _zeros()
+	var clap := _zeros()
+	var level := rnd(rng_range(0.6, 0.9))
+	if fam == "journey":
+		for i in 16:
+			if i % 4 == 0:
+				kick[i] = 0.95
+			if i % 4 == 2:
+				open[i] = rnd(0.45 + 0.2 * r())
+			else:
+				hat[i] = rnd(0.22 + 0.2 * r())
+			if (i == 4 or i == 12) and r() < 0.6:
+				clap[i] = 0.65
+	elif fam == "groove":
+		for i in 16:
+			if i == 0 or (i in [3, 6, 8, 10, 11, 14] and r() < 0.6):
+				kick[i] = rnd(0.8 + 0.15 * r())
+			if i == 4 or i == 12:
+				snare[i] = 0.85
+			elif r() < 0.12:
+				snare[i] = 0.3
+			if i % 2 == 0:
+				hat[i] = rnd(0.45 + 0.25 * r())
+	else:
+		if r() < 0.6:
+			level = 0.0
+		else:
+			level = rnd(rng_range(0.25, 0.45))
+			kick[0] = 0.6
+			if r() < 0.5:
+				kick[8] = 0.45
+			hat[4] = rnd(0.12 + 0.08 * r())
+			if r() < 0.5:
+				hat[12] = rnd(0.1 + 0.08 * r())
+	var params := {}
+	params["kick.tune"] = rnd(rng_range(42, 60))
+	params["kick.decay"] = rnd(rng_range(0.25, 0.7))
+	params["snare.tone"] = rnd(rng_range(160, 260))
+	params["snare.decay"] = rnd(rng_range(0.1, 0.3))
+	params["hat.decay"] = rnd(rng_range(0.15, 0.4) if fam == "ambient" else rng_range(0.03, 0.12), 3)
+	params["hat.tone"] = rnd(rng_range(6000, 11000), 0)
+	params["master.drive"] = rnd(rng_range(0, 0.1 if fam == "ambient" else 0.6))
+	return {"instrument": "Pulsar", "level": level, "params": params, "pattern": {"kick": kick, "snare": snare, "hat": hat, "open": open, "clap": clap}}
+
+
+func _drums(e: float, fam := "song") -> Dictionary:
+	if fam in ["journey", "groove", "ambient"]:
+		return _family_drums(e, fam)
 	var kick := _zeros()
 	var snare := _zeros()
 	var hat := _zeros()
@@ -504,7 +706,40 @@ func _drums(e: float) -> Dictionary:
 	return {"instrument": "Pulsar", "level": level, "params": params, "pattern": {"kick": kick, "snare": snare, "hat": hat, "open": open, "clap": clap}}
 
 
-func _bass(e: float) -> Dictionary:
+func _family_bass(e: float, fam: String) -> Dictionary:
+	var bar := _rests()
+	if fam == "journey":
+		for i in 16:
+			if i % 4 != 0:
+				bar[i] = {"d": 0, "o": 0, "v": rnd(0.85 if i % 4 == 1 else 0.7), "g": 1}
+		if r() < 0.4:
+			bar[15] = {"d": pick([4, 6]), "o": 0, "v": 0.75, "g": 1}
+	elif fam == "groove":
+		bar[0] = {"d": 0, "o": 0, "v": 0.9, "g": pick([6, 8])}
+		var d8 = pick([0, 0, 4])
+		bar[8] = {"d": d8, "o": 0, "v": 0.8, "g": pick([4, 6])}
+		if r() < 0.4:
+			bar[14] = {"d": pick([0, 6]), "o": 0, "v": 0.7, "g": 2}
+	else:
+		bar[0] = {"d": 0, "o": 0, "v": 0.7, "g": 16}
+	var level := rnd(rng_range(0.3, 0.5) if fam == "ambient" else rng_range(0.6, 0.9))
+	var j := fam == "journey"
+	var params := {}
+	params["osc.wave"] = pick(["sawtooth", "square"]) if j else "square"
+	params["osc.detune"] = rnd(rng_range(1, 6))
+	params["sub.level"] = rnd(rng_range(0.5, 0.9))
+	params["filter.cutoff"] = rnd(rng_range(300, 800) if j else rng_range(140, 380), 0)
+	params["filter.emphasis"] = rnd(rng_range(0.5, 6.0 if j else 2.0))
+	params["fenv.amount"] = rnd(rng_range(300, 1600) if j else rng_range(0, 300), 0)
+	params["fenv.decay"] = rnd(rng_range(0.08, 0.3))
+	params["aenv.release"] = rnd(rng_range(0.04, 0.12) if j else rng_range(0.2, 0.6))
+	params["glide"] = 0
+	return {"instrument": "Undertow", "level": level, "params": params, "pattern": [bar, bar, bar, bar]}
+
+
+func _bass(e: float, fam := "song") -> Dictionary:
+	if fam in ["journey", "groove", "ambient"]:
+		return _family_bass(e, fam)
 	var bar := _rests()
 	var density := 0.15 + e * 0.5
 	for i in 16:
@@ -529,9 +764,17 @@ func _bass(e: float) -> Dictionary:
 	return {"instrument": "Undertow", "level": level, "params": params, "pattern": [bar, bar, bar, bar]}
 
 
-func _keys(e: float) -> Dictionary:
-	var rhythm: Array = pick([[0], [0, 8]] if e < 0.45 else [[0, 6, 12], [2, 6, 10, 14], [0, 3, 8, 11], [4, 12]])
-	var gate = 16.0 / rhythm.size() if e < 0.45 else pick([1, 2, 3])
+func _keys(e: float, fam := "song") -> Dictionary:
+	var calm := e < 0.45 or fam == "ambient"
+	var choices: Array
+	if calm:
+		choices = [[0], [0, 8]]
+	elif fam == "groove":
+		choices = [[2, 6, 10, 14], [0, 3, 8, 11], [3, 6, 11, 14]]
+	else:
+		choices = [[0, 6, 12], [2, 6, 10, 14], [0, 3, 8, 11], [4, 12]]
+	var rhythm: Array = pick(choices)
+	var gate = 16.0 / rhythm.size() if calm else pick([1, 2, 3])
 	var bar := _rests()
 	for s in rhythm:
 		bar[s] = {"v": rnd(0.55 + 0.25 * r()), "g": gate}
@@ -541,8 +784,11 @@ func _keys(e: float) -> Dictionary:
 	params["osc.detune"] = rnd(rng_range(4, 18))
 	params["filter.cutoff"] = rnd(rng_range(700, 4000), 0)
 	params["filter.resonance"] = rnd(rng_range(0.5, 4))
-	params["aenv.attack"] = rnd(rng_range(0.3, 1.2) if e < 0.45 else rng_range(0.005, 0.05), 3)
-	params["aenv.release"] = rnd(rng_range(0.3, 2.5))
+	if fam == "ambient":
+		params["aenv.attack"] = rnd(rng_range(0.8, 2), 3)
+	else:
+		params["aenv.attack"] = rnd(rng_range(0.3, 1.2) if calm else rng_range(0.005, 0.05), 3)
+	params["aenv.release"] = rnd(rng_range(2, 4) if fam == "ambient" else rng_range(0.3, 2.5))
 	params["chorus.mix"] = rnd(rng_range(0.1, 0.6))
 	params["reverb.send"] = rnd(rng_range(0.2, 0.7))
 	params["voicing"] = pick([3, 4])
@@ -550,17 +796,17 @@ func _keys(e: float) -> Dictionary:
 	return {"instrument": "Lumen", "level": level, "params": params, "pattern": [bar, bar, bar, bar]}
 
 
-func _lead(e: float) -> Dictionary:
+func _lead(e: float, fam := "song") -> Dictionary:
 	var motif := _rests()
 	var d: int = pick([0, 2, 4, 7])
-	var notes := 3 + int(floorf(e * 6 * r()))
+	var notes := 2 + int(floorf(2 * r())) if fam == "ambient" else 3 + int(floorf(e * 6 * r()))
 	var slots := shuffle([0, 2, 3, 4, 6, 7, 8, 10, 11, 12, 14]).slice(0, notes)
 	slots.sort()
 	for s in slots:
 		d += int(pick([-2, -1, -1, 1, 1, 2, 3, -3, 0]))
 		d = clampi(d, -2, 9)
 		var v := rnd(0.6 + 0.3 * r())
-		motif[s] = {"d": d, "o": 1, "v": v, "g": pick([1, 2, 2, 3])}
+		motif[s] = {"d": d, "o": 1, "v": v, "g": pick([4, 6, 8]) if fam == "ambient" else pick([1, 2, 2, 3])}
 	var answer := []
 	for i in 16:
 		var st = motif[i]
@@ -586,15 +832,16 @@ func _lead(e: float) -> Dictionary:
 	return {"instrument": "Comet", "level": level, "params": params, "pattern": pattern}
 
 
-func _pluck(e: float) -> Dictionary:
-	var shape: String = pick(["up", "down", "updown", "random"])
-	var every := 1 if e > 0.6 else 2
+func _pluck(e: float, fam := "song") -> Dictionary:
+	var shape: String = pick(["up", "updown"]) if fam == "journey" else pick(["up", "down", "updown", "random"])
+	var every := 1 if fam == "journey" else (4 if fam == "ambient" else (1 if e > 0.6 else 2))
+	var skip := 0.05 if fam == "journey" else 0.2
 	var bar := _rests()
 	var tones := [0, 2, 4, 7]
 	var k := 0
 	var i := 0
 	while i < 16:
-		if r() < 0.2:
+		if r() < skip:
 			i += every
 			continue
 		var d: int
@@ -619,10 +866,10 @@ func _pluck(e: float) -> Dictionary:
 	return {"instrument": "Driftwood", "level": level, "params": params, "pattern": [bar, bar, bar, bar]}
 
 
-func _texture(e: float) -> Dictionary:
+func _texture(e: float, fam := "song") -> Dictionary:
 	var bar := _rests()
 	bar[0] = {"d": pick([0, 4, 7]), "o": 0, "v": 0.6, "g": 16}
-	var level := rnd(rng_range(0.15, 0.5) * (1.1 - e * 0.6))
+	var level := rnd(rng_range(0.15, 0.5) * (1.6 if fam == "ambient" else 1.1 - e * 0.6))
 	var params := {}
 	params["ratio"] = pick([0.5, 1, 1.5, 2, 3, 3.5])
 	params["fm.index"] = rnd(rng_range(0.5, 6))
