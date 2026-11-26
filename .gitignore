@@ -23,3 +23,6 @@ build/
 
 # Listening demos rendered by tools/prism_demo.gd (large; regenerate any time)
 media/prism-demos/
+
+# Private credentials (Supabase): never committed
+.env.supabase
