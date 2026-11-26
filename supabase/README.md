@@ -18,6 +18,7 @@ python tools/pg.py supabase/migrations/0001_shared_map.sql
 |---|---|
 | `0001_shared_map.sql` | Step 2, the read side: `songs`, `grids` and `plants`, readable by anyone when live, never writable through the API, and with the `owner` column never readable (so nobody can link one person's beacons into a trail). |
 | `0002_submit.sql` | Step 3: signed-in people share their own grids, songs, planted songs and maps after accepting the terms (`consents`). The server forces the owner, rounds the time to the day, recomputes tiles, checks the lower 48, and caps each person per day (5 grids, 20 songs, 20 planted songs, 5 maps, 20 reports; deleting doesn't give the allowance back). `favorites` with public `favorite_counts`; `reports` hide a beacon after 3 different people; `delete_my_account()` removes a person and everything they shared. |
+| `0003_flights.sql` | Following a flight: `flight_lookup(query)` fetches an aircraft's live position from adsb.lol by tail number, flight number or transponder code (the `http` extension), caches it 10 seconds per aircraft and spaces requests 1.5 seconds apart (adsb.lol's free tier is 500 a day per address). An optional adsb.lol key goes in `private.settings` and never leaves the database. |
 
 **Checking the rules:** `python tools/pg.py supabase/tests/submit_check.sql` plays signed-in people against them inside a transaction that's rolled back (nothing stays), and ends with `submit_check: OK`.
 

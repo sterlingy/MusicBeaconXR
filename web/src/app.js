@@ -9,6 +9,8 @@ import { ListenerInput, planarSpace, geoSpace, localSpace, keyboardSource, point
 import { initDrafts } from "./draftsui.js";
 import { Globe3D } from "./globe3d.js";
 import { initWalks, drawLines } from "./walkui.js";
+import { FlightTracker, supabaseFlightLookup, describe as describeFlight } from "./flight.js";
+import { SUPABASE_URL, SUPABASE_KEY } from "./config.js";
 
 const $ = (id) => document.getElementById(id);
 const MOOD_COLOR = { Drift: "#8fa7ff", Glow: "#f5c04a", Tide: "#2ec4b6", Pulse: "#ff4f9a", Rush: "#ff8a3d" };
@@ -65,6 +67,8 @@ const is3d = () => ui.mode === "globe" && ui.view3d;
 let globe3d = null, lastDraw = performance.now();
 // Walks (src/walkui.js): trail, recordings, replay, audio export. Set up once the page is.
 let walk = { frame: () => false, lines: () => [], setSong: () => false, findBeacon: () => null, replaying: false };
+// Following a flight (src/flight.js): a real aircraft drives the listener on the Globe tab.
+const flight = new FlightTracker({ lookup: supabaseFlightLookup({ url: SUPABASE_URL, key: SUPABASE_KEY }) });
 
 // ------------------------------------------------------------------ setup
 
@@ -287,6 +291,7 @@ function draw(now) {
     g.strokeStyle = C.accent; g.lineWidth = 1.5 * d;
     g.beginPath(); g.moveTo(tx - 6 * d, ty - 6 * d); g.lineTo(tx + 6 * d, ty + 6 * d); g.moveTo(tx + 6 * d, ty - 6 * d); g.lineTo(tx - 6 * d, ty + 6 * d); g.stroke();
   }
+  if (flight.active && ui.mode === "globe") drawPlane(g, px, py, flight.fix.track, d, C.accent);
   g.fillStyle = C.accent;
   g.beginPath(); g.arc(px, py, 8 * d, 0, Math.PI * 2); g.fill();
   g.strokeStyle = C.field; g.lineWidth = 2.5 * d;
@@ -381,6 +386,24 @@ function drawGraticule(v, d) {
   }
 }
 
+/** A small plane pointing along `track` (degrees from north), for following a flight. */
+export function drawPlane(g, x, y, track, d, color) {
+  g.save();
+  g.translate(x, y);
+  g.rotate(((track || 0) * Math.PI) / 180);
+  g.scale(d, d);
+  g.fillStyle = color;
+  g.strokeStyle = "#04070d";
+  g.lineWidth = 1.5;
+  g.beginPath();
+  // Nose up: fuselage, wings, tail.
+  g.moveTo(0, -22); g.lineTo(3, -12); g.lineTo(3, -4); g.lineTo(18, 4); g.lineTo(18, 8); g.lineTo(3, 4);
+  g.lineTo(2.5, 14); g.lineTo(8, 19); g.lineTo(8, 22); g.lineTo(0, 19); g.lineTo(-8, 22); g.lineTo(-8, 19);
+  g.lineTo(-2.5, 14); g.lineTo(-3, 4); g.lineTo(-18, 8); g.lineTo(-18, 4); g.lineTo(-3, -4); g.lineTo(-3, -12); g.closePath();
+  g.fill(); g.stroke();
+  g.restore();
+}
+
 function label(text, x, y, size, color, halo, alpha = 1, align = "center") {
   g.font = `500 ${size}px "IBM Plex Mono", Consolas, monospace`;
   g.textAlign = align;
@@ -421,6 +444,7 @@ const input = new ListenerInput({ space: spaces.grid, position: { x: -38, y: 27 
 input.add(keyboardSource(window));
 const pointer = input.add(pointerSource(canvas, (x, y) => view().toWorld(x, y)));
 input.on("moved", (p) => engine.setPosition(p));
+input.on("manual", () => stopFlight("Walking by hand, so you stopped following the flight."));
 input.on("manual", (kind) => stopFollow(kind === "pointer" ? "Moved by hand, so the map stopped following your location." : "Walking by hand, so the map stopped following your location."));
 input.on("wander", (on) => { $("wander").checked = on; if (on) stopFollow("Auto-walk is on, so the map stopped following your location."); });
 input.on("action", (name, arg) => {
@@ -545,6 +569,7 @@ function setMode(mode) {
   const from = ui.mode !== "grid" ? { ...engine.pos } : null;
   ui.mode = mode;
   if (mode === "grid") stopFollow();
+  if (mode !== "globe") stopFlight();
   if (mode !== "globe" && ui.zoom === "close") setZoom("local");
   if (mode === "globe" && !fields.globe) fields.globe = makeGlobeField(10);
   if (mode === "local" && !fields.local) fields.local = makeLocalGridField(from || { lat: 51.507, lon: -0.128 }, ui.localKm, ui.spacingKm);
@@ -1051,7 +1076,11 @@ function frame(now) {
   last = now;
   // A replaying walk drives the listener; otherwise walking does, and the trail and any recording follow.
   if (walk.replaying) walk.frame();
-  else { step(dt); walk.frame(); }
+  else {
+    if (flight.active && ui.mode === "globe") flyAlong();
+    else step(dt);
+    walk.frame();
+  }
   for (const ev of engine.takeSounding()) ui.flashes.set(ev.id, now);
   draw(now);
   if (now - ui.lastPanel > 120) { ui.lastPanel = now; renderPanels(); }
@@ -1059,6 +1088,52 @@ function frame(now) {
 }
 
 // Start somewhere between beacons so the blend shows right away.
+// ------------------------------------------------------------------ following a flight
+
+/** Each frame while following: put the listener where the plane is, and fetch a new fix now and then. */
+function flyAlong() {
+  const p = flight.position();
+  if (p) { input.target = null; engine.setPosition(p); }
+  flight.poll().then((got) => { if (got || flight.lost) renderFlight(); });
+}
+
+function renderFlight() {
+  const on = flight.active;
+  $("flightStop").hidden = !on;
+  $("flightGo").hidden = on;
+  $("flightQ").disabled = on;
+  if (on) setMsg("fieldMsg", `✈ Following ${describeFlight(flight.fix)}${flight.lost ? ` · last update failed (${flight.lost}); gliding on` : ""}. Data: adsb.lol (ODbL).`);
+}
+
+async function startFlight() {
+  const q = $("flightQ").value.trim();
+  if (!q) return setMsg("fieldMsg", "Type a tail number (like N733YX) or a flight number (like UAL123).", true);
+  if (ui.mode !== "globe") setMode("globe");
+  stopFollow();
+  input.wander = false;
+  $("flightGo").disabled = true;
+  setMsg("fieldMsg", `Looking for ${q}…`);
+  try {
+    const f = await flight.start(q);
+    engine.setPosition({ lat: f.lat, lon: f.lon });
+    if (globe3d && is3d()) { globe3d.flyTo(f.lat, f.lon, Math.max(globe3d.zoom, 6)); globe3d.mode = "follow"; }
+    renderFlight();
+  } catch (err) {
+    setMsg("fieldMsg", err.message, true);
+  } finally { $("flightGo").disabled = false; }
+}
+
+function stopFlight(why) {
+  if (!flight.active) return;
+  const was = flight.fix;
+  flight.stop();
+  renderFlight();
+  setMsg("fieldMsg", why || `Stopped following ${was.reg || was.flight || "the flight"}.`);
+}
+$("flightGo").addEventListener("click", startFlight);
+$("flightQ").addEventListener("keydown", (e) => { if (e.key === "Enter") startFlight(); });
+$("flightStop").addEventListener("click", () => stopFlight());
+
 /** Globe tab: the 3D globe or the flat map. The globe takes the pointer (drag turns it) while it shows. */
 function apply3d() {
   const on = is3d();
@@ -1092,6 +1167,7 @@ globe3d = new Globe3D({
   select,
   place: (lat, lon) => !!drafts.placing && drafts.placeAt({ lat, lon }),
   lines: () => walk.lines(),
+  flight: () => (flight.active ? { track: flight.fix.track, label: flight.fix.reg || flight.fix.flight } : null),
   travel: (lat, lon) => { stopFollow("Flew somewhere else, so the map stopped following your location."); input.target = null; engine.setPosition({ lat, lon }); },
 });
 walk = initWalks({
@@ -1107,7 +1183,7 @@ requestAnimationFrame(frame);
 connectShared();
 
 // For debugging and automated checks.
-window.beaconField = { engine, ui, setMode, select, centerLocal, setZoom, setView3d, get walk() { return walk; }, get drafts() { return drafts; }, get globe3d() { return globe3d; } };
+window.beaconField = { flight, engine, ui, setMode, select, centerLocal, setZoom, setView3d, get walk() { return walk; }, get drafts() { return drafts; }, get globe3d() { return globe3d; } };
 
 // ------------------------------------------------------------------ synths page
 

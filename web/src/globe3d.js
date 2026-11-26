@@ -24,6 +24,14 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const wrap180 = (d) => ((((d % 360) + 540) % 360) - 180);
 const ease = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 
+/** A point `deg` degrees of arc from p on a bearing (for drawing directions). */
+function destinationLite(p, bearing, deg) {
+  const d = deg * D2R, b = bearing * D2R, la = p.lat * D2R;
+  const la2 = Math.asin(Math.sin(la) * Math.cos(d) + Math.cos(la) * Math.sin(d) * Math.cos(b));
+  const lo2 = p.lon * D2R + Math.atan2(Math.sin(b) * Math.sin(d) * Math.cos(la), Math.cos(d) - Math.sin(la) * Math.sin(la2));
+  return { lat: la2 * R2D, lon: wrap180(lo2 * R2D) };
+}
+
 /** Where the sun is overhead right now (degrees): declination and the longitude where it's noon. */
 export function subsolar(date = new Date()) {
   const start = Date.UTC(date.getUTCFullYear(), 0, 0);
@@ -566,6 +574,25 @@ export class Globe3D {
   _drawListener(g, now, d, C) {
     const s = this.toScreen(this.h.engine.pos);
     if (!s) return;
+    const fl = this.h.flight?.();
+    if (fl) {
+      // Following a flight: a plane along its track (screen-north is the view's north near the middle).
+      const ahead = this.toScreen(destinationLite(this.h.engine.pos, fl.track, 0.05));
+      const ang = ahead ? Math.atan2(ahead[0] - s[0], s[1] - ahead[1]) : (fl.track * Math.PI) / 180;
+      g.save();
+      g.translate(s[0], s[1]);
+      g.rotate(ang);
+      g.scale(d * 1.1, d * 1.1);
+      g.fillStyle = C.accent; g.strokeStyle = "#04070d"; g.lineWidth = 1.5;
+      g.beginPath();
+      g.moveTo(0, -22); g.lineTo(3, -12); g.lineTo(3, -4); g.lineTo(18, 4); g.lineTo(18, 8); g.lineTo(3, 4);
+      g.lineTo(2.5, 14); g.lineTo(8, 19); g.lineTo(8, 22); g.lineTo(0, 19); g.lineTo(-8, 22); g.lineTo(-8, 19);
+      g.lineTo(-2.5, 14); g.lineTo(-3, 4); g.lineTo(-18, 8); g.lineTo(-18, 4); g.lineTo(-3, -4); g.lineTo(-3, -12); g.closePath();
+      g.fill(); g.stroke();
+      g.restore();
+      this.h.label(`✈ ${fl.label || ""}`, s[0], s[1] + 34 * d, 11 * d, C.accent, "rgba(4,7,13,0.85)");
+      return;
+    }
     const ph = (now / 1600) % 1;
     g.strokeStyle = C.accent;
     g.globalAlpha = 1 - ph;

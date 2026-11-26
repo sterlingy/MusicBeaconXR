@@ -247,6 +247,15 @@ func _k() -> float:
 
 
 func _process(delta: float) -> void:
+	# Following a flight: the plane drives the listener (walking is paused meanwhile).
+	if mine.flight.active():
+		var fp := mine.flight.position()
+		input.process_mode = Node.PROCESS_MODE_DISABLED
+		if not fp.is_empty():
+			player.set_position(Vector2(fp.lon, fp.lat))
+	elif input.process_mode == Node.PROCESS_MODE_DISABLED and walks.replay.is_empty():
+		input.process_mode = Node.PROCESS_MODE_INHERIT
+		input.jump_to(player.pos)
 	var p := player.pos # (lon, lat)
 	var up := to_world(p.y, p.x, 1.0)
 	var k := _k()
@@ -337,6 +346,8 @@ func _parse_args() -> void:
 			input.jump_to(Vector2(float(ll[1]), float(ll[0])))
 		elif a.begins_with("--alt="):
 			altitude = float(a.trim_prefix("--alt="))
+		elif a.begins_with("--flight="):
+			_follow_flight_dev(a.trim_prefix("--flight="))
 		elif a == "--drafts-demo":
 			_drafts_demo()
 		elif a == "--play":
@@ -482,3 +493,10 @@ func _draw_trail() -> void:
 			prev = here
 	if any:
 		im.surface_end()
+
+
+## Dev: --flight=<tail or flight no.> starts following it (for screenshots).
+func _follow_flight_dev(q: String) -> void:
+	mine._flight_q.text = q
+	mine._panel.visible = true
+	mine._toggle_flight()

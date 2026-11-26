@@ -32,6 +32,10 @@ var _signed_in: HBoxContainer
 var _who: Label
 var _reason: OptionButton
 var _terms: ConfirmationDialog
+## Following a flight (FlightFollow): the globe scene moves the listener with it.
+var flight: FlightFollow
+var _flight_q: LineEdit
+var _flight_btn: Button
 var geo: GeoLocation
 ## The latest location fix {lat, lon, accuracy, at}; dev: --fakegps=lat,lon[,accuracy].
 var fix := {}
@@ -81,6 +85,8 @@ func _ready() -> void:
 	add_child(shared_map)
 	account = BeaconAccount.new()
 	add_child(account)
+	flight = FlightFollow.new()
+	add_child(flight)
 	shared_map.changed.connect(func(): _rebuild(false))
 	player.layer = _layer
 	_build()
@@ -405,6 +411,15 @@ func _build() -> void:
 	v.add_child(pl)
 	v.add_child(menu._small("Plant uses the song you hear most. Making beacons needs your location (lower 48 US for now)."))
 
+	var fl := HBoxContainer.new()
+	_flight_q = LineEdit.new()
+	_flight_q.placeholder_text = "Tail or flight no."
+	_flight_q.custom_minimum_size = Vector2(150, 0)
+	fl.add_child(_flight_q)
+	_flight_btn = menu._button("✈ Follow flight", _toggle_flight)
+	fl.add_child(_flight_btn)
+	v.add_child(fl)
+
 	var tools := HBoxContainer.new()
 	tools.add_child(menu._button("New map", _new_map))
 	tools.add_child(menu._button("New song here", _regen_here))
@@ -496,6 +511,25 @@ func _build() -> void:
 	_terms.cancel_button_text = "Not now"
 	add_child(_terms)
 	menu.free()
+
+
+# ---------------------------------------------------------------- following a flight
+
+func _toggle_flight() -> void:
+	if flight.active():
+		var f := flight.fix
+		flight.stop()
+		_flight_btn.text = "✈ Follow flight"
+		_say("Stopped following %s." % f.get("reg", "the flight"))
+		return
+	_say("Looking for %s…" % _flight_q.text)
+	var why := await flight.start(_flight_q.text)
+	if why != "":
+		_say(why, true)
+		return
+	_flight_btn.text = "■ Stop flight"
+	go_to.emit(flight.fix.lat, flight.fix.lon, 1500.0)
+	_say("✈ Following %s. Data: adsb.lol (ODbL)." % FlightFollow.describe(flight.fix))
 
 
 # ---------------------------------------------------------------- sharing (step 3)
