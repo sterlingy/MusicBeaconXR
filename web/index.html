@@ -177,6 +177,23 @@ details summary { cursor: pointer; color: var(--muted); font-size: 13px; }
 .startcard p { margin: 0; color: var(--muted); }
 .startcard .btn { font-size: 16px; padding: 12px 22px; }
 
+/* My beacons (Globe tab) */
+.sources { font: 12.5px/1.4 var(--f-mono); color: var(--fg); padding: 5px 9px; border: 1px solid var(--line); border-radius: 8px; background: var(--raise); justify-self: start; }
+.ditems { display: grid; gap: 8px; }
+.ditem { display: grid; gap: 6px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--raise); }
+.dname { display: flex; gap: 8px; align-items: center; cursor: pointer; min-width: 0; }
+.dname i { width: 12px; height: 12px; border-radius: 3px; flex: none; }
+.dname span { min-width: 0; font-weight: 600; }
+.dname small { display: block; font-weight: 400; color: var(--muted); font-size: 12px; }
+.dbtns { display: flex; flex-wrap: wrap; gap: 5px; }
+.dbtns .btn[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+.dex { font-size: 12.5px; }
+.dtools { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
+.dspot { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.dspot > small { width: 100%; color: var(--muted); }
+.dspot b { color: var(--fg); font-weight: 500; }
+.doffer { border: 1px solid var(--accent); border-radius: 10px; padding: 10px; display: grid; gap: 8px; }
+.doffer[hidden], #draftsUnit[hidden], #sources[hidden], #plantWrap[hidden], #zoomClose[hidden] { display: none !important; }
 @media (max-width: 960px) {
   .main { grid-template-columns: minmax(0, 1fr); }
   .now { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -246,6 +263,7 @@ details summary { cursor: pointer; color: var(--muted); font-size: 13px; }
           <div class="seg" role="group" aria-label="Map zoom">
             <button id="zoomLocal" aria-pressed="true">Local</button>
             <button id="zoomWorld" aria-pressed="false">World</button>
+            <button id="zoomClose" aria-pressed="false" hidden title="A few km across, for your own beacons. The mouse wheel zooms.">Close</button>
           </div>
         </div>
         <span class="msg" id="fieldMsg"></span>
@@ -263,6 +281,7 @@ details summary { cursor: pointer; color: var(--muted); font-size: 13px; }
         </div>
         <div class="beat" id="beat"></div>
         <div class="songline" id="songline">Harmony from –</div>
+        <div class="sources" id="sources" hidden title="The song sources you're hearing, and how much of each">Global 100%</div>
       </section>
 
       <section class="unit" aria-label="Active beacons">
@@ -288,6 +307,10 @@ details summary { cursor: pointer; color: var(--muted); font-size: 13px; }
           <button class="btn" id="shareSong" hidden>Share with everyone</button>
           <button class="btn" id="unshareSong" hidden>Remove shared song</button>
         </div>
+        <div class="row" id="plantWrap" hidden>
+          <button class="btn" id="plantSong" title="Plants this song on a beacon where you are (needs your location; lower 48 US for now)">Plant this song where I am</button>
+          <label class="inline" for="dRange">Range <input id="dRange" type="number" step="100" style="width:6em"> m</label>
+        </div>
         <div id="editorWrap" hidden>
           <div class="edhead"><strong id="editorTitle">Editing</strong><button class="btn small" id="closeEditor">Done</button></div>
           <div id="editor"></div>
@@ -302,6 +325,27 @@ details summary { cursor: pointer; color: var(--muted); font-size: 13px; }
         <div class="msg" id="inspMsg"></div>
       </section>
 
+      <section class="unit" id="draftsUnit" aria-label="My beacons" hidden>
+        <h2>My beacons · <span id="dWhere">on this device</span></h2>
+        <div class="dtools">
+          <label class="inline" for="dSpacing">Beacon every <select id="dSpacing"></select></label>
+          <button class="btn primary" id="dGenerate" title="Makes a grid of beacons centered where you are (needs your location; lower 48 US for now)">Generate grid here</button>
+          <span class="hint" id="dSpacingHint"></span>
+        </div>
+        <div class="doffer" id="dOffer" hidden>
+          <span id="dOfferText"></span>
+          <div class="row"><button class="btn primary small" id="dOfferGo">Generate the next grid</button><button class="btn small" id="dOfferNo">Not now</button></div>
+        </div>
+        <div class="dtools">
+          <button class="btn" id="dNewMap" title="A map of your own: put beacons anywhere by tapping the map. Only you edit it.">New map</button>
+          <button class="btn" id="dImport">Import…</button>
+          <button class="btn" id="dExportAll">Export all</button>
+          <input type="file" id="dFile" accept=".json,application/json" hidden>
+        </div>
+        <label class="inline" for="dPlayMode">Where several songs share a spot, play <select id="dPlayMode"></select></label>
+        <div class="ditems" id="dList"></div>
+        <div class="msg" id="dMsg"></div>
+      </section>
       <section class="unit">
         <details>
           <summary>Blend settings</summary>

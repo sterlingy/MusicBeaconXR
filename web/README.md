@@ -24,6 +24,22 @@ The test playfield for Music Beacon XR. You walk a listener between music beacon
   - Distances are measured on a flat map of the area, where neighbouring beacons are exactly one spacing apart (under 1% off the true distance over 40 km, about 1% at the edge of a 100 km grid). Columns are measured at the whole degree of latitude nearest the center.
   - **Nearby** shows about 8 spacings around you; **Whole grid** shows all of it. Distances under 1 km show in meters.
 
+## My beacons (Globe tab)
+
+Step 1 of the beacon database ([docs/beacon-database-plan.md](../docs/beacon-database-plan.md)): your own beacons, kept on this device (IndexedDB) with no server yet. The **My beacons** panel shows on the Globe tab, and **Close** zoom (the mouse wheel zooms from 1 to 400 km) shows them on the map.
+
+- **Generate grid here:** 21 × 21 beacons centered where you are, one every 100 m, 200 m, 500 m, 1, 2 or 5 km (2 to 100 km a side). Each starts with the song the local grid plays at that spot.
+- **Plant this song where I am** (under the beacon song): the song in the inspector (edited, pasted or generated) goes on the 100 m lattice point where you stand, heard within its **range** (500 m by default, 100 m to 10 km).
+- Both need your location, accurate to 250 m or better, and for now only work in the lower 48 United States (a coarse outline, within about 20 km of the borders). The globe plays everywhere.
+- **New map:** a custom map. Tap the map to put beacons on it anywhere, at exact spots, with no location needed (lower 48 only for now). **Exclusive** makes it the only thing playing while it's on, with silence away from its beacons.
+- Each grid, map and the planted songs can be turned on and off (several at once, merged into one pool, each in its own tint), gone to, renamed, duplicated, exported or deleted. **Import…** adds a file's grids, maps and songs as copies. **Export all** saves everything (the `beacon-drafts` format the app uses too).
+- **New songs** on a grid regenerates every generated beacon (edited songs stay); **New song** in the inspector regenerates one. Edit song or Paste JSON on one of your beacons stores the full song.
+- **Several songs at one spot** (up to 20 per 100 m point): the inspector lists them, and **Where several songs share a spot, play** picks one: random (changes daily, the same for everyone there), my favorite (★ in the inspector; the latest when you haven't picked one), mine, original (first) or latest.
+- **Generate more:** walking out of your grid offers the next grid along, on the same lattice and spacing (you need to be inside it to make it).
+- **How it sounds:** your beacons blend nearest-3 among those whose range reaches you, at full strength out to 75% of their range, easing to nothing at the edge, while the globe fades in. The line under **Now playing** shows the sources and their shares, for example `User 70% · Global 30%`, `Lakeside walk 60% · User 25% · Global 15%`, or `Lakeside walk (exclusive) · outside`.
+- **Testing without walking:** on `serve.py` only, `?fakegps=30.2672,-97.7431` (optionally `,accuracy`) stands in for your location.
+- Code: `src/drafts.js` (the rules and the format, no DOM; tests in `web/tests/drafts.test.mjs`), `src/draftstore.js` (IndexedDB), `src/draftsui.js` (panel, map, inspector).
+
 ## AR and VR page
 
 `ar.html` (the **AR / VR ↗** button) shows the test grid in 3D and lets you walk it with your body.
@@ -111,6 +127,7 @@ The songs play on SynthKit's own instruments through its web module (`addons/syn
 
 | Piece | File | What it does |
 |---|---|---|
+| My beacons | `src/drafts.js`, `src/draftsui.js`, `src/draftstore.js` | Your own grids, planted songs and custom maps on the Globe tab, kept on this device, crossfaded with the globe. |
 | Beacon fields | `src/beacons.js` | The 5×5 test grid (100 m apart), the globe (a beacon every 10°, 614 in all, great-circle distance) and the local grid (1 to 100 km a side around you, a beacon every 10 m to 100 km). All have the same shape, so swapping one for the other changes nothing else. |
 | Weights | `src/beacons.js` → `weigh()` | The 3 closest beacons, each weighted `(1/d − 1/d4)^sharpness`, normalized. A beacon fades to exactly 0 as it swaps with the 4th closest, so the music never jumps. Standing on a beacon gives it 100%. |
 | Songs | `src/song.js` | The song format (below), music theory helpers, and a seeded generator that gives every beacon its own song (mood, key, tempo, chords, six parts, and a 2 to 5 minute form). |

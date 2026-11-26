@@ -31,6 +31,16 @@
         "build/site"
       ],
       "port": 8790
+    },
+    {
+      "name": "beacon-field-3",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "web/serve.py",
+        "8781"
+      ],
+      "port": 8781,
+      "autoPort": false
     }
   ]
 }

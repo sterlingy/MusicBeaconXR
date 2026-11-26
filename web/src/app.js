@@ -6,6 +6,7 @@ import { songPosition, sectionName, clock, hasForm, totalBars, lengthSeconds, SE
 import { BeaconEngine } from "./engine.js";
 import { SongEditor } from "./editor.js";
 import { ListenerInput, planarSpace, geoSpace, localSpace, keyboardSource, pointerSource } from "./input/listener.js";
+import { initDrafts } from "./draftsui.js";
 
 const $ = (id) => document.getElementById(id);
 const MOOD_COLOR = { Drift: "#8fa7ff", Glow: "#f5c04a", Tide: "#2ec4b6", Pulse: "#ff4f9a", Rush: "#ff8a3d" };
@@ -34,6 +35,8 @@ function savedSpacingKm() {
 const fmtDist = (m) => m < 1000 ? `${Math.round(m)} m` : `${+(m / 1000).toFixed(m < 10000 ? 2 : 1)} km`;
 const fmtKmVal = (km) => `${+km.toFixed(3)} km`;
 const engine = new BeaconEngine(fields.grid);
+// My beacons (src/draftsui.js), set up once the rest of the page is.
+let drafts = { isUser: () => false, findBeacon: () => null, setSong: () => false, regenerate: () => null, inspectorHtml: () => "", placeAt: () => false, beaconAt: () => null, draw() {}, tick() {}, noteFix() {}, placing: null };
 const canvas = $("field");
 const g = canvas.getContext("2d");
 
@@ -53,6 +56,7 @@ const ui = {
   localKm: savedLocalKm(), // local grid length of each side, km
   spacingKm: savedSpacingKm(), // local grid: km between neighbouring beacons
   watchId: null,
+  closeKm: 30, // Globe tab, Close zoom: km from the top of the map to the bottom
 };
 
 // ------------------------------------------------------------------ setup
@@ -111,6 +115,19 @@ function view() {
       toScreen: (p) => { const q = f.toXY(p); return [W / 2 + (q.x - c.x) * s, H / 2 - (q.y - c.y) * s]; },
       toWorld: (x, y) => f.fromXY({ x: c.x + (x - W / 2) / s, y: c.y - (y - H / 2) / s }),
       scale: s,
+    };
+  }
+  if (ui.zoom === "close") {
+    // Close (Globe tab): a few km across, east-west scaled to match north-south, for your own beacons.
+    const latSpan = ui.closeKm / 111.2;
+    const c = { lat: Math.max(-85, Math.min(85, engine.pos.lat)), lon: engine.pos.lon };
+    const sy = H / latSpan, sx = sy * Math.cos((c.lat * Math.PI) / 180);
+    const wrap = (d) => ((d + 540) % 360) - 180;
+    return {
+      center: c, span: { lat: latSpan, lon: W / sx },
+      toScreen: (p) => [W / 2 + wrap(p.lon - c.lon) * sx, H / 2 - (p.lat - c.lat) * sy],
+      toWorld: (x, y) => normalizeLatLon({ lon: c.lon + (x - W / 2) / sx, lat: c.lat - (y - H / 2) / sy }),
+      scale: sx,
     };
   }
   const span = ui.zoom === "world" ? { lon: 360, lat: 180 } : { lon: 90, lat: 45 };
@@ -178,7 +195,7 @@ function draw(now) {
   const C = ui.colors;
   g.fillStyle = C.field;
   g.fillRect(0, 0, W, H);
-  if (ui.zones) {
+  if (ui.zones && ui.zoom !== "close") {
     g.imageSmoothingEnabled = true;
     g.drawImage(zoneImage(v), 0, 0, W, H);
   }
@@ -247,6 +264,8 @@ function draw(now) {
     }
   }
 
+  drafts.draw(g, v, d);
+
   // Target and listener.
   if (input.target) {
     const [tx, ty] = v.toScreen(input.target);
@@ -312,6 +331,15 @@ function drawGraticule(v, d) {
     label(fmtDist(sp * (fine ? 1 : 5)), x0 + len / 2, y0 - 9 * d, 10 * d, C.muted, null);
     return;
   }
+  if (ui.zoom === "close") {
+    const km = [0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 50, 100].find((k) => k >= ui.closeKm / 6) || 100;
+    const len = (km / ui.closeKm) * canvas.height;
+    const x0 = canvas.width - 20 * d - len, y0 = canvas.height - 14 * d;
+    g.strokeStyle = C.muted;
+    g.beginPath(); g.moveTo(x0, y0); g.lineTo(x0 + len, y0); g.stroke();
+    label(fmtDist(km * 1000), x0 + len / 2, y0 - 9 * d, 10 * d, C.muted, null);
+    return;
+  }
   const step = 10;
   for (let lat = -90; lat <= 90; lat += step) {
     const [, y] = v.toScreen({ lat, lon: v.center.lon });
@@ -338,9 +366,9 @@ function drawGraticule(v, d) {
   }
 }
 
-function label(text, x, y, size, color, halo, alpha = 1) {
+function label(text, x, y, size, color, halo, alpha = 1, align = "center") {
   g.font = `500 ${size}px "IBM Plex Mono", Consolas, monospace`;
-  g.textAlign = "center";
+  g.textAlign = align;
   g.textBaseline = "middle";
   g.globalAlpha = alpha;
   if (halo) {
@@ -361,6 +389,7 @@ function speedPerSec() {
     const f = engine.field;
     return (ui.zoom === "world" ? Math.max(0.5 * f.spacing, f.sideM / 25) : 0.5 * f.spacing) * ui.speed;
   }
+  if (ui.zoom === "close") return (ui.closeKm / 111.2 / 12) * ui.speed; // a 12th of the map per second
   return (ui.zoom === "world" ? 18 : 5) * ui.speed; // degrees per second
 }
 
@@ -382,6 +411,7 @@ input.on("wander", (on) => { $("wander").checked = on; if (on) stopFollow("Auto-
 input.on("action", (name, arg) => {
   if (name === "toggle_play") togglePlay();
   else if (name === "select") {
+    if (drafts.placing && drafts.placeAt(view().toWorld(arg.x, arg.y))) return;
     const b = beaconAt(arg.x, arg.y);
     if (b) { select(b.id); input.setTarget({ ...b.pos }); }
   }
@@ -395,6 +425,8 @@ function step(dt) {
 
 function beaconAt(x, y) {
   const v = view();
+  const mine = drafts.beaconAt(x, y, v, 14 * (ui.dpr || 1));
+  if (mine) return mine;
   let best = null, bd = (ui.mode === "grid" ? 24 : 14) * (ui.dpr || 1);
   for (const b of engine.field.beacons) {
     const [bx, by] = v.toScreen(b.pos);
@@ -497,7 +529,8 @@ function setMode(mode) {
   if (mode === ui.mode) return;
   const from = ui.mode !== "grid" ? { ...engine.pos } : null;
   ui.mode = mode;
-  if (mode !== "local") stopFollow();
+  if (mode === "grid") stopFollow();
+  if (mode !== "globe" && ui.zoom === "close") setZoom("local");
   if (mode === "globe" && !fields.globe) fields.globe = makeGlobeField(10);
   if (mode === "local" && !fields.local) fields.local = makeLocalGridField(from || { lat: 51.507, lon: -0.128 }, ui.localKm, ui.spacingKm);
   engine.setField(fields[mode]);
@@ -510,7 +543,11 @@ function setMode(mode) {
   $("modeGlobe").setAttribute("aria-pressed", mode === "globe");
   $("modeLocal").setAttribute("aria-pressed", mode === "local");
   $("globeTools").hidden = mode === "grid";
-  $("followWrap").hidden = mode !== "local";
+  $("followWrap").hidden = mode === "grid";
+  $("zoomClose").hidden = mode !== "globe";
+  $("draftsUnit").hidden = mode !== "globe";
+  $("sources").hidden = mode !== "globe";
+  $("plantWrap").hidden = mode !== "globe";
   $("zoomLocal").textContent = mode === "local" ? "Nearby" : "Local";
   $("zoomWorld").textContent = mode === "local" ? "Whole grid" : "World";
   $("geo").textContent = mode === "local" ? "Center on me" : "My location";
@@ -548,11 +585,20 @@ $("localSpacing").addEventListener("change", (e) => {
 
 function setZoom(z) {
   ui.zoom = z;
+  ui.zoneKey = "";
   $("zoomLocal").setAttribute("aria-pressed", z === "local");
   $("zoomWorld").setAttribute("aria-pressed", z === "world");
+  $("zoomClose").setAttribute("aria-pressed", z === "close");
 }
 $("zoomLocal").addEventListener("click", () => setZoom("local"));
 $("zoomWorld").addEventListener("click", () => setZoom("world"));
+$("zoomClose").addEventListener("click", () => setZoom("close"));
+// Close zoom: the wheel (or a pinch on a trackpad) zooms from 1 km to 400 km.
+canvas.addEventListener("wheel", (e) => {
+  if (ui.mode !== "globe" || ui.zoom !== "close") return;
+  e.preventDefault();
+  ui.closeKm = Math.max(1, Math.min(400, ui.closeKm * Math.pow(1.0015, e.deltaY)));
+}, { passive: false });
 
 function jumpTo(lat, lon, how) {
   input.target = null;
@@ -617,13 +663,15 @@ function startFollow() {
   let first = true;
   ui.watchId = navigator.geolocation.watchPosition(
     (pos) => {
-      if (ui.mode !== "local") return;
+      if (ui.mode === "grid") return;
       const p = { lat: pos.coords.latitude, lon: pos.coords.longitude };
       const acc = Math.round(pos.coords.accuracy || 0);
-      centerLocal(p, { keepIfClose: !first });
+      drafts.noteFix({ ...p, accuracy: pos.coords.accuracy });
+      if (ui.mode === "globe") engine.setPosition(p);
+      else centerLocal(p, { keepIfClose: !first });
       input.target = null;
       if (first) {
-        setMsg("fieldMsg", `Centered on you (accurate to ${acc < 1000 ? acc + " m" : (acc / KM_M).toFixed(1) + " km"}). Following your location.`);
+        setMsg("fieldMsg", `${ui.mode === "globe" ? "Found you" : "Centered on you"} (accurate to ${acc < 1000 ? acc + " m" : (acc / KM_M).toFixed(1) + " km"}). Following your location.`);
         devLog("position", { accuracy: acc });
       }
       first = false;
@@ -693,7 +741,8 @@ engine.on((type, data) => {
 
 // ------------------------------------------------------------------ inspector
 
-function beaconLabel(id) { return engine.field.beacons.find((b) => b.id === id)?.label ?? id; }
+function findBeacon(id) { return drafts.findBeacon(id) || engine.field.beacons.find((b) => b.id === id); }
+function beaconLabel(id) { return findBeacon(id)?.label ?? id; }
 function esc(s) { return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
 function setMsg(id, text, err = false) { const el = $(id); el.textContent = text; el.classList.toggle("err", err); }
 
@@ -710,7 +759,8 @@ function inspectedId() { return ui.selected ?? engine.active[0]?.id; }
 function renderInspector() {
   const id = inspectedId();
   if (!id) return;
-  const b = engine.field.beacons.find((x) => x.id === id);
+  const b = findBeacon(id);
+  if (!b) { ui.selected = null; return; }
   const s = engine.songFor(b);
   const chordsOf = (p) => p.map((d) => chordName(s.key, d)).join(" – ");
   const chords = chordsOf(s.progression);
@@ -737,7 +787,7 @@ function renderInspector() {
       <span class="chip">${hasForm(s) ? `<b>${s.form.length}</b> sections` : "<b>one loop</b> (no form)"}</span>
     </div>
     <div class="formview" id="inspForm" data-id="${esc(id)}"></div>
-    <div class="chips">${tracks}</div>`;
+    <div class="chips">${tracks}</div>${drafts.inspectorHtml(id)}`;
   ui.inspectedShown = inspectorKey(id);
   updateShareButtons();
 }
@@ -745,7 +795,7 @@ function renderInspector() {
 let editorId = null;
 const editor = new SongEditor($("editor"), {
   onChange: (song) => {
-    engine.setSong(editorId, song);
+    if (!drafts.setSong(editorId, song)) engine.setSong(editorId, song);
     engine.songRev = (engine.songRev || 0) + 1;
     $("editorTitle").textContent = `Editing ${song.title} (${beaconLabel(editorId)})`;
     renderInspector();
@@ -761,12 +811,25 @@ function openEditor(id) {
   renderInspector();
 }
 function closeEditor() { editorId = null; editor.close(); $("editorWrap").hidden = true; }
-$("editSong").addEventListener("click", () => openEditor(inspectedId()));
+$("editSong").addEventListener("click", () => { const id = needBeacon(); if (id) openEditor(id); });
 $("closeEditor").addEventListener("click", closeEditor);
 
-$("goBeacon").addEventListener("click", () => { const id = inspectedId(); const b = engine.field.beacons.find((x) => x.id === id); if (b) input.target = { ...b.pos }; });
-$("regen").addEventListener("click", () => {
+$("goBeacon").addEventListener("click", () => { const b = findBeacon(inspectedId()); if (b) input.target = { ...b.pos }; });
+/** The inspected beacon's id, or null after saying there's none (an exclusive map's silence). */
+function needBeacon() {
   const id = inspectedId();
+  if (!id) setMsg("inspMsg", "No beacon is playing here. Tap one on the map first.", true);
+  return id || null;
+}
+$("regen").addEventListener("click", () => {
+  const id = needBeacon();
+  if (!id) return;
+  if (drafts.isUser(id)) {
+    const m = drafts.regenerate(id);
+    if (editorId === id) openEditor(id);
+    renderInspector();
+    return setMsg("inspMsg", m, /hand-made/.test(m));
+  }
   const s = generateSong(`${engine.field.kind}:${id}:${Date.now()}`);
   engine.setSong(id, s);
   engine.songRev = (engine.songRev || 0) + 1;
@@ -775,7 +838,8 @@ $("regen").addEventListener("click", () => {
   setMsg("inspMsg", `New song on ${beaconLabel(id)}: ${s.title}`);
 });
 $("copyJson").addEventListener("click", async () => {
-  const id = inspectedId();
+  const id = needBeacon();
+  if (!id) return;
   const text = JSON.stringify(engine.songFor(id), null, 1);
   try {
     await navigator.clipboard.writeText(text);
@@ -788,6 +852,7 @@ $("copyJson").addEventListener("click", async () => {
   }
 });
 $("editJson").addEventListener("click", () => {
+  if (!needBeacon()) return;
   $("songJson").value = JSON.stringify(engine.songFor(inspectedId()), null, 1);
   $("jsonBox").hidden = false;
 });
@@ -797,8 +862,9 @@ $("loadJson").addEventListener("click", () => {
   try { s = JSON.parse($("songJson").value); } catch (err) { return setMsg("inspMsg", "That isn't valid JSON: " + err.message, true); }
   const errs = validateSong(s);
   if (errs.length) return setMsg("inspMsg", "Song not loaded: " + errs.join("; "), true);
-  const id = inspectedId();
-  engine.setSong(id, s);
+  const id = needBeacon();
+  if (!id) return;
+  if (!drafts.setSong(id, s)) engine.setSong(id, s);
   engine.songRev = (engine.songRev || 0) + 1;
   if (editorId === id) openEditor(id);
   $("jsonBox").hidden = true;
@@ -896,9 +962,9 @@ function renderPanels() {
   // Blend rows.
   $("blend").innerHTML = st.active.map((a) => {
     const col = MOOD_COLOR[a.song.mood] || "#888";
-    const dist = ui.mode === "grid" ? `${Math.round(a.d)} m` : ui.mode === "local" ? fmtDist(a.d) : `${Math.round(a.d).toLocaleString()} km`;
+    const dist = ui.mode === "grid" ? `${Math.round(a.d)} m` : ui.mode === "local" ? fmtDist(a.d) : drafts.isUser(a.id) || a.d < 10 ? fmtDist(a.d * 1000) : `${Math.round(a.d).toLocaleString()} km`;
     return `<div class="brow${a.id === engine.harmony.id ? " harm" : ""}" data-id="${a.id}">
-      <span class="tag" style="background:${col}">${esc(ui.mode === "globe" ? a.beacon.label.split(" ")[0] : a.beacon.label)}</span>
+      <span class="tag" style="background:${col}">${esc(ui.mode === "globe" && !drafts.isUser(a.id) ? a.beacon.label.split(" ")[0] : a.beacon.label)}</span>
       <div class="name"><div>${esc(a.song.title)}</div><small>${esc(keyName(a.song.key))} · ${a.song.bpm} BPM · ${dist}</small>
         <small class="sec">${sectionLine(a.song, now)}</small>
         <div class="wbar"><i style="width:${(a.w * 100).toFixed(1)}%;background:${col}"></i></div>
@@ -942,6 +1008,7 @@ function renderPanels() {
     : `<b>${Math.abs(p.lat).toFixed(2)}°${p.lat < 0 ? "S" : "N"}</b> <b>${Math.abs(p.lon).toFixed(2)}°${p.lon < 0 ? "W" : "E"}</b>`;
   $("overlay").innerHTML = `<span>${where}</span>`;
 
+  drafts.tick();
   if (inspectorKey(inspectedId()) !== ui.inspectedShown) renderInspector();
 }
 
@@ -967,6 +1034,12 @@ function frame(now) {
 }
 
 // Start somewhere between beacons so the blend shows right away.
+drafts = initDrafts({
+  engine, input, ui, $, esc, setMsg, fmtDist, label, canvas, view, setZoom, select, inspectedId, stopFollow,
+  moodColor: (m) => MOOD_COLOR[m] || "#888888",
+  renderInspector: () => renderInspector(),
+  inspectedSong: () => { const id = needBeacon(); return id ? engine.songFor(id) : null; },
+});
 engine.setPosition({ x: -38, y: 27 });
 resize();
 renderInspector();
@@ -975,7 +1048,7 @@ requestAnimationFrame(frame);
 connectShared();
 
 // For debugging and automated checks.
-window.beaconField = { engine, ui, setMode, select, centerLocal };
+window.beaconField = { engine, ui, setMode, select, centerLocal, setZoom, get drafts() { return drafts; } };
 
 // ------------------------------------------------------------------ synths page
 
@@ -1034,7 +1107,7 @@ function formStrip(song, t, labels) {
 }
 
 /** Changes whenever the inspector should redraw: another beacon, or an edit to its song. */
-function inspectorKey(id) { return `${id}|${engine.overrides.has(id) ? `${engine.songFor(id).title}|${engine.songRev || 0}` : ""}`; }
+function inspectorKey(id) { return `${id}|${engine.overrides.has(id) || drafts.isUser(id) ? `${engine.songFor(id).title}|${engine.songRev || 0}` : ""}`; }
 
 /** The parts sounding in a song's current section, e.g. "drums, keys, texture". */
 function playing(song, p) {

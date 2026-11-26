@@ -38,6 +38,12 @@ export class BeaconEngine {
     this.anchor = { t: 0, beat: 0, bpm: 108 }; // audio time -> beats, for automation
     this.beatAt = (t) => this.anchor.beat + ((t - this.anchor.t) * this.anchor.bpm) / 60;
     this.synthMode = "kit";
+    // Optional extra layer on the globe (the user's own beacons, src/drafts.js):
+    // layer(pos, opts) -> {globeShare, entries: [{id, w, d, beacon, song}]},
+    // and layerSong(id) -> the song for one of its ids (null if not its own).
+    this.layer = null;
+    this.layerSong = null;
+    this.layerInfo = null;
     this.setField(field);
   }
 
@@ -60,6 +66,7 @@ export class BeaconEngine {
 
   songFor(beacon) {
     const id = typeof beacon === "string" ? beacon : beacon.id;
+    if (this.layerSong) { const ls = this.layerSong(id); if (ls) return ls; }
     if (this.overrides.has(id)) return this.overrides.get(id);
     let s = this.songCache.get(id);
     if (!s) {
@@ -93,6 +100,13 @@ export class BeaconEngine {
   refresh() {
     this.weights = weigh(this.field, this.pos, this.opts);
     this.active = this.weights.map((n) => ({ id: n.id, w: n.w, d: n.d, beacon: n.beacon, song: this.songFor(n.beacon) }));
+    // The globe layer and the user's beacons, crossfaded (weights still sum
+    // to 1, or less where an exclusive map leaves silence).
+    this.layerInfo = this.layer && this.field.kind === "globe" ? this.layer(this.pos, this.opts) : null;
+    if (this.layerInfo) {
+      const L = this.layerInfo;
+      this.active = [...this.active.filter(() => L.globeShare > 0).map((a) => ({ ...a, w: a.w * L.globeShare })), ...L.entries];
+    }
     this._position();
     this.mix = blend(this.active);
     if (this.harmony.id === null) this.harmony.update(this.active, 0);
@@ -237,7 +251,7 @@ export class BeaconEngine {
       const a = this.mix.roles[role].automation;
       if (a && (a["reverb.send"] || a["delay.send"] || a["chorus.mix"] || a["master.drive"] || a.drive)) this.inst[role].applyChannel(t, 0.03);
     }
-    for (const ev of stepEvents(this.active, this.mix, this.harmony, bar, s)) {
+    for (const ev of this.harmony.song ? stepEvents(this.active, this.mix, this.harmony, bar, s) : []) {
       const inst = this.inst[ev.role];
       const dur = ev.gate * stepDur * 0.95;
       if (ev.role === "drums") inst.hit(ev.voice, t, ev.vel);
