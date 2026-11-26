@@ -343,6 +343,7 @@ details summary { cursor: pointer; color: var(--muted); font-size: 13px; }
           <input type="file" id="dFile" accept=".json,application/json" hidden>
         </div>
         <label class="inline" for="dPlayMode">Where several songs share a spot, play <select id="dPlayMode"></select></label>
+        <label class="inline" for="dSharedOn" title="Beacons other people shared, read in 1° tiles around you and saved on this device for offline"><input type="checkbox" id="dSharedOn" checked> Shared map: <span id="dShared">…</span></label>
         <div class="ditems" id="dList"></div>
         <div class="msg" id="dMsg"></div>
       </section>

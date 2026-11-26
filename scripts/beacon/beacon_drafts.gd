@@ -63,6 +63,10 @@ var _song_memo := {}
 var _uid := 0
 ## Where saves go (tests point it elsewhere, or "" to not save).
 var path := PATH
+## The shared map (step 2, SharedMap): {doc: {grids, plants} from rows_to_doc,
+## song: func(id) -> song or {} (starts loading it), mine: {server id: true}}.
+## Empty for none.
+var shared := {}
 
 
 # ---------------------------------------------------------------- lattice
@@ -457,25 +461,102 @@ func pool_entries() -> Array:
 			out.append({"key": "%s/%s" % [g.id, pt.id], "source": source, "point": pt.id, "lat": pt.lat, "lon": pt.lon,
 				"rangeM": int(g.spacingM), "kind": "edited" if edited else "gen", "createdAt": float(g.createdAt), "tint": g.tint,
 				"seed": "" if edited else seed_for(g, pt.id), "north": half - i / GRID_POINTS, "east": i % GRID_POINTS - half,
-				"spacingM": int(g.spacingM), "grid": g})
+				"spacingM": int(g.spacingM), "grid": g, "own": true})
 	if doc.prefs.get("plantsOn", true):
 		var source := {"id": "plants", "name": "Planted songs", "kind": "plants", "exclusive": false}
 		for p in doc.plants:
 			var pt := parse_point(p.point)
 			out.append({"key": p.id, "source": source, "point": p.point, "lat": pt.lat, "lon": pt.lon, "rangeM": int(p.rangeM),
-				"kind": "plant", "createdAt": float(p.createdAt), "tint": PLANT_TINT, "seed": "", "plant": p})
+				"kind": "plant", "createdAt": float(p.createdAt), "tint": PLANT_TINT, "seed": "", "plant": p, "own": true})
 	for m in doc.maps:
 		if not m.on:
 			continue
 		var source := {"id": m.id, "name": m.name, "kind": "map", "exclusive": bool(m.exclusive)}
 		for b in m.beacons:
 			out.append({"key": b.id, "source": source, "point": b.id, "lat": float(b.lat), "lon": float(b.lon), "rangeM": int(b.rangeM),
-				"kind": "map", "createdAt": float(b.createdAt), "tint": m.tint, "seed": "" if b.has("song") else map_seed(b), "map_beacon": b})
+				"kind": "map", "createdAt": float(b.createdAt), "tint": m.tint, "seed": "" if b.has("song") else map_seed(b), "map_beacon": b, "own": true})
+	if not shared.is_empty() and doc.prefs.get("sharedOn", true):
+		out = _shared_entries() + out
 	return out
+
+
+## Entries for the shared map (see web/src/drafts.js sharedEntries).
+func _shared_entries() -> Array:
+	var out := []
+	var source := {"id": "shared", "name": "Shared", "kind": "shared", "exclusive": false}
+	var mine: Dictionary = shared.get("mine", {})
+	var half := (GRID_POINTS - 1) / 2
+	for g in shared.doc.grids:
+		if mine.has(g.sharedId):
+			continue
+		var pts := grid_points(g.center, int(g.spacingM))
+		for i in pts.size():
+			var pt: Dictionary = pts[i]
+			var ref: String = g.editedRefs.get(pt.id, "")
+			out.append({"key": "%s/%s" % [g.id, pt.id], "source": source, "point": pt.id, "lat": pt.lat, "lon": pt.lon,
+				"rangeM": int(g.spacingM), "kind": "edited" if ref != "" else "gen", "createdAt": float(g.createdAt), "tint": g.tint,
+				"seed": "" if ref != "" else seed_for(g, pt.id), "north": half - i / GRID_POINTS, "east": i % GRID_POINTS - half,
+				"spacingM": int(g.spacingM), "own": false, "shared": true, "sharedId": g.sharedId, "song_id": ref})
+	for p in shared.doc.plants:
+		if mine.has(p.sharedId):
+			continue
+		var pt := parse_point(p.point)
+		out.append({"key": p.id, "source": source, "point": p.point, "lat": pt.lat, "lon": pt.lon, "rangeM": int(p.rangeM),
+			"kind": "plant", "createdAt": float(p.createdAt), "tint": "#9aa7b8", "seed": "", "own": false, "shared": true,
+			"sharedId": p.sharedId, "song_id": p.songId})
+	return out
+
+
+## Server rows ({grids, plants} per tile, as SharedMap fetches them) as a
+## beacon-drafts-shaped document. Same as web/src/shared.js rowsToDoc.
+static func rows_to_doc(tiles: Array) -> Dictionary:
+	var grids := {}
+	var plants := {}
+	var gorder := []
+	var porder := []
+	for t in tiles:
+		for r in t.get("grids", []):
+			if grids.has(r.id):
+				continue
+			gorder.append(r.id)
+			grids[r.id] = {"id": "s-" + r.id, "sharedId": r.id, "name": "Shared", "shared": true, "tint": "#9aa7b8",
+				"spacingM": int(r.spacing_m), "center": r.center, "variant": int(r.get("variant", 0)), "variants": _int_values(r.get("variants", {})),
+				"editedRefs": r.get("edited", {}), "edited": {}, "createdAt": iso_ms(r.created_at), "on": true}
+		for r in t.get("plants", []):
+			if plants.has(r.id):
+				continue
+			porder.append(r.id)
+			plants[r.id] = {"id": "s-" + r.id, "sharedId": r.id, "shared": true, "point": r.point, "rangeM": int(r.range_m),
+				"songId": r.song_id, "createdAt": iso_ms(r.created_at)}
+	return {"grids": gorder.map(func(k): return grids[k]), "plants": porder.map(func(k): return plants[k])}
+
+
+static func _int_values(d: Dictionary) -> Dictionary:
+	var out := {}
+	for k in d:
+		out[k] = int(d[k])
+	return out
+
+
+## Milliseconds since 1970 for an ISO time from the server (Date.parse in JavaScript).
+static func iso_ms(s: String) -> float:
+	var base := s.substr(0, 19)
+	var sec := Time.get_unix_time_from_datetime_string(base)
+	var frac := 0.0
+	var m := RegEx.create_from_string("\\.(\\d+)").search(s.substr(19))
+	if m:
+		frac = float("0." + m.get_string(1))
+	var tz := RegEx.create_from_string("([+-])(\\d\\d):?(\\d\\d)$").search(s)
+	var off := 0
+	if tz and not s.ends_with("Z"):
+		off = (int(tz.get_string(2)) * 3600 + int(tz.get_string(3)) * 60) * (1 if tz.get_string(1) == "+" else -1)
+	return floorf((sec - off + frac) * 1000.0 + 0.5)
 
 
 ## An entry's song: generated from its seed (cached), or its stored one.
 func song_of(e: Dictionary) -> Dictionary:
+	if e.get("song_id", "") != "":
+		return shared.song.call(e.song_id) if not shared.is_empty() else {}
 	match e.kind:
 		"plant":
 			return e.plant.song
@@ -530,6 +611,10 @@ static func pick_at_point(entries: Array, mode: String, favorites: Dictionary, d
 		for e in list:
 			if e.key == want:
 				return e
+	if mode == "owned":
+		var own := list.filter(func(e): return e.get("own", true))
+		if not own.is_empty():
+			return own[own.size() - 1]
 	return list[list.size() - 1]
 
 
@@ -609,6 +694,9 @@ func user_layer(lat: float, lon: float, active := 3, sharpness := 1.5) -> Dictio
 	var u := 0.0
 	for e in near(lat, lon):
 		var d := meters(lat, lon, e.lat, e.lon)
+		# A shared song still on its way doesn't play yet (asking for it starts the download).
+		if e.get("song_id", "") != "" and d < e.rangeM * 1.5 and song_of(e).is_empty():
+			continue
 		var f := reach(d, e.rangeM)
 		if f <= 0.0:
 			continue

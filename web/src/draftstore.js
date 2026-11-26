@@ -6,21 +6,25 @@
 import { emptyDoc, normalizeDoc, validateDoc } from "./drafts.js";
 
 const DB = "music-beacon-xr", STORE = "drafts", KEY = "doc", LS_KEY = "beacon.drafts";
+// Version 2 adds the shared map's cache: tiles and songs (src/shared.js).
+const TILES = "tiles", SONGS = "songs";
 
 function openDb() {
   return new Promise((resolve, reject) => {
     if (typeof indexedDB === "undefined") return reject(new Error("no IndexedDB"));
-    const req = indexedDB.open(DB, 1);
-    req.onupgradeneeded = () => req.result.createObjectStore(STORE);
+    const req = indexedDB.open(DB, 2);
+    req.onupgradeneeded = () => {
+      for (const name of [STORE, TILES, SONGS]) if (!req.result.objectStoreNames.contains(name)) req.result.createObjectStore(name);
+    };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
   });
 }
 
-function idb(db, mode, fn) {
+function idb(db, mode, fn, store = STORE) {
   return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE, mode);
-    const req = fn(tx.objectStore(STORE));
+    const tx = db.transaction(store, mode);
+    const req = fn(tx.objectStore(store));
     tx.oncomplete = () => resolve(req?.result);
     tx.onerror = () => reject(tx.error);
     tx.onabort = () => reject(tx.error);
@@ -69,5 +73,19 @@ export class DraftStore {
       try { await idb(this.db, "readwrite", (s) => s.put(copy, KEY)); return true; } catch { /* fall through */ }
     }
     try { localStorage.setItem(LS_KEY, JSON.stringify(copy)); this.where = "localstorage"; return true; } catch { this.where = "memory"; return false; }
+  }
+
+  /**
+   * The shared map's device cache (src/shared.js expects getTile, putTile,
+   * getSong, putSong). Without IndexedDB it keeps nothing between visits.
+   */
+  tileCache() {
+    const mem = { t: new Map(), s: new Map() };
+    const get = (store, k, m) => this.db ? idb(this.db, "readonly", (s) => s.get(k), store).then((v) => v ?? null) : Promise.resolve(m.get(k) ?? null);
+    const put = (store, k, v, m) => this.db ? idb(this.db, "readwrite", (s) => s.put(v, k), store) : Promise.resolve(void m.set(k, v));
+    return {
+      getTile: (k) => get(TILES, k, mem.t), putTile: (k, v) => put(TILES, k, v, mem.t),
+      getSong: (id) => get(SONGS, id, mem.s), putSong: (id, v) => put(SONGS, id, v, mem.s),
+    };
   }
 }

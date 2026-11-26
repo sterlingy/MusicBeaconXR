@@ -17,6 +17,12 @@ const UID := "u:"
 
 var drafts: BeaconDrafts
 var player: BeaconPlayer
+## Other people's beacons, by 1 degree tile (step 2).
+var shared_map: SharedMap
+var _shared_at := -1e9
+var _shared_pos := Vector2(INF, INF)
+var _shared_label: Label
+var _shared_on: CheckBox
 var geo: GeoLocation
 ## The latest location fix {lat, lon, accuracy, at}; dev: --fakegps=lat,lon[,accuracy].
 var fix := {}
@@ -62,6 +68,9 @@ func _ready() -> void:
 		if _wanted != "":
 			_say("Couldn't get your location: %s. Beacons can only be made where you are." % reason, true)
 			_wanted = "")
+	shared_map = SharedMap.new()
+	add_child(shared_map)
+	shared_map.changed.connect(func(): _rebuild(false))
 	player.layer = _layer
 	_build()
 	_render_list()
@@ -82,6 +91,8 @@ func _layer(pos: Vector2) -> Dictionary:
 
 
 func label_of(e: Dictionary) -> String:
+	if e.get("shared", false):
+		return "Shared song" if e.kind == "plant" else "Shared grid"
 	match e.kind:
 		"plant":
 			return "Planted"
@@ -98,7 +109,17 @@ func label_of(e: Dictionary) -> String:
 
 
 func _changed() -> void:
-	drafts.changed()
+	_rebuild(true)
+
+
+## Rebuilds the pool from your drafts and the shared map, and the music with it.
+func _rebuild(save: bool) -> void:
+	var mine := {}
+	for x in drafts.doc.grids + drafts.doc.plants + drafts.doc.maps:
+		if x.has("sharedId"):
+			mine[x.sharedId] = true
+	drafts.shared = {"doc": shared_map.doc(), "song": shared_map.song, "mine": mine}
+	drafts.changed(save)
 	_offer_key = "x"
 	player.set_position(player.pos)
 	_render_list()
@@ -263,6 +284,17 @@ func _act(action: String, id: String) -> void:
 
 func _process(_delta: float) -> void:
 	_fit()
+	# The shared map: the tiles around you, every minute and soon after you move.
+	var p := player.pos
+	var now := Time.get_ticks_msec()
+	if drafts.doc.prefs.get("sharedOn", true) and (now - _shared_at > 60000.0 or absf(p.x - _shared_pos.x) > 0.05 or absf(p.y - _shared_pos.y) > 0.05):
+		_shared_at = now
+		_shared_pos = p
+		shared_map.update(p.y, p.x)
+	var ss := shared_map.stats()
+	_shared_label.text = "Shared map: off" if not drafts.doc.prefs.get("sharedOn", true) else \
+		("Shared map: can't reach it; your beacons and the globe still play" if ss.offline and ss.tiles == 0 else \
+		"Shared map: %d grids, %d songs nearby%s" % [ss.grids, ss.plants, " · offline, playing what's saved" if ss.offline else ""])
 	var names: Array = drafts.pool.exclusive.map(func(x): return x.name)
 	var line := BeaconDrafts.status_line(shares, names) if not shares.is_empty() else "Global 100%"
 	_status.text = line
@@ -382,6 +414,15 @@ func _build() -> void:
 	mode_row.add_child(_mode)
 	v.add_child(mode_row)
 
+	_shared_on = CheckBox.new()
+	_shared_on.text = "Play the shared map (other people's beacons)"
+	_shared_on.focus_mode = Control.FOCUS_NONE
+	_shared_on.button_pressed = drafts.doc.prefs.get("sharedOn", true)
+	_shared_on.toggled.connect(func(t): drafts.doc.prefs.sharedOn = t; _changed())
+	v.add_child(_shared_on)
+	_shared_label = menu._small("Shared map: …")
+	v.add_child(_shared_label)
+
 	var scroll := ScrollContainer.new()
 	scroll.custom_minimum_size = Vector2(0, 220)
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
@@ -461,6 +502,9 @@ func _regen_here() -> void:
 		_say("None of your beacons is playing here.", true)
 		return
 	var e: Dictionary = a.beacon.entry
+	if e.get("shared", false):
+		_say("That's a shared beacon: it belongs to whoever made it. Plant your own song instead.", true)
+		return
 	match e.kind:
 		"plant":
 			_say("A planted song is hand-made: it has no generated song.", true)

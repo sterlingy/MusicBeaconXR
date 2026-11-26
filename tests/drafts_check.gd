@@ -1,7 +1,8 @@
 extends SceneTree
 ## The app's beacon drafts (BeaconDrafts) must agree with the website's
 ## (web/src/drafts.js): lattice ids, the lower-48 outline, grid points, seeds,
-## play modes, the user layer's weights and the status line.
+## play modes, the user layer's weights and the status line, and the shared
+## map's tiles and how shared beacons blend in (step 2).
 ## Fixture: tests/fixtures/drafts.json (node web/tools/export_drafts.mjs).
 ##   godot --headless --path . -s res://tests/drafts_check.gd
 
@@ -44,14 +45,31 @@ func _init() -> void:
 	for i in fx.mapSeeds.size():
 		check(BeaconDrafts.map_seed(d.doc.maps[0].beacons[i]) == fx.mapSeeds[i], "map seed %d" % i)
 
+	for t in fx.tiles.keys:
+		check(SharedMap.tile_key(t.lat, t.lon) == t.key, "tile key %s,%s" % [t.lat, t.lon])
+		var around := SharedMap.tiles_around(t.lat, t.lon)
+		around.sort()
+		var want_around: Array = t.around.duplicate()
+		want_around.sort()
+		check(around == want_around, "tiles around %s,%s: %s vs %s" % [t.lat, t.lon, around, want_around])
+	for tg in fx.tiles.grids:
+		var g: Dictionary = d.doc.grids.filter(func(x): return x.id == tg.id)[0]
+		check(SharedMap.tiles_for_grid(g) == tg.tiles, "tiles for %s: %s vs %s" % [tg.id, SharedMap.tiles_for_grid(g), tg.tiles])
+	var shared_doc := BeaconDrafts.rows_to_doc([fx.sharedRows])
+	check(shared_doc.grids.size() == 1 and shared_doc.plants.size() == 2 and shared_doc.grids[0].createdAt == 1795168800000.0,
+		"rows to doc (%s)" % (shared_doc.grids[0].createdAt if not shared_doc.grids.is_empty() else "none"))
+
 	for case in fx.modes:
 		var dd := BeaconDrafts.new()
 		dd.path = ""
 		dd.doc = BeaconDrafts.normalize_doc(fx.doc)
 		dd.doc.prefs.playMode = case.mode
 		dd.doc.maps[0].exclusive = case.exclusive
+		if case.get("withShared", false):
+			var songs: Dictionary = fx.sharedSongs
+			dd.shared = {"doc": shared_doc, "song": func(id): return songs.get(id, {}), "mine": {}}
 		dd.changed(false, int(fx.day))
-		var name := "%s%s" % [case.mode, " exclusive" if case.exclusive else ""]
+		var name := "%s%s%s" % [case.mode, " exclusive" if case.exclusive else "", " shared" if case.get("withShared", false) else ""]
 		var playing: Array = dd.pool.playing.map(func(e): return e.key)
 		playing.sort()
 		check(playing == case.playing, "%s: playing (%d vs %d)" % [name, playing.size(), case.playing.size()])

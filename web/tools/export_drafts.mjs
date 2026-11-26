@@ -9,6 +9,7 @@ import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import * as D from "../src/drafts.js";
 import { generateSong } from "../src/song.js";
+import { rowsToDoc, tileKey, tilesAround, tilesForGrid } from "../src/shared.js";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 
@@ -36,6 +37,18 @@ doc.maps.push({ id: "map-1", name: "Lakeside walk", number: 3, tint: D.TINTS[2],
 doc.prefs.favorites[spot] = "plant-1";
 doc.nextNumber = 4;
 
+// The shared map (step 2): rows as the server returns them, one grid that
+// overlaps grid A, a shared song at the shared spot, one far away.
+const sharedRows = {
+  grids: [{ id: "srv-grid-1", center: D.gridCenterFor({ lat: 30.25, lon: -97.72 }, 500), spacing_m: 500, variant: 1, variants: {}, edited: { [D.gridPoints(D.gridCenterFor({ lat: 30.25, lon: -97.72 }, 500), 500)[100].id]: "song-b" }, created_at: "2026-11-20T10:00:00Z" }],
+  plants: [
+    { id: "srv-plant-1", point: spot, range_m: 900, song_id: "song-a", created_at: "2026-11-21T10:00:00Z" },
+    { id: "srv-plant-2", point: D.snapPoint({ lat: 30.33, lon: -97.80 }).id, range_m: 2000, song_id: "song-missing", created_at: "2026-11-22T10:00:00Z" },
+  ],
+};
+const sharedSongs = { "song-a": generateSong("fixture:shared-a"), "song-b": generateSong("fixture:shared-b") };
+const sharedDoc = rowsToDoc([sharedRows]);
+
 const DAY = 20500;
 const c = D.parsePoint(doc.grids[0].center);
 const pts = [];
@@ -45,13 +58,14 @@ for (let i = 0; i < 40; i++) {
 }
 pts.push({ lat: c.lat, lon: c.lon }, { lat: 30.31, lon: -97.76 }, { lat: 30.3115, lon: -97.759 });
 
-function answers(mode, exclusive = false) {
+function answers(mode, exclusive = false, withShared = false) {
   const d = JSON.parse(JSON.stringify(doc));
   d.prefs.playMode = mode;
   d.maps[0].exclusive = exclusive;
-  const pool = D.buildPool(D.normalizeDoc(d), { day: DAY });
+  const shared = withShared ? { doc: sharedDoc, song: (id) => sharedSongs[id] || null, mine: new Set() } : null;
+  const pool = D.buildPool(D.normalizeDoc(d), { day: DAY, shared });
   return {
-    mode, exclusive,
+    mode, exclusive, withShared,
     playing: pool.playing.map((e) => e.key).sort(),
     atSpot: pool.playing.find((e) => e.point === spot)?.key ?? null,
     layers: pts.map((p) => {
@@ -72,7 +86,12 @@ const out = {
   gridPoints: doc.grids.map((g) => ({ id: g.id, points: D.gridPoints(g.center, g.spacingM).filter((_, i) => i % 37 === 0 || i === 440).map((p) => p.id) })),
   seeds: [[0, b[0].id], [1, D.gridPoints(doc.grids[1].center, 200)[5].id], [1, D.gridPoints(doc.grids[1].center, 200)[6].id]].map(([gi, pt]) => ({ grid: doc.grids[gi].id, point: pt, seed: D.seedFor(doc.grids[gi], pt) })),
   mapSeeds: doc.maps[0].beacons.map((x) => D.mapSeed(x)),
-  modes: [...D.PLAY_MODES.map((m) => answers(m)), answers("latest", true)],
+  modes: [...D.PLAY_MODES.map((m) => answers(m)), answers("latest", true), ...["owned", "latest", "random"].map((m) => answers(m, false, true))],
+  sharedRows, sharedSongs,
+  tiles: {
+    keys: [[30.27, -97.74], [-0.5, 0.5], [10.5, 179.7], [-33.9, 151.2]].map(([lat, lon]) => ({ lat, lon, key: tileKey(lat, lon), around: tilesAround({ lat, lon }) })),
+    grids: doc.grids.map((g) => ({ id: g.id, tiles: tilesForGrid(g) })),
+  },
   offers,
   reach: [0, 100, 740, 750, 800, 900, 999, 1000, 1200].map((d) => [d, D.reach(d, 1000)]),
 };

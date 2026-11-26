@@ -39,6 +39,7 @@ Step 1 of the beacon database ([docs/beacon-database-plan.md](../docs/beacon-dat
 - **How it sounds:** your beacons blend nearest-3 among those whose range reaches you, at full strength out to 75% of their range, easing to nothing at the edge, while the globe fades in. The line under **Now playing** shows the sources and their shares, for example `User 70% · Global 30%`, `Lakeside walk 60% · User 25% · Global 15%`, or `Lakeside walk (exclusive) · outside`.
 - **Testing without walking:** on `serve.py` only, `?fakegps=30.2672,-97.7431` (optionally `,accuracy`) stands in for your location.
 - Code: `src/drafts.js` (the rules and the format, no DOM; tests in `web/tests/drafts.test.mjs`), `src/draftstore.js` (IndexedDB), `src/draftsui.js` (panel, map, inspector).
+- **Shared map** (step 2): beacons other people shared play too, read from the Supabase project in 1° tiles around you (the 3 × 3 tiles around the listener, checked every minute and soon after you move), and saved on this device so they still play offline. A shared song's body loads only when you come within 1.5 times its range. Shared beacons blend with yours as "User" in the status line, draw in grey, and can't be edited or removed; "Mine" prefers your own songs at a shared spot. **Shared map** in the panel shows what's nearby and turns it off. Code: `src/shared.js` (tiles, fetcher, cache rules; tests in `web/tests/shared.test.mjs`), `src/config.js` (the public address and key). The server side is in [supabase/](../supabase/README.md).
 
 ## AR and VR page
 

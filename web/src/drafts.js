@@ -375,8 +375,9 @@ export function mergeDoc(doc, other, now = Date.now()) {
  * {id, name, kind: "grid" | "plants" | "map", exclusive}. Map beacons aren't
  * on the lattice, so their `point` is their own key.
  */
-export function poolEntries(doc) {
+export function poolEntries(doc, shared = null) {
   const out = [];
+  if (shared) out.push(...sharedEntries(shared));
   for (const g of doc.grids) {
     if (!g.on) continue;
     const source = { id: g.id, name: g.name, kind: "grid" };
@@ -386,7 +387,7 @@ export function poolEntries(doc) {
       const seed = edited ? null : seedFor(g, pt.id);
       out.push({
         key: `${g.id}/${pt.id}`, source, point: pt.id, pos: { lat: pt.lat, lon: pt.lon }, rangeM: g.spacingM,
-        kind: edited ? "edited" : "gen", createdAt: g.createdAt, tint: g.tint, seed,
+        kind: edited ? "edited" : "gen", createdAt: g.createdAt, tint: g.tint, seed, own: true,
         // Spacings north and east of the grid's center, for labels.
         north: half - Math.floor(i / GRID_POINTS), east: (i % GRID_POINTS) - half, spacingM: g.spacingM,
         song: edited ? () => g.edited[pt.id] : cachedSong(seed),
@@ -397,7 +398,7 @@ export function poolEntries(doc) {
     const source = { id: "plants", name: "Planted songs", kind: "plants" };
     for (const p of doc.plants || []) {
       const pt = parsePoint(p.point);
-      out.push({ key: p.id, source, point: p.point, pos: { lat: pt.lat, lon: pt.lon }, rangeM: p.rangeM, kind: "plant", createdAt: p.createdAt, tint: PLANT_TINT, seed: null, plant: p, song: () => p.song });
+      out.push({ key: p.id, source, point: p.point, pos: { lat: pt.lat, lon: pt.lon }, rangeM: p.rangeM, kind: "plant", createdAt: p.createdAt, tint: PLANT_TINT, seed: null, own: true, plant: p, song: () => p.song });
     }
   }
   for (const m of doc.maps || []) {
@@ -407,9 +408,44 @@ export function poolEntries(doc) {
       const seed = b.song ? null : mapSeed(b);
       out.push({
         key: b.id, source, point: b.id, pos: { lat: b.lat, lon: b.lon }, rangeM: b.rangeM, kind: "map", createdAt: b.createdAt,
-        tint: m.tint, seed, mapBeacon: b, song: b.song ? () => b.song : cachedSong(seed),
+        tint: m.tint, seed, own: true, mapBeacon: b, song: b.song ? () => b.song : cachedSong(seed),
       });
     }
+  }
+  return out;
+}
+
+/**
+ * Entries for the shared map (step 2): `shared` is {doc: {grids, plants} from
+ * shared.js, song(id) -> body or null, mine: Set of server ids that are this
+ * device's own submissions (they play as the device's own drafts instead)}.
+ * Songs stored on the server load when needed: until then an entry is
+ * `pending` and doesn't play.
+ */
+function sharedEntries({ doc, song, mine = new Set() }) {
+  const out = [];
+  const source = { id: "shared", name: "Shared", kind: "shared" };
+  const half = (GRID_POINTS - 1) / 2;
+  for (const g of doc.grids || []) {
+    if (mine.has(g.sharedId)) continue;
+    gridPoints(g.center, g.spacingM).forEach((pt, i) => {
+      const ref = g.editedRefs?.[pt.id];
+      const seed = ref ? null : seedFor(g, pt.id);
+      out.push({
+        key: `${g.id}/${pt.id}`, source, point: pt.id, pos: { lat: pt.lat, lon: pt.lon }, rangeM: g.spacingM,
+        kind: ref ? "edited" : "gen", createdAt: g.createdAt, tint: g.tint, seed, own: false, shared: true, sharedId: g.sharedId,
+        north: half - Math.floor(i / GRID_POINTS), east: (i % GRID_POINTS) - half, spacingM: g.spacingM,
+        songId: ref || null, song: ref ? () => song(ref) : cachedSong(seed),
+      });
+    });
+  }
+  for (const p of doc.plants || []) {
+    if (mine.has(p.sharedId)) continue;
+    const pt = parsePoint(p.point);
+    out.push({
+      key: p.id, source, point: p.point, pos: { lat: pt.lat, lon: pt.lon }, rangeM: p.rangeM, kind: "plant", createdAt: p.createdAt,
+      tint: "#9aa7b8", seed: null, own: false, shared: true, sharedId: p.sharedId, songId: p.songId, song: () => song(p.songId),
+    });
   }
   return out;
 }
@@ -451,9 +487,9 @@ export function songsAtPoint(entries) {
 /**
  * Which of the songs at one point plays, by the listener's play mode:
  * random (rotates daily, the same for everyone there), favorite (the
- * listener's own; with none set, the latest), owned (the listener's own; on
- * this device that's all of them, so the latest), original (the first one),
- * latest (the newest).
+ * listener's own; with none set, the latest), owned (the newest of the
+ * listener's own; none there, the latest), original (the first one), latest
+ * (the newest).
  */
 export function pickAtPoint(entries, mode, favorites = {}, day = dayNumber()) {
   const list = songsAtPoint(entries);
@@ -463,6 +499,10 @@ export function pickAtPoint(entries, mode, favorites = {}, day = dayNumber()) {
   if (mode === "favorite") {
     const fav = list.find((e) => e.key === favorites[list[0].point]);
     if (fav) return fav;
+  }
+  if (mode === "owned") {
+    const own = list.filter((e) => e.own !== false);
+    if (own.length) return own[own.length - 1];
   }
   return list[list.length - 1];
 }
@@ -495,8 +535,8 @@ export function reach(d, r) {
  * mode or the favorites change. With an exclusive map on, only exclusive
  * maps' beacons are in it.
  */
-export function buildPool(doc, { day = dayNumber() } = {}) {
-  let entries = poolEntries(doc);
+export function buildPool(doc, { day = dayNumber(), shared = null } = {}) {
+  let entries = poolEntries(doc, doc.prefs?.sharedOn === false ? null : shared);
   const exclusive = [...new Map(entries.filter((e) => e.source.exclusive).map((e) => [e.source.id, e.source])).values()];
   // An exclusive map with no beacons yet still silences everything else.
   for (const m of doc.maps || []) if (m.on && m.exclusive && !exclusive.some((s) => s.id === m.id)) exclusive.push({ id: m.id, name: m.name, kind: "map", exclusive: true });
@@ -550,6 +590,9 @@ export function userLayer(pool, pos, { active = 3, sharpness = 1.5 } = {}) {
   let u = 0;
   for (const e of pool.near(pos)) {
     const d = meters(pos, e.pos);
+    // A shared song still on its way doesn't play yet (song() starts loading it
+    // when the listener is within 1.5 ranges, so it's usually here by the edge).
+    if (e.songId && d < e.rangeM * 1.5 && !e.song()) continue;
     const f = reach(d, e.rangeM);
     if (f <= 0) continue;
     if (f > u) u = f;

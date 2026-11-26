@@ -5,8 +5,12 @@
 
 import * as D from "./drafts.js";
 import { DraftStore } from "./draftstore.js";
+import { SharedMap, supabaseFetcher } from "./shared.js";
+import { SUPABASE_URL, SUPABASE_KEY } from "./config.js";
 
 const KIND_LABEL = { gen: "generated", edited: "edited", plant: "planted song", map: "map beacon" };
+/** How often the shared map checks the tiles around you, and how far you move before it checks sooner. */
+const SHARED_EVERY_MS = 60000, SHARED_MOVE_DEG = 0.05;
 const UID = "u:"; // engine ids of user beacons: "u:" + pool entry key
 
 /**
@@ -28,7 +32,13 @@ export function initDrafts(ctx) {
     offer: null,
     offerKey: "",
     ready: false,
+    shared: null, // the shared map (step 2): other people's beacons, by 1 degree tile
+    sharedAt: 0,
+    sharedPos: null,
   };
+  st.shared = new SharedMap({ fetcher: supabaseFetcher({ url: SUPABASE_URL, key: SUPABASE_KEY }), cache: store.tileCache() });
+  let songTimer = 0;
+  st.shared.onSong = () => { clearTimeout(songTimer); songTimer = setTimeout(() => changed({ save: false }), 150); };
   const msg = (t, err = false) => setMsg("dMsg", t, err);
   const isUser = (id) => typeof id === "string" && id.startsWith(UID);
   const entryOf = (id) => (isUser(id) ? st.byKey.get(id.slice(UID.length)) : null);
@@ -45,19 +55,32 @@ export function initDrafts(ctx) {
   }
 
   function labelOf(e) {
+    if (e.shared) return e.kind === "plant" ? "Shared song" : `Shared grid · ${gridOffset(e)}`;
     if (e.kind === "plant") return `Planted · ${e.song().title}`;
     if (e.kind === "map") {
       const m = st.doc.maps.find((x) => x.id === e.source.id);
       return `${e.source.name} #${(m?.beacons.findIndex((b) => b.id === e.key) ?? -1) + 1}`;
     }
-    const km = (n) => +((Math.abs(n) * e.spacingM) / 1000).toFixed(1);
-    const off = [e.north ? `${km(e.north)}${e.north > 0 ? "N" : "S"}` : "", e.east ? `${km(e.east)}${e.east > 0 ? "E" : "W"}` : ""].filter(Boolean).join(" ");
-    return `${e.source.name} · ${off || "center"}`;
+    return `${e.source.name} · ${gridOffset(e)}`;
   }
 
+  function gridOffset(e) {
+    const km = (n) => +((Math.abs(n) * e.spacingM) / 1000).toFixed(1);
+    return [e.north ? `${km(e.north)}${e.north > 0 ? "N" : "S"}` : "", e.east ? `${km(e.east)}${e.east > 0 ? "E" : "W"}` : ""].filter(Boolean).join(" ") || "center";
+  }
+
+  const SHARED_NO = "Shared beacons belong to whoever made them, so they can't be changed here. Plant your own song instead.";
+
   /** Rebuilds the pool after any change, saves, and redraws. */
+  /** Server ids of this device's own submissions: they play as its drafts, not twice. */
+  function mySharedIds() {
+    const ids = new Set();
+    for (const x of [...st.doc.grids, ...st.doc.plants, ...st.doc.maps]) if (x.sharedId) ids.add(x.sharedId);
+    return ids;
+  }
+
   function changed({ save = true } = {}) {
-    st.pool = D.buildPool(st.doc);
+    st.pool = D.buildPool(st.doc, { shared: { doc: st.shared.doc(), song: (id) => st.shared.song(id), mine: mySharedIds() } });
     st.byKey = new Map(st.pool.entries.map((e) => [e.key, e]));
     st.beacons.clear();
     if (save) store.save(st.doc);
@@ -240,6 +263,7 @@ export function initDrafts(ctx) {
   function setSong(id, song) {
     const e = entryOf(id);
     if (!e) return false;
+    if (e.shared) { msg(SHARED_NO, true); return true; }
     const copy = JSON.parse(JSON.stringify(song));
     if (e.kind === "plant") e.plant.song = copy;
     else if (e.kind === "map") e.mapBeacon.song = copy;
@@ -252,6 +276,7 @@ export function initDrafts(ctx) {
   function regenerate(id) {
     const e = entryOf(id);
     if (!e) return null;
+    if (e.shared) return SHARED_NO.replace("so they", "so their songs");
     if (e.kind === "plant") return "A planted song is hand-made, so it has no generated song. Edit it, or remove it.";
     if (e.kind === "map") { delete e.mapBeacon.song; e.mapBeacon.variant = (e.mapBeacon.variant || 0) + 1; }
     else D.regenerateOne(st.doc.grids.find((g) => g.id === e.source.id), e.point);
@@ -261,7 +286,7 @@ export function initDrafts(ctx) {
 
   function removeBeacon(id) {
     const e = entryOf(id);
-    if (!e || (e.kind !== "plant" && e.kind !== "map")) return;
+    if (!e || e.shared || (e.kind !== "plant" && e.kind !== "map")) return;
     if (!confirm(`Remove "${e.song().title}" (${labelOf(e)}) from this device?`)) return;
     if (e.kind === "plant") st.doc.plants = st.doc.plants.filter((p) => p !== e.plant);
     else { const m = st.doc.maps.find((x) => x.id === e.source.id); m.beacons = m.beacons.filter((b) => b !== e.mapBeacon); }
@@ -280,7 +305,7 @@ export function initDrafts(ctx) {
 
   function setRange(id, m) {
     const e = entryOf(id);
-    if (!e) return;
+    if (!e || e.shared) return;
     const r = D.clampRange(m);
     if (e.kind === "plant") e.plant.rangeM = r;
     else if (e.kind === "map") e.mapBeacon.rangeM = r;
@@ -298,8 +323,8 @@ export function initDrafts(ctx) {
     const isFav = favKey === e.key;
     const favs = Object.values(st.doc.prefs.favorites).filter((k) => k === e.key).length;
     const rows = at.length > 1 ? `<div class="dspot"><small>${at.length} songs at this spot · playing by <b>${esc(D.PLAY_MODE_LABEL[st.doc.prefs.playMode])}</b></small>${at.map((x) =>
-      `<button class="etab" data-insp="${esc(UID + x.key)}" aria-pressed="${x.key === e.key}">${x.key === playing?.key ? "▶ " : ""}${esc(x.song().title)}${favKey === x.key ? " ★" : ""} <small>${esc(KIND_LABEL[x.kind])}</small></button>`).join("")}</div>` : "";
-    const ranged = e.kind === "plant" || e.kind === "map";
+      `<button class="etab" data-insp="${esc(UID + x.key)}" aria-pressed="${x.key === e.key}">${x.key === playing?.key ? "▶ " : ""}${esc(x.song()?.title || "loading…")}${x.shared ? " · shared" : ""}${favKey === x.key ? " ★" : ""} <small>${esc(KIND_LABEL[x.kind])}</small></button>`).join("")}</div>` : "";
+    const ranged = !e.shared && (e.kind === "plant" || e.kind === "map");
     return `<div class="chips">
         <span class="chip" style="border-color:${e.tint}"><b>${esc(e.source.name)}</b></span>
         <span class="chip">${esc(KIND_LABEL[e.kind])}</span>
@@ -359,6 +384,16 @@ export function initDrafts(ctx) {
     const all = [...grids, ...maps, ...plants];
     $("dList").innerHTML = all.length ? all.join("") : `<p class="hint">Nothing yet. Generate a grid or plant a song where you are, or start a custom map.</p>`;
     $("dWhere").textContent = store.where === "memory" ? "not saved: this browser blocks storage" : "on this device";
+    $("dSharedOn").checked = st.doc.prefs.sharedOn !== false;
+    renderShared();
+  }
+
+  function renderShared() {
+    const s = st.shared.stats();
+    const when = s.updated ? new Date(s.updated).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "";
+    $("dShared").textContent = st.doc.prefs.sharedOn === false ? "off"
+      : s.offline && !s.tiles ? "can't reach the shared map; your own beacons and the globe still play"
+      : `${s.grids} grid${s.grids === 1 ? "" : "s"} and ${s.plants} song${s.plants === 1 ? "" : "s"} nearby${when ? ` · checked ${when}` : ""}${s.offline ? " · offline, playing what's saved" : ""}`;
   }
 
   $("dList").addEventListener("click", (ev) => {
@@ -399,6 +434,7 @@ export function initDrafts(ctx) {
     $("dPlayMode").append(o);
   }
   $("dPlayMode").addEventListener("change", (e) => { st.doc.prefs.playMode = e.target.value; changed(); });
+  $("dSharedOn").addEventListener("change", (e) => { st.doc.prefs.sharedOn = e.target.checked; changed(); });
   $("dRange").value = D.PLANT_RANGE_M;
   $("dRange").min = D.MIN_RANGE_M;
   $("dRange").max = D.MAX_RANGE_M;
@@ -414,6 +450,13 @@ export function initDrafts(ctx) {
   /** Called with the panels: the status line and the "generate more" offer. */
   function tick() {
     if (!st.pool || ui.mode !== "globe") return;
+    // The shared map: the tiles around you, now and then, and soon after you move.
+    const p = engine.pos, sp = st.sharedPos;
+    if (st.doc.prefs.sharedOn !== false && (!sp || Date.now() - st.sharedAt > SHARED_EVERY_MS || Math.abs(p.lat - sp.lat) > SHARED_MOVE_DEG || Math.abs(p.lon - sp.lon) > SHARED_MOVE_DEG)) {
+      st.sharedAt = Date.now();
+      st.sharedPos = { ...p };
+      st.shared.update(p).then((ch) => { if (ch) changed({ save: false }); else renderShared(); });
+    }
     const names = st.pool.exclusive.map((x) => x.name);
     const line = D.statusLine(st.shares || { globeShare: 1, status: [], exclusive: names.length > 0 }, names);
     if ($("sources").textContent !== line) $("sources").textContent = line;
@@ -438,8 +481,8 @@ export function initDrafts(ctx) {
     const close = ui.zoom === "close";
     const pxPerM = close ? v.scale / (D.M_PER_DEG * Math.cos((v.center.lat * Math.PI) / 180)) : 0;
     const on = (x, y, m = 30) => x > -m && y > -m && x < W + m && y < H + m;
-    // Grid outlines.
-    for (const grid of st.doc.grids) {
+    // Grid outlines (yours, then shared ones, fainter).
+    for (const grid of [...st.doc.grids, ...(st.doc.prefs.sharedOn === false ? [] : st.shared.doc().grids.filter((x) => !mySharedIds().has(x.sharedId)))]) {
       const pts = D.gridOutline(grid).map((p) => v.toScreen(p));
       if (pts.some(([x], i) => i && Math.abs(x - pts[0][0]) > W * 0.75)) continue;
       g.strokeStyle = grid.tint;
@@ -453,7 +496,7 @@ export function initDrafts(ctx) {
       g.setLineDash([]);
       g.globalAlpha = 1;
       const [lx, ly] = pts[0];
-      if (on(lx, ly)) ctx.label(grid.name, lx + 4 * d, ly - 8 * d, 10 * d, grid.tint, C.field, 1, "left");
+      if (on(lx, ly) && !grid.shared) ctx.label(grid.name, lx + 4 * d, ly - 8 * d, 10 * d, grid.tint, C.field, 1, "left");
     }
     const activeW = new Map(engine.active.filter((a) => isUser(a.id)).map((a) => [a.id, a.w]));
     const sel = ui.selected;
@@ -467,7 +510,8 @@ export function initDrafts(ctx) {
       if (gap < 5 && !w && !isSel) continue;
       const special = e.kind !== "gen";
       const r = (special ? 4.5 : Math.max(1.8, Math.min(5, gap / 10))) * d * (1 + 0.35 * w);
-      g.fillStyle = ctx.moodColor(e.song().mood);
+      const song = e.song();
+      g.fillStyle = song ? ctx.moodColor(song.mood) : C.muted;
       g.globalAlpha = w > 0 ? 1 : 0.8;
       g.beginPath();
       if (special) { g.moveTo(x, y - r * 1.25); g.lineTo(x + r * 1.25, y); g.lineTo(x, y + r * 1.25); g.lineTo(x - r * 1.25, y); g.closePath(); }
@@ -500,6 +544,7 @@ export function initDrafts(ctx) {
     if (!st.pool || ui.mode !== "globe") return null;
     let best = null, bd = maxPx;
     for (const e of st.pool.playing) {
+      if (e.songId && !e.song()) continue;
       const [bx, by] = v.toScreen(e.pos);
       const dd = Math.hypot(bx - x, by - y) - (e.kind === "gen" ? 0 : 3);
       if (dd < bd) { bd = dd; best = e; }
