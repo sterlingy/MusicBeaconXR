@@ -69,6 +69,7 @@ func _ready() -> void:
 	menu = FieldMenu.new(kind)
 	add_child(menu)
 	_build_input()
+	_build_walks()
 	if kind == "grid":
 		_build_beacons()
 		input.jump_to(Vector2(-38, 27))
@@ -396,6 +397,7 @@ func _update_world(delta: float) -> void:
 		ground.position = snap
 		grid_lines.position = snap
 	_draw_lines()
+	_draw_trail()
 	_update_beacons(delta)
 	hud.help_text = help_text()
 
@@ -475,3 +477,51 @@ func _parse_args() -> void:
 			input.wander = true
 		elif a == "--menu":
 			menu.set_open(true)
+
+
+# ---------------------------------------------------------------- walks: trail
+
+var walks: BeaconWalks
+var trail_mesh: MeshInstance3D
+
+
+func _build_walks() -> void:
+	walks = BeaconWalks.new()
+	walks.player = player
+	walks.input = input
+	add_child(walks)
+	trail_mesh = MeshInstance3D.new()
+	trail_mesh.mesh = ImmediateMesh.new()
+	var m := StandardMaterial3D.new()
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.vertex_color_use_as_albedo = true
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	m.cull_mode = BaseMaterial3D.CULL_DISABLED
+	trail_mesh.material_override = m
+	add_child(trail_mesh)
+
+
+## The trail of where you've been (and a replaying walk's path) as a ribbon on the floor.
+func _draw_trail() -> void:
+	var im: ImmediateMesh = trail_mesh.mesh
+	im.clear_surfaces()
+	var any := false
+	var lp := _view_pos()
+	for line in walks.lines():
+		var prev = null
+		for pt in line.pts:
+			var fp := BeaconWalks.field_pos(player.field, pt.p) * view_scale
+			var here := Vector3(fp.x, 0.25, fp.y)
+			if prev != null and (here - prev).length() < 2000.0 and Vector2(fp.x - lp.x, fp.y - lp.y).length() < 3000.0:
+				if not any:
+					im.surface_begin(Mesh.PRIMITIVE_TRIANGLES)
+					any = true
+				var col: Color = Color.WHITE if line.replay else MOOD_COLOR.get(pt.m, Color(0.6, 0.6, 0.6))
+				col.a = 0.55 if line.replay else 0.8
+				var side: Vector3 = (here - prev).cross(Vector3.UP).normalized() * (0.8 if line.replay else 1.4)
+				for v in [prev - side, prev + side, here + side, prev - side, here + side, here - side]:
+					im.surface_set_color(col)
+					im.surface_add_vertex(v)
+			prev = here
+	if any:
+		im.surface_end()

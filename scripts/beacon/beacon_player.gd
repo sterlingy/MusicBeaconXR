@@ -41,6 +41,9 @@ var song_source := Callable()
 var layer := Callable()
 ## What `layer` returned last (the globe scene reads it for the status line).
 var layer_info := {}
+## Replaying a walk (BeaconWalks): the blend for this moment, [{id, w, d, beacon, song}],
+## used instead of the field's. Empty when not replaying.
+var replay: Array = []
 var pos := Vector2.ZERO
 var active_count := 3
 var sharpness := 1.5
@@ -138,6 +141,16 @@ func set_position(p: Vector2) -> void:
 
 
 func _refresh() -> void:
+	if not replay.is_empty():
+		active = replay
+		mix = BeaconMixer.blend(active)
+		var rpad := 0.0
+		for a in active:
+			rpad += a.w * pad_level(a.song)
+		mix["pad"] = {"gain": rpad, "params": {}, "sources": []}
+		if harmony.id == null:
+			harmony.update(active, 0)
+		return
 	if songs.is_empty() and not song_source.is_valid() and not layer.is_valid():
 		return
 	active = []

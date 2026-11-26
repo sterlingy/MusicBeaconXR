@@ -62,6 +62,7 @@ func _ready() -> void:
 	mine.go_to.connect(_go_to)
 	_build_user_beacons()
 	_build_input()
+	_build_walks()
 	input.jump_to(Vector2(-0.128, 51.507))
 	_parse_args()
 
@@ -253,6 +254,7 @@ func _process(delta: float) -> void:
 	camera.near = clampf(altitude * 0.01, 0.0005, 0.05)
 	input.space.walk_speed = WALK_DEG * maxf(0.002, k)
 	_draw_user_beacons()
+	_draw_trail()
 	# Camera: above and a little south of the listener, north at the top of the screen.
 	var east := Vector3.UP.cross(up)
 	if east.length() < 1e-3:
@@ -435,3 +437,48 @@ func _drafts_demo() -> void:
 	mine._changed()
 	mine._panel.visible = true
 	_go_to(mine.fix.lat + 0.002, mine.fix.lon + 0.003, 14.0)
+
+
+# ---------------------------------------------------------------- walks: trail
+
+var walks: BeaconWalks
+var trail_mesh: MeshInstance3D
+
+
+func _build_walks() -> void:
+	walks = BeaconWalks.new()
+	walks.player = player
+	walks.input = input
+	add_child(walks)
+	trail_mesh = MeshInstance3D.new()
+	trail_mesh.mesh = ImmediateMesh.new()
+	var m := StandardMaterial3D.new()
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.vertex_color_use_as_albedo = true
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	trail_mesh.material_override = m
+	add_child(trail_mesh)
+
+
+## The trail (and a replaying walk's path) as lines just above the surface.
+func _draw_trail() -> void:
+	var im: ImmediateMesh = trail_mesh.mesh
+	im.clear_surfaces()
+	var lift := maxf(0.0005, 0.3 * _k())
+	var any := false
+	for line in walks.lines():
+		var prev = null
+		for pt in line.pts:
+			var here := to_world(float(pt.p.lat), float(pt.p.lon), R + lift)
+			if prev != null and (here - prev).length() < R * 0.2:
+				if not any:
+					im.surface_begin(Mesh.PRIMITIVE_LINES)
+					any = true
+				var col: Color = Color.WHITE if line.replay else MOOD_COLOR.get(pt.m, Color(0.7, 0.7, 0.7))
+				col.a = 0.6 if line.replay else 0.9
+				for v in [prev, here]:
+					im.surface_set_color(col)
+					im.surface_add_vertex(v)
+			prev = here
+	if any:
+		im.surface_end()
