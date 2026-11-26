@@ -235,8 +235,10 @@ Every generated song is a full song, 2 to 5 minutes long, with a form such as in
 
 ## Known limits
 
-- **Not the C++ engine.** The browser synths sound like the SynthKit instruments but aren't identical. If one engine has to run in both places, it would need a WebAssembly build of `jamcore`, and that needs the engine source.
-- **Animation pauses in background tabs.** The music keeps playing, but the listener only moves while the page is visible.
-- **No GPS on the published page** (the platform doesn't offer location to pages). Use the city list or type coordinates, or run it locally.
-- **Away from home, the phone needs another way in.** `serve.py --https` is reachable on your own network or ZeroTier. Anywhere else needs the page hosted on a public HTTPS address.
+- **The old browser synths aren't the C++ engine.** The default sound, SynthKit, is the app's own engine compiled to WebAssembly; the **Old browser synths** in the Sound menu are Web Audio copies kept for comparing, and they no longer match the mix.
+- **Animation pauses in background tabs.** The music keeps playing, but the listener only moves (and a followed flight only updates on screen) while the page is visible.
+- **No GPS on the Claude-published copy** (the platform doesn't offer location to pages). The public site, https://sterlingy.github.io/MusicBeaconXR/, is HTTPS, so location works there anywhere; so does `serve.py` on your own network.
+- **Walk exports play in real time.** Exporting a 10-minute walk takes 10 minutes.
+- **Flight data is shared and limited.** adsb.lol's free tier is 500 requests a day for the database's one address (a few hours of following in total) unless a key is added.
+- **Sign-in needs the project's email settings** (see [supabase/README.md](../supabase/README.md)): until then, sign-in emails only reach the project team.
 - **The app plays the local grid too,** with the same songs (its own copy of the generator, checked against this one), but not yet song forms or automation.
