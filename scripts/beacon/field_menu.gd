@@ -16,7 +16,7 @@ const ACCENT := Color("ffb547")
 const MANUAL_URL := "https://sterlingy.github.io/MusicBeaconXR/manual.html"
 const FIELDS := [["grid", "Test grid"], ["globe", "Globe"], ["local", "Local grid"]]
 ## How much bigger the buttons and panel are on phones (they were too small to tap).
-const PHONE_SCALE := 4.0
+const PHONE_SCALE := 2.8
 
 var kind := "grid"
 var panel: PanelContainer
