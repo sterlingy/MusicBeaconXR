@@ -35,6 +35,12 @@ var songs := {} # beacon id -> song
 ## Makes the song for a beacon id that has none loaded (the local grid:
 ## func(id) -> song, see SongGen). Songs are made as beacons come near.
 var song_source := Callable()
+## An extra layer crossfaded with the field (the user's own beacons on the
+## globe, see BeaconDrafts): func(pos) -> {globe_share, entries: [{id, w, d,
+## beacon, song}]}, or {} for none. Same as the website's engine.layer.
+var layer := Callable()
+## What `layer` returned last (the globe scene reads it for the status line).
+var layer_info := {}
 var pos := Vector2.ZERO
 var active_count := 3
 var sharpness := 1.5
@@ -132,12 +138,24 @@ func set_position(p: Vector2) -> void:
 
 
 func _refresh() -> void:
-	if songs.is_empty() and not song_source.is_valid():
+	if songs.is_empty() and not song_source.is_valid() and not layer.is_valid():
 		return
 	active = []
 	for n in field.weigh(pos, active_count, sharpness):
 		if not song_for(n.id).is_empty():
 			active.append({"id": n.id, "w": n.w, "d": n.d, "beacon": n.beacon, "song": songs[n.id]})
+	layer_info = layer.call(pos) if layer.is_valid() else {}
+	if not layer_info.is_empty():
+		var share := float(layer_info.globe_share)
+		var both := []
+		if share > 0.0:
+			for a in active:
+				a.w *= share
+				both.append(a)
+		both.append_array(layer_info.entries)
+		# Loudest first, so readouts that show three show the ones you hear.
+		both.sort_custom(func(x, y): return x.w > y.w)
+		active = both
 	mix = BeaconMixer.blend(active)
 	var pad := 0.0
 	for a in active:
