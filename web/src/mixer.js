@@ -2,7 +2,7 @@
 // parameters and notes for one step. The audio engine plays what this
 // returns, and the tests check it directly.
 
-import { ROLES, degreeToMidi, chordNotes, chordName, romanName, keyName, hash01 } from "./song.js";
+import { ROLES, chordTone, chordNotes, chordName, romanName, keyName, hash01 } from "./song.js";
 import { sectionName } from "./form.js";
 
 const LOG_PARAM = /cutoff|tone|tune|rate|amount/;
@@ -183,7 +183,7 @@ export function stepEvents(active, mix, harmony, bar, step) {
       const oct = Math.round(m.params.octave ?? 4);
       events.push({ role, id, notes: chordNotes(key, chordDeg, oct, Math.round(m.params.voicing ?? 3)), vel: ev.v, gate: ev.g });
     } else {
-      const midi = foldIntoRange(role, degreeToMidi(key, chordDeg + ev.d, ROLE_OCTAVE[role] + (ev.o || 0) + lift));
+      const midi = foldIntoRange(role, chordTone(key, chordDeg, ev.d, ROLE_OCTAVE[role] + (ev.o || 0) + lift));
       events.push({ role, id, notes: [midi], vel: ev.v, gate: ev.g });
     }
   });

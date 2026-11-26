@@ -813,7 +813,7 @@ function renderInspector() {
   const chordsOf = (p) => p.map((d) => chordName(s.key, d)).join(" – ");
   const chords = chordsOf(s.progression);
   const used = hasForm(s) ? [...new Set(s.form.map((f) => f.section))] : [];
-  const sectionChords = used.filter((t) => sectionSpec(s, t).progression && sectionSpec(s, t).progression.join() !== s.progression.join())
+  const sectionChords = used.filter((t) => sectionSpec(s, t).progression && JSON.stringify(sectionSpec(s, t).progression) !== JSON.stringify(s.progression))
     .map((t) => `<span class="chip">${SECTION_LABEL[t]} <b>${esc(chordsOf(sectionSpec(s, t).progression))}</b></span>`).join("");
   const tracks = ROLES.filter((r) => s.tracks[r]?.level > 0).map((r) => {
     const t = s.tracks[r], moving = Object.keys(t.automation || {});

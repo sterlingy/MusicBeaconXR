@@ -69,7 +69,7 @@ function hfDb(l, r) {
   return (10 * Math.log10(Math.max(hi, 1e-15) / Math.max(all, 1e-12)));
 }
 
-test("every grid song's parts stay mellow on SynthKit's web engine", { skip: !hasKit && "addons/synthkit not checked out" }, async () => {
+test("every grid song (and every family) stays mellow on SynthKit's web engine", { skip: !hasKit && "addons/synthkit not checked out" }, async () => {
   const { SynthKitCore } = await import(new URL("web/synthkit-worklet.js", KIT).href);
   const module = await WebAssembly.compile(readFileSync(fileURLToPath(new URL("web/synthkit.wasm", KIT))));
   const index = JSON.parse(readFileSync(fileURLToPath(new URL("presets/factory/index.json", KIT)), "utf-8"));
@@ -80,9 +80,12 @@ test("every grid song's parts stay mellow on SynthKit's web engine", { skip: !ha
   const presets = Object.fromEntries(PARTS.map((r) => [r, preset(r)]));
   const worst = {};
   const over = [];
-  for (let gy = 0; gy < 5; gy++) for (let gx = 0; gx < 5; gx++) {
-    const id = `g${gx}${gy}`;
-    const song = generateSong(`grid:${id}`);
+  // Every test-grid song, plus five of each generator family (v2), so every kind of song is checked.
+  const cases = [];
+  for (let gy = 0; gy < 5; gy++) for (let gx = 0; gx < 5; gx++) cases.push([`g${gx}${gy}`, () => generateSong(`grid:g${gx}${gy}`)]);
+  for (const family of ["song", "journey", "ambient", "groove"]) for (let i = 0; i < 5; i++) cases.push([`${family}${i}`, () => generateSong(`family:${family}:${i}`, { family })]);
+  for (const [id, make] of cases) {
+    const song = make();
     const active = [{ id, w: 1, song }];
     const mix = blend(active);
     const harmony = new Harmony();

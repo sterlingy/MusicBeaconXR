@@ -2,7 +2,15 @@
 // Every change goes to the engine right away, so you hear it while you stand
 // near the beacon.
 
-import { MODES, NOTE_NAMES, ROLES, ROLE_INSTRUMENT, chordName, validateSong } from "./song.js";
+import { MODES, NOTE_NAMES, ROLES, ROLE_INSTRUMENT, chordName, romanName, isBorrowed, validateSong } from "./song.js";
+
+// Borrowed chords the picker offers (modal mixture), as {d, m}: degree d of mode m on the key's root.
+const BORROWABLE = [
+  { d: 6, m: "mixolydian" }, { d: 2, m: "minor" }, { d: 3, m: "minor" }, { d: 4, m: "minor" }, { d: 5, m: "minor" },
+  { d: 1, m: "lydian" }, { d: 1, m: "phrygian" }, { d: 3, m: "dorian" }, { d: 4, m: "harmonicMinor" }, { d: 0, m: "major" },
+];
+const chordValue = (c) => (isBorrowed(c) ? `${c.m}:${c.d}` : String(c));
+const parseChord = (v) => (v.includes(":") ? { m: v.split(":")[0], d: +v.split(":")[1] } : +v);
 import { formToText, parseForm, lengthSeconds, clock, totalBars, SECTION_LABEL, SECTION_COLOR, entryLayers } from "./form.js";
 
 const ROLE_LABEL = { drums: "Drums", bass: "Bass", keys: "Keys", lead: "Lead", pluck: "Pluck", texture: "Texture" };
@@ -75,8 +83,17 @@ export class SongEditor {
     const used = s.form ? [...new Set(s.form.map((f) => f.section))].filter((x) => ["verse", "pre", "chorus", "bridge"].includes(x)) : [];
     if (!used.includes(this.chordSection)) this.chordSection = "verse";
     const secOpts = (used.length ? used : ["verse"]).map((k) => `<option value="${k}"${k === this.chordSection ? " selected" : ""}>${SECTION_LABEL[k]}</option>`).join("");
-    const prog = this._prog().map((d, bi) => `<select data-prog="${bi}" aria-label="Chord for bar ${bi + 1}">${
-      [0, 1, 2, 3, 4, 5, 6].map((k) => `<option value="${k}"${k === d ? " selected" : ""}>${chordName(s.key, k)}</option>`).join("")}</select>`).join("");
+    // Diatonic chords, then borrowed ones (shown with their roman name), skipping duplicates of a diatonic chord.
+    const diatonic = [0, 1, 2, 3, 4, 5, 6].map((k) => ({ c: k, name: chordName(s.key, k) }));
+    const names = new Set(diatonic.map((x) => x.name));
+    const borrowed = BORROWABLE.map((c) => ({ c, name: chordName(s.key, c) })).filter((x) => !names.has(x.name) && (names.add(x.name), true));
+    const prog = this._prog().map((d, bi) => {
+      const cur = chordValue(d);
+      const opts = [...diatonic, ...borrowed];
+      if (!opts.some((x) => chordValue(x.c) === cur)) opts.push({ c: d, name: chordName(s.key, d) });
+      return `<select data-prog="${bi}" aria-label="Chord for bar ${bi + 1}">${opts.map((x) =>
+        `<option value="${chordValue(x.c)}"${chordValue(x.c) === cur ? " selected" : ""}>${x.name}${isBorrowed(x.c) ? ` (${romanName(s.key, x.c)})` : ""}</option>`).join("")}</select>`;
+    }).join("");
     const tabs = ROLES.map((r) => `<button class="etab" data-role="${r}" aria-pressed="${r === this.role}">${ROLE_LABEL[r]}${s.tracks[r]?.level > 0 ? "" : " ·off"}</button>`).join("");
     const mat = s.form ? `<div class="etabs" role="group" aria-label="Material"><button class="etab" data-mat="A" aria-pressed="${this.material === "A"}">Verse material</button><button class="etab" data-mat="B" aria-pressed="${this.material === "B"}">Chorus material</button></div>` : "";
     const bars = this.role === "drums" ? "" : `<div class="ebars">${[0, 1, 2, 3].map((b) => `<button class="etab" data-bar="${b}" aria-pressed="${b === this.bar}">Bar ${b + 1}</button>`).join("")}
@@ -182,7 +199,7 @@ export class SongEditor {
       }
       this._commit();
     }));
-    R.querySelectorAll("[data-prog]").forEach((el) => el.addEventListener("change", () => { this._prog()[+el.dataset.prog] = +el.value; this._commit(); }));
+    R.querySelectorAll("[data-prog]").forEach((el) => el.addEventListener("change", () => { this._prog()[+el.dataset.prog] = parseChord(el.value); this._commit(); }));
     R.querySelector("[data-chordsec]")?.addEventListener("change", (e) => { this.chordSection = e.target.value; this.render(); });
     R.querySelectorAll("[data-arr]").forEach((el) => el.addEventListener("click", () => {
       const [i, role] = el.dataset.arr.split(":");

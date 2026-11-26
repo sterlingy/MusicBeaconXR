@@ -2,7 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makeGridField, makeGlobeField, makeLocalGridField, localGridShape, MAX_LOCAL_STEPS, KM_M, weigh, greatCircleKm, nearest, normalizeLatLon } from "../src/beacons.js";
-import { generateSong, validateSong, degreeToMidi, chordName, ROLES } from "../src/song.js";
+import { generateSong, validateSong, degreeToMidi, chordName, romanName, chordNotes, ROLES } from "../src/song.js";
 import { blend, Harmony, stepEvents, targetTempo, pickSource, foldIntoRange } from "../src/mixer.js";
 
 const grid = makeGridField(5, 100);
@@ -319,12 +319,13 @@ test("generated songs have a real form, 2 to 5 minutes long", () => {
     const sec = lengthSeconds(s);
     assert.ok(sec >= 120 && sec <= 300, `${s.title}: ${sec.toFixed(0)} s`);
     const types = s.form.map((f) => f.section);
-    assert.ok(types.filter((t) => t === "chorus").length >= 2, "at least two choruses");
+    // Ambient pieces have no chorus; every other family has at least two.
+    if (s.family !== "ambient") assert.ok(types.filter((t) => t === "chorus").length >= 2, `${s.family}: at least two choruses`);
     assert.ok(types.includes("verse"));
     assert.equal(types[0], "intro");
     for (const f of s.form) assert.ok(f.bars % 4 === 0);
     for (const role of ROLES) assert.ok(s.tracks[role].patternB, `${role} has chorus material`);
-    assert.notDeepEqual(s.sections.chorus.progression, s.progression, "chorus has its own chords");
+    if (s.family !== "ambient") assert.notDeepEqual(s.sections.chorus.progression, s.progression, "chorus has its own chords");
   }
 });
 
@@ -349,7 +350,7 @@ test("song position walks through the form on the shared clock", () => {
 });
 
 test("sections shape the arrangement: layers, brightness, chords", () => {
-  const s = generateSong("grid:b2_2");
+  const s = generateSong("grid:b2_2", { family: "song" });
   s.form[0].layers = { ...s.form[0].layers, bass: 0, drums: 0 };
   delete s.form[0].enter;
   for (const f of s.form) if (f.section === "verse") { f.layers = { ...f.layers, bass: 1 }; delete f.enter; }
@@ -375,7 +376,7 @@ test("sections shape the arrangement: layers, brightness, chords", () => {
 });
 
 test("drums: fill into the chorus, crash on it, half time in the bridge", () => {
-  const s = generateSong("grid:b0_4");
+  const s = generateSong("grid:b0_4", { family: "song" });
   const d = s.tracks.drums;
   const i = s.form.findIndex((f, k) => k > 0 && f.section === "chorus" && s.form[k - 1].section !== "chorus");
   const startOf = (k) => s.form.slice(0, k).reduce((n, f) => n + f.bars, 0);
@@ -550,4 +551,53 @@ test("bass notes fold into a real bass range (E1-G3)", () => {
   assert.equal(foldIntoRange("bass", 40), 40);
   assert.equal(foldIntoRange("lead", 84), 84);
   assert.equal(foldIntoRange("lead", 100), 88);
+});
+
+test("generator v2: families, borrowed chords, and each family's shape", () => {
+  const seen = {};
+  let borrowed = 0;
+  for (let i = 0; i < 400; i++) {
+    const s = generateSong("v2:" + i);
+    seen[s.family] = (seen[s.family] || 0) + 1;
+    if (s.progression.some((c) => typeof c === "object")) borrowed++;
+    const on = (role) => s.tracks[role].level > 0;
+    if (s.family === "journey") {
+      assert.ok(s.bpm >= 120 && s.bpm <= 132, "journeys drive");
+      assert.ok(s.form.some((f) => f.section === "pre" && f.enter?.drums), "the beat comes in partway through the build");
+      assert.ok(s.sections.chorus.energy > s.sections.intro.energy * 3, "a big build");
+    }
+    if (s.family === "ambient") {
+      assert.ok(s.bpm <= 92);
+      const d = s.tracks.drums.pattern;
+      assert.ok(!on("drums") || (d.snare.every((v) => v === 0) && d.hat.filter((v) => v > 0).length <= 2), "at most a soft heartbeat");
+      assert.ok(s.tracks.drums.params["hat.tone"] <= 4500, "dark hats");
+    }
+    if (s.family === "groove") {
+      assert.ok(on("drums") && on("bass"), "a groove keeps its beat and bass");
+      assert.ok(s.tracks.bass.pattern[0][0].g >= 6, "sub-bass holds");
+    }
+  }
+  for (const f of ["song", "journey", "ambient", "groove"]) assert.ok(seen[f] > 30, `${f}: ${seen[f]}`);
+  assert.ok(borrowed > 40, `borrowed-chord verses: ${borrowed}`);
+});
+
+test("borrowed chords: names, notes and melodies use the borrowed scale", () => {
+  const C = { root: 0, mode: "major" };
+  const bVII = { d: 6, m: "mixolydian" }, bIII = { d: 2, m: "minor" }, iv = { d: 3, m: "minor" };
+  assert.equal(chordName(C, bVII), "Bb");
+  assert.equal(chordName(C, bIII), "Eb");
+  assert.equal(chordName(C, iv), "Fm");
+  assert.equal(romanName(C, bVII), "bVII");
+  assert.equal(romanName(C, iv), "iv");
+  assert.deepEqual(chordNotes(C, bVII, 4), [70, 74, 77]);
+  // A melody note two steps above a bIII root lands on G (Eb minor-scale steps: Eb F G).
+  const s = generateSong("borrow", { family: "song" });
+  s.progression = [bIII, bIII, bIII, bIII];
+  s.key = C;
+  delete s.form; delete s.sections;
+  const h = new Harmony();
+  h.update([{ id: "x", w: 1, song: s }], 0);
+  assert.deepEqual(h.chordDegree(0), bIII);
+  assert.equal(h.describe(0).chord, "Eb");
+  assert.deepEqual(validateSong({ ...s, progression: [0, { d: 9, m: "nope" }] }).slice(0, 1), ["progression entries must be scale degrees or {d, m} borrowed chords"]);
 });
