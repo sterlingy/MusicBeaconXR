@@ -26,3 +26,7 @@ media/prism-demos/
 
 # Private credentials (Supabase): never committed
 .env.supabase
+
+# Audio analysis: the Python environment (PyTorch, Demucs) and the songs and stems it works on
+tools/.venv/
+analysis/

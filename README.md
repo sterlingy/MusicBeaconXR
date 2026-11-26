@@ -70,3 +70,13 @@ The app opens on the **local grid** the first time, centered on the phone's loca
 - Settings live in `user://field.cfg` (`scripts/beacon/field_prefs.gd`); `scenes/start.tscn` opens the right field.
 - Quest standalone: the plain export has no OpenXR loader or Quest manifest entries. Add the Godot OpenXR vendors plugin (`addons/godotopenxrvendors`), install the Android build template, and turn on gradle build and the Meta plugin in the `Quest (OpenXR)` preset. PC VR (including Quest over Link) uses the Windows VR build instead; not tried on a headset yet.
 - No Godot web export. SynthKit now has a web build (`addons/synthkit/web/`, the same C++ compiled to WebAssembly), but the Godot app itself isn't exported to the web; the browser version is `web/`, which still uses its own Web Audio instruments.
+
+## Studying songs' instruments (audio analysis)
+
+`tools/separate.py` splits songs into their parts with Demucs (drums, bass, vocals, guitar, piano, other), on the NVIDIA GPU, so their instruments can be studied and their sounds copied onto SynthKit. Put WAV, FLAC, MP3 or OGG files in `analysis/input/` and run:
+
+```bash
+tools/.venv/Scripts/python.exe tools/separate.py
+```
+
+Parts land in `analysis/stems/<song>/<part>.wav`, with `parts.json` giving how loud each is. The Python environment (`tools/.venv/`, PyTorch with CUDA, Demucs 4.0.1, soundfile) and `analysis/` stay out of git; setup steps are at the top of the script.
