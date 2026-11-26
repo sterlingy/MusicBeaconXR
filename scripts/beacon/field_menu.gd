@@ -48,7 +48,7 @@ func _ready() -> void:
 	row.add_theme_constant_override("separation", 8)
 	add_child(row)
 	_row = row
-	ui_scale = PHONE_SCALE if OS.has_feature("mobile") else 1.0
+	ui_scale = PHONE_SCALE if BuildInfo.is_phone() else 1.0
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--ui-scale="):
 			ui_scale = float(a.trim_prefix("--ui-scale="))
@@ -211,6 +211,9 @@ func _build_panel() -> void:
 		var b := _button(l[0], l[1])
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		links.add_child(b)
+	var build := _small("Build %s · %s · UI ×%s" % [BuildInfo.BUILD, OS.get_name(), _num(ui_scale)])
+	build.add_theme_font_size_override("font_size", 11)
+	v.add_child(build)
 
 
 func _pick_field(k: String) -> void:
