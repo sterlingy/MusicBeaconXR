@@ -7,6 +7,7 @@ import { BeaconEngine } from "./engine.js";
 import { SongEditor } from "./editor.js";
 import { ListenerInput, planarSpace, geoSpace, localSpace, keyboardSource, pointerSource } from "./input/listener.js";
 import { initDrafts } from "./draftsui.js";
+import { Globe3D } from "./globe3d.js";
 
 const $ = (id) => document.getElementById(id);
 const MOOD_COLOR = { Drift: "#8fa7ff", Glow: "#f5c04a", Tide: "#2ec4b6", Pulse: "#ff4f9a", Rush: "#ff8a3d" };
@@ -57,7 +58,10 @@ const ui = {
   spacingKm: savedSpacingKm(), // local grid: km between neighbouring beacons
   watchId: null,
   closeKm: 30, // Globe tab, Close zoom: km from the top of the map to the bottom
+  view3d: (() => { try { return localStorage.getItem("beacon.globe3d") !== "0"; } catch { return true; } })(), // Globe tab: the 3D globe (default) or the flat map
 };
+const is3d = () => ui.mode === "globe" && ui.view3d;
+let globe3d = null, lastDraw = performance.now();
 
 // ------------------------------------------------------------------ setup
 
@@ -190,6 +194,9 @@ function zoneImage(v) {
 // ------------------------------------------------------------------ drawing
 
 function draw(now) {
+  const dtDraw = Math.min(0.1, (now - lastDraw) / 1000);
+  lastDraw = now;
+  if (is3d() && globe3d) { globe3d.draw(g, now, dtDraw); return; }
   const W = canvas.width, H = canvas.height, d = ui.dpr || 1;
   const v = view();
   const C = ui.colors;
@@ -552,6 +559,8 @@ function setMode(mode) {
   $("zoomWorld").textContent = mode === "local" ? "Whole grid" : "World";
   $("geo").textContent = mode === "local" ? "Center on me" : "My location";
   $("fieldwrap").classList.toggle("globe", mode === "globe");
+  $("viewSeg").hidden = mode !== "globe";
+  apply3d();
   $("modeHint").textContent = typeof MODE_HINT[mode] === "function" ? MODE_HINT[mode]() : MODE_HINT[mode];
   setMsg("fieldMsg", "");
   applyShared();
@@ -584,6 +593,12 @@ $("localSpacing").addEventListener("change", (e) => {
 });
 
 function setZoom(z) {
+  if (is3d() && globe3d) {
+    // On the 3D globe the zoom buttons fly the camera: Local to you, World out, Close to your beacons.
+    const p = engine.pos;
+    if (z === "world") { globe3d.flyTo(globe3d.lat0, globe3d.lon0, 1); globe3d.spin(); }
+    else globe3d.flyTo(p.lat, p.lon, z === "close" ? globe3d.zoomForKm(ui.closeKm) : 5), globe3d.mode = "follow";
+  }
   ui.zoom = z;
   ui.zoneKey = "";
   $("zoomLocal").setAttribute("aria-pressed", z === "local");
@@ -595,7 +610,7 @@ $("zoomWorld").addEventListener("click", () => setZoom("world"));
 $("zoomClose").addEventListener("click", () => setZoom("close"));
 // Close zoom: the wheel (or a pinch on a trackpad) zooms from 1 km to 400 km.
 canvas.addEventListener("wheel", (e) => {
-  if (ui.mode !== "globe" || ui.zoom !== "close") return;
+  if (ui.mode !== "globe" || ui.zoom !== "close" || ui.view3d) return;
   e.preventDefault();
   ui.closeKm = Math.max(1, Math.min(400, ui.closeKm * Math.pow(1.0015, e.deltaY)));
 }, { passive: false });
@@ -1034,11 +1049,39 @@ function frame(now) {
 }
 
 // Start somewhere between beacons so the blend shows right away.
+/** Globe tab: the 3D globe or the flat map. The globe takes the pointer (drag turns it) while it shows. */
+function apply3d() {
+  const on = is3d();
+  $("fieldwrap").classList.toggle("g3d", on);
+  $("view2d").setAttribute("aria-pressed", String(!ui.view3d));
+  $("view3d").setAttribute("aria-pressed", String(ui.view3d));
+  if (!globe3d) return;
+  if (on && !globe3d.attached) { pointer.detach(); globe3d.attach(); globe3d.attached = true; globe3d.lat0 = engine.pos.lat * 0.5; globe3d.lon0 = engine.pos.lon - 25; }
+  else if (!on && globe3d.attached) { globe3d.detach(); globe3d.attached = false; pointer.attach(input); canvas.style.cursor = ""; }
+  ui.zoneKey = "";
+}
+function setView3d(on) {
+  ui.view3d = on;
+  try { localStorage.setItem("beacon.globe3d", on ? "1" : "0"); } catch {}
+  apply3d();
+}
+$("view2d").addEventListener("click", () => setView3d(false));
+$("view3d").addEventListener("click", () => setView3d(true));
+
 drafts = initDrafts({
   engine, input, ui, $, esc, setMsg, fmtDist, label, canvas, view, setZoom, select, inspectedId, stopFollow,
   moodColor: (m) => MOOD_COLOR[m] || "#888888",
   renderInspector: () => renderInspector(),
   inspectedSong: () => { const id = needBeacon(); return id ? engine.songFor(id) : null; },
+});
+globe3d = new Globe3D({
+  canvas, engine, ui,
+  drafts: () => drafts.state || null,
+  moodColor: (m) => MOOD_COLOR[m] || "#888888",
+  label,
+  select,
+  place: (lat, lon) => !!drafts.placing && drafts.placeAt({ lat, lon }),
+  travel: (lat, lon) => { stopFollow("Flew somewhere else, so the map stopped following your location."); input.target = null; engine.setPosition({ lat, lon }); },
 });
 engine.setPosition({ x: -38, y: 27 });
 resize();
@@ -1048,7 +1091,7 @@ requestAnimationFrame(frame);
 connectShared();
 
 // For debugging and automated checks.
-window.beaconField = { engine, ui, setMode, select, centerLocal, setZoom, get drafts() { return drafts; } };
+window.beaconField = { engine, ui, setMode, select, centerLocal, setZoom, setView3d, get drafts() { return drafts; }, get globe3d() { return globe3d; } };
 
 // ------------------------------------------------------------------ synths page
 
