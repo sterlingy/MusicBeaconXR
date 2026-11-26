@@ -79,4 +79,4 @@ The app opens on the **local grid** the first time, centered on the phone's loca
 tools/.venv/Scripts/python.exe tools/separate.py
 ```
 
-Parts land in `analysis/stems/<song>/<part>.wav`, with `parts.json` giving how loud each is. The Python environment (`tools/.venv/`, PyTorch with CUDA, Demucs 4.0.1, soundfile) and `analysis/` stay out of git; setup steps are at the top of the script.
+Parts land in `analysis/stems/<song>/<part>.wav`, with `parts.json` giving how loud each is. Then `tools/.venv/Scripts/python.exe tools/analyze.py` measures each song (tempo, key, chords by bar, rough sections) and each part (tone balance, brightness, attack and decay, how busy and wide, pitch range, the drums' typical bar) into `analysis/stems/<song>/report.json`, the numbers SynthKit presets get matched against. The Python environment (`tools/.venv/`, PyTorch with CUDA, Demucs 4.0.1, soundfile) and `analysis/` stay out of git; setup steps are at the top of the script.
