@@ -50,6 +50,10 @@ static func to_synth(role: String, p: Dictionary) -> Dictionary:
 				o["osc1.wave"] = w
 				o["osc2.wave"] = w
 			if p.has("osc.detune"): o["osc2.freq"] = clampf(float(p["osc.detune"]) / 100.0, -7, 7)
+			# Undertow's oscillators default to 16' (an octave under the note); 8' plays the note itself.
+			if p.has("osc.octave"):
+				o["osc1.range"] = 3 if p["osc.octave"] == "8'" else 2
+				o["osc2.range"] = o["osc1.range"]
 			if p.has("sub.level"):
 				o["mix.osc3_on"] = 1.0
 				o["osc3.range"] = 1 # 32', an octave under osc 1 and 2
@@ -66,6 +70,10 @@ static func to_synth(role: String, p: Dictionary) -> Dictionary:
 				o["filter.contour"] = clampf(octaves * 2.0, 0, 10)
 			if p.has("fenv.decay"): o["fenv.decay"] = clampf(float(p["fenv.decay"]), 0.004, 10)
 			if p.has("glide"): o["ctrl.glide"] = clampf(float(p["glide"]), 0, 5)
+			# The song's loudness envelope. Undertow's release follows its decay (the
+			# Minimoog decay switch, on in every bass preset), so aenv.release sets lenv.decay.
+			if p.has("aenv.attack"): o["lenv.attack"] = clampf(float(p["aenv.attack"]), 0.001, 10)
+			if p.has("aenv.release"): o["lenv.decay"] = clampf(float(p["aenv.release"]), 0.004, 10)
 		"lead":
 			# Prism: the base preset makes the sound; the song sets its tone, motion and space.
 			_prism_filter("lead", p, o)
@@ -89,6 +97,8 @@ static func to_synth(role: String, p: Dictionary) -> Dictionary:
 			if p.has("portamento"): o["voice.glide"] = clampf(float(p["portamento"]), 0, 2)
 			if p.has("delay.send"): o["send.echo"] = clampf(float(p["delay.send"]) * 10.0, 0, 10)
 			if p.has("reverb.send"): o["send.space"] = clampf(float(p["reverb.send"]) * 10.0, 0, 10)
+			# At least 20 ms: a faster onset clicks, and a bright lead turns shrill.
+			if p.has("aenv.attack"): o["env1.attack"] = clampf(float(p["aenv.attack"]), 0.02, 10)
 			if p.has("aenv.release"): o["env1.release"] = clampf(float(p["aenv.release"]), 0.005, 15)
 
 		"keys":

@@ -21,7 +21,7 @@ export const SPEC = {
   Undertow: {
     role: "bass", blurb: "Fat mono bass: two detuned oscillators plus a sub, into a two-stage low-pass with a filter envelope, drive and glide.",
     groups: {
-      Oscillators: [["osc.wave", "Wave", ["sawtooth", "square", "triangle", "sine"], "sawtooth"], ["osc.detune", "Detune", 0, 30, 0.5, 6, { unit: "ct" }], ["sub.wave", "Sub wave", ["square", "sine", "triangle"], "square"], ["sub.level", "Sub", 0, 1, 0.01, 0.4]],
+      Oscillators: [["osc.wave", "Wave", ["sawtooth", "square", "triangle", "sine"], "sawtooth"], ["osc.detune", "Detune", 0, 30, 0.5, 6, { unit: "ct" }], ["sub.wave", "Sub wave", ["square", "sine", "triangle"], "square"], ["sub.level", "Sub", 0, 1, 0.01, 0.4], ["osc.octave", "Octave", ["16'", "8'"], "16'"]],
       Filter: [["filter.cutoff", "Cutoff", 40, 8000, 1, 500, { unit: "Hz", log: true }], ["filter.emphasis", "Emphasis", 0, 12, 0.1, 3], ["fenv.amount", "Filter env", 0, 6000, 10, 1200, { unit: "Hz" }], ["fenv.decay", "Env decay", 0.02, 1.5, 0.01, 0.25, { unit: "s" }]],
       Amp: [["aenv.attack", "Attack", 0.001, 0.3, 0.001, 0.004, { unit: "s", log: true }], ["aenv.release", "Release", 0.01, 1, 0.01, 0.12, { unit: "s" }], ["glide", "Glide", 0, 0.5, 0.005, 0, { unit: "s", auto: false }]],
       Output: [["drive", "Drive", 0, 1, 0.01, 0], ["reverb.send", "Reverb", 0, 1, 0.01, 0.04], ["delay.send", "Delay", 0, 1, 0.01, 0]],

@@ -435,10 +435,10 @@ test("every control has a sane range and default", () => {
   assert.ok(!automatable("Comet").includes("osc2.semis"), "semitone steps aren't animated");
 });
 
-test("20 presets per synth, all valid and all different", () => {
+test("20 factory presets per synth plus matched ones, all valid and all different", () => {
   for (const n of INSTRUMENTS) {
-    assert.equal(PRESETS[n].length, 20, n);
-    assert.equal(new Set(PRESETS[n].map((p) => p.name)).size, 20, `${n} names`);
+    assert.ok(PRESETS[n].length >= 20, n);
+    assert.equal(new Set(PRESETS[n].map((p) => p.name)).size, PRESETS[n].length, `${n} names`);
     const sounds = new Set();
     for (const pr of PRESETS[n]) {
       assert.ok(pr.energy >= 0 && pr.energy <= 1);
@@ -453,7 +453,7 @@ test("20 presets per synth, all valid and all different", () => {
       assert.equal(Object.keys(s.params).length, controls(n).length);
       sounds.add(JSON.stringify(s.params));
     }
-    assert.equal(sounds.size, 20, `${n} presets are distinct sounds`);
+    assert.equal(sounds.size, PRESETS[n].length, `${n} presets are distinct sounds`);
   }
 });
 
@@ -550,7 +550,8 @@ test("bass notes fold into a real bass range (E1-G3)", () => {
   assert.equal(foldIntoRange("bass", 24), 36);
   assert.equal(foldIntoRange("bass", 40), 40);
   assert.equal(foldIntoRange("lead", 84), 84);
-  assert.equal(foldIntoRange("lead", 100), 88);
+  assert.equal(foldIntoRange("lead", 100), 76); // the lead stops at D6 (86): never shrill
+  assert.equal(foldIntoRange("lead", 90), 78);
 });
 
 test("generator v2: families, borrowed chords, and each family's shape", () => {

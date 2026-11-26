@@ -184,6 +184,23 @@ The generator was reshaped by six reference songs studied with `tools/analyze.py
 
 **Borrowed chords:** a progression entry can be `{ "d": 6, "m": "mixolydian" }`, degree d of mode m on the key's root (here B♭ in C major, ♭VII). The generator uses ♭VII, ♭III, iv, v, ♭VI and II in major keys, and IV and V in minor ones; melodies over a borrowed chord follow its scale, the readouts name it (♭VII), and the song editor's chord picker offers them.
 
+## Presets matched to reference songs
+
+`node web/tools/match_presets.mjs` builds presets that copy sounds measured in the reference songs: it plays candidate settings through SynthKit's own engine (the WebAssembly build, as the website and app play songs), measures brightness, tone balance and attack and decay the way `tools/analyze.py` measures a song's parts, and searches until they match. Every result must pass the "never shrill" limit for its part. The results (`src/presets_matched.js`, generated) join the factory presets, so the song generator picks them too:
+
+| Preset | Part | Matched to | How close |
+|---|---|---|---|
+| Round Low | bass (8') | Sowing the Seeds of Love, Woman in Chains | tone balance and attack match; slightly longer decay |
+| Sub Hold | bass | Stoned | close |
+| Rolling Low | bass (8') | Shpongle, The Aquatic Garden | very close |
+| Wide Warm Pad | keys | Sowing, Woman in Chains, Pier (pads) | close |
+| Downtempo Bed | keys | Stoned (synth bed) | close |
+| Choir Haze | keys | Pier (choir-like layer) | close, a little darker |
+| Clean Strum | pluck | Sowing, Woman in Chains (guitar) | darker than the guitars: Driftwood's brightness is at its maximum, so it's the mellow version |
+| Psy Arp | lead | Shpongle (arps) | very close |
+
+Along the way: bass presets gained an **octave** choice (Undertow's oscillators sit at 16', an octave under the note; 8' plays the note itself, as the reference basses do); bass attack and release and lead attack now reach SynthKit (Undertow's loudness contour; Prism's envelope, at least 20 ms); the lead stops at D6 (higher notes fold down an octave); and the factory lead "Sync Scream" was tamed. All keep every part of every song under the "never shrill" limits on both platforms.
+
 ## Song structure
 
 Every generated song is a full song, 2 to 5 minutes long, with a form such as intro, verse, chorus, verse, chorus, bridge, chorus, outro (four templates, some with a pre-chorus, a breakdown or a double last chorus). Sections are 4, 8 or 16 bars, fitted so the whole song lands between 2:00 and 5:00.

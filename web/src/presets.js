@@ -4,6 +4,7 @@
 // instrument's defaults (params.js).
 
 import { defaults } from "./params.js";
+import { MATCHED } from "./presets_matched.js";
 
 /** Builds presets from rows: [name, energy, ...values in `keys` order, automation?]. */
 function table(keys, rows) {
@@ -102,7 +103,8 @@ export const PRESETS = {
     ["osc.wave", "osc2.wave", "osc2.semis", "osc2.level", "filter.cutoff", "filter.resonance", "fenv.amount", "vibrato.rate", "vibrato.depth", "portamento", "aenv.attack", "aenv.release", "drive", "delay.send", "reverb.send"],
     [
       ["Classic Lead", 0.6, "sawtooth", "square", 7, 0.55, 3000, 2, 0.85, 5.5, 10, 0, 0.01, 0.2, 0, 0.3, 0.2],
-      ["Sync Scream", 0.9, "sawtooth", "sawtooth", 12, 0.7, 4500, 5, 1.5, 6, 6, 0.03, 0.005, 0.15, 0.5, 0.25, 0.15],
+      // Tamed (filter 4500 -> 3200 Hz, osc 2 and drive lower): nudged brighter, it crossed the "never shrill" line.
+      ["Sync Scream", 0.9, "sawtooth", "sawtooth", 12, 0.5, 3200, 5, 1.5, 6, 6, 0.03, 0.005, 0.15, 0.35, 0.25, 0.15],
       ["Flute", 0.3, "sine", "triangle", 12, 0.2, 2500, 0.5, 0.2, 5, 14, 0.02, 0.08, 0.25, 0, 0.2, 0.35],
       ["Chip Square", 0.7, "square", "square", 12, 0.3, 8000, 0, 0, 6, 0, 0, 0.002, 0.08, 0, 0.15, 0.1],
       ["Soft Whistle", 0.25, "sine", "sine", 24, 0.15, 3000, 0, 0, 5.5, 18, 0.05, 0.06, 0.3, 0, 0.35, 0.4],
@@ -173,6 +175,10 @@ export const PRESETS = {
       ["Comet Tail", 0.5, "sawtooth", 1.5, 2.5, 3.5, 1, 0.3, 0.6, 2200, 3, 0.6, 3, 0.6, 0.6, 0.4, A("delay.send", "sine", 8, 0.3)],
     ]),
 };
+
+// Presets matched to sounds in reference songs (web/tools/match_presets.mjs):
+// they join each instrument's list, so the song generator picks them too.
+for (const [instrument, list] of Object.entries(MATCHED)) PRESETS[instrument].push(...list);
 
 /** A preset's full param set (defaults filled in) and its automation. */
 export function presetSound(instrument, preset) {

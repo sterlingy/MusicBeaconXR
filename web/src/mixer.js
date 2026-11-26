@@ -9,9 +9,9 @@ const LOG_PARAM = /cutoff|tone|tune|rate|amount/;
 // The songs' lead and pluck notes carry +1 octave (or more), so they start at octave 3.
 const ROLE_OCTAVE = { bass: 2, lead: 3, pluck: 3, texture: 3 };
 // Lowest and highest MIDI note a part may play; notes outside fold in by
-// octaves. A bass above G3 stops sounding like a bass, and a lead above G6
+// octaves. A bass above G3 stops sounding like a bass, and a lead above D6
 // turns piercing.
-const ROLE_RANGE = { bass: [28, 55], lead: [52, 91], pluck: [48, 91] };
+const ROLE_RANGE = { bass: [28, 55], lead: [52, 86], pluck: [48, 91] };
 export function foldIntoRange(role, midi) {
   const r = ROLE_RANGE[role];
   if (!r) return midi;

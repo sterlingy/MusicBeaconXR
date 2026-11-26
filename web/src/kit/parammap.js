@@ -53,6 +53,8 @@ export function toSynth(role, p = {}) {
         o["osc2.wave"] = w;
       }
       if (has(p, "osc.detune")) o["osc2.freq"] = clamp(num(p["osc.detune"]) / 100, -7, 7);
+      // Undertow's oscillators default to 16' (an octave under the note); 8' plays the note itself.
+      if (has(p, "osc.octave")) { o["osc1.range"] = p["osc.octave"] === "8'" ? 3 : 2; o["osc2.range"] = o["osc1.range"]; }
       if (has(p, "sub.level")) {
         o["mix.osc3_on"] = 1;
         o["osc3.range"] = 1;
@@ -67,6 +69,9 @@ export function toSynth(role, p = {}) {
       }
       if (has(p, "fenv.decay")) o["fenv.decay"] = clamp(num(p["fenv.decay"]), 0.004, 10);
       if (has(p, "glide")) o["ctrl.glide"] = clamp(num(p.glide), 0, 5);
+      // The loudness envelope (release follows decay: Undertow's decay switch).
+      if (has(p, "aenv.attack")) o["lenv.attack"] = clamp(num(p["aenv.attack"]), 0.001, 10);
+      if (has(p, "aenv.release")) o["lenv.decay"] = clamp(num(p["aenv.release"]), 0.004, 10);
       break;
     case "lead":
       prismFilter("lead", p, o);
@@ -89,6 +94,8 @@ export function toSynth(role, p = {}) {
       if (has(p, "portamento")) o["voice.glide"] = clamp(num(p.portamento), 0, 2);
       if (has(p, "delay.send")) o["send.echo"] = clamp(num(p["delay.send"]) * 10, 0, 10);
       if (has(p, "reverb.send")) o["send.space"] = clamp(num(p["reverb.send"]) * 10, 0, 10);
+      // At least 20 ms: a faster onset clicks, and a bright lead turns shrill.
+      if (has(p, "aenv.attack")) o["env1.attack"] = clamp(num(p["aenv.attack"]), 0.02, 10);
       if (has(p, "aenv.release")) o["env1.release"] = clamp(num(p["aenv.release"]), 0.005, 15);
       break;
     case "keys":
