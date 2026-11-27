@@ -250,11 +250,15 @@ export class BeaconEngine {
       const m = this.mix.roles[role];
       const inst = this.inst[role];
       inst.setParams(m.params);
+      inst.setSample?.(m.sample);
       inst.setAutomation(m.automation, this.beatAt);
       this.inst.channels[role].set("level", m.gain, tc);
       inst.applyChannel(this.ctx.currentTime, tc);
     }
-    if (this.inst.pad) this.inst.channels.pad.set("level", padGain(this.active), tc);
+    if (this.inst.pad) {
+      this.inst.channels.pad.set("level", padGain(this.active), tc);
+      this.inst.pad.setSample?.(this.harmony?.song?.pad?.sample || null);
+    }
   }
 
   _tick() {

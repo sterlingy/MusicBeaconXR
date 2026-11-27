@@ -80,3 +80,27 @@ tools/.venv/Scripts/python.exe tools/separate.py
 ```
 
 Parts land in `analysis/stems/<song>/<part>.wav`, with `parts.json` giving how loud each is. Then `tools/.venv/Scripts/python.exe tools/analyze.py` measures each song (tempo, key, chords by bar, rough sections) and each part (tone balance, brightness, attack and decay, how busy and wide, pitch range, the drums' typical bar) into `analysis/stems/<song>/report.json`, the numbers SynthKit presets get matched against. The Python environment (`tools/.venv/`, PyTorch with CUDA, Demucs 4.0.1, soundfile) and `analysis/` stay out of git; setup steps are at the top of the script.
+
+## Sampled instruments
+
+Some parts of a song can play a recorded instrument instead of a synth: piano, string section, pizzicato, harp, horn, trumpet, trombone, tuba, flute, clarinet, oboe, bassoon, contrabass, marimba, glockenspiel, xylophone and an orchestral percussion kit, all from VSCO 2 Community Edition (CC0). Each song rolls its sampled parts from its own seed (`SAMPLE_CHOICES` and `SAMPLE_ODDS` in `web/src/song.js`, mirrored in `scripts/beacon/song_gen.gd`), ambient and journey songs most often; the notes and synth sounds are unchanged. The loudest song in a part picks its sound, and a part plays its synth until its samples have loaded. They play on SynthKit's Sampler.
+
+Each platform gets its own quality tier:
+
+| Tier | Where | What | Size |
+|---|---|---|---|
+| full | desktop and Windows VR builds (`samples/full`) | every velocity layer and round robin, stereo, long tails | 72 MB |
+| web | the website (`web/samples/web`), loaded per instrument on demand | 3 layers, stereo | 41 MB |
+| phone | Android and Quest builds (`samples/phone`) | 2 layers, mono, 32 kHz | 12 MB |
+
+Build them from the source library (cloned to `samples_src/VSCO-2-CE`, git-ignored), then match their loudness to the synths they replace:
+
+```bash
+tools/.venv/Scripts/python.exe tools/build_samples.py
+```
+
+```bash
+node web/tools/calibrate_samples.mjs
+```
+
+The export presets carry the right tier (desktop: full, Android and Quest: phone). The built packs are git-ignored for now, so the website plays only synths until the web pack is published. `web/tools/sampler_render.mjs` renders a program offline for checking, and `tests/sampler_check.gd` checks the Sampler in the app.

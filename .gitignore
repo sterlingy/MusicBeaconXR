@@ -30,3 +30,13 @@ media/prism-demos/
 # Audio analysis: the Python environment (PyTorch, Demucs) and the songs and stems it works on
 tools/.venv/
 analysis/
+
+# Sample libraries (sources for a curated pack); never in git or app exports
+samples_src/
+
+# Built sample packs (tools/build_samples.py rebuilds them from samples_src/).
+# Kept out of git until we settle where ~125 MB of audio should live.
+samples/
+web/samples/
+tools/build_samples.log
+tests_scene.log

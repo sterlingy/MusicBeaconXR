@@ -17,10 +17,12 @@
 //       params: { <param id>: value },   // the instrument's sound (see params.js)
 //       automation?: { <param id>: { shape, bars, depth, phase } },  // params that move over time
 //       preset?: "name",                  // the factory preset the sound started from
+//       sample?: "id",                    // a sampled instrument to play instead (SAMPLE_CHOICES)
 //       pattern: [...]                    // see below
 //     }
 //   },
 //   morph: { <role>: { <param id>: [min, max] } }  // how far blending may push each param
+//   pad?: { sample: "id" },          // the harmony pad on a sampled instrument (strings, brass)
 //   form: [{ section: "intro" | "verse" | "pre" | "chorus" | "bridge" | "break" | "outro", bars }],
 //   sections: { <section>: { progression?, energy?, layers?: { <role>: 0..1 }, material?: "A" | "B", feel?: "half" } }
 // }
@@ -306,8 +308,50 @@ export function generateSong(seedString, hint = {}) {
   addStructure(r, song, e);
   // Part levels are mixed for SynthKit, the instruments every platform plays.
   for (const role of ROLES) song.tracks[role].level = round(song.tracks[role].level * MIX[role], 3);
+  assignSamples(song, seedString);
   return song;
 }
+
+/**
+ * Sampled instruments (SynthKit's Sampler, playing the sample packs built by
+ * tools/build_samples.py): which recorded instrument a part may play instead
+ * of its synth. Parts are listed in the order they're rolled.
+ */
+export const SAMPLE_CHOICES = {
+  drums: ["orch_kit"],
+  bass: ["contrabass_pizz", "contrabass", "tuba", "bassoon"],
+  keys: ["piano"],
+  lead: ["horn", "flute", "clarinet", "oboe", "trumpet"],
+  pluck: ["harp", "strings_pizz", "marimba", "glock", "xylo"],
+  pad: ["strings", "strings", "trombone", "horn"],
+};
+/** How often each family's parts go acoustic: ambient and journey songs lean orchestral, grooves stay electronic. */
+export const SAMPLE_ODDS = {
+  ambient: { drums: 0.1, bass: 0.3, keys: 0.5, lead: 0.45, pluck: 0.5, pad: 0.6 },
+  journey: { drums: 0.25, bass: 0.35, keys: 0.45, lead: 0.55, pluck: 0.45, pad: 0.6 },
+  song: { drums: 0.15, bass: 0.3, keys: 0.45, lead: 0.35, pluck: 0.35, pad: 0.4 },
+  groove: { drums: 0.08, bass: 0.2, keys: 0.3, lead: 0.2, pluck: 0.3, pad: 0.25 },
+};
+
+/**
+ * Picks the song's sampled parts from its own seed (seed + "|samples"), so the
+ * notes and synth sounds are the same as without them. A player that doesn't
+ * have a sample (still loading, or not in its pack) plays the part's synth.
+ */
+function assignSamples(song, seedString) {
+  const r = rng(hashString(`${seedString}|samples`));
+  const odds = SAMPLE_ODDS[song.family] || SAMPLE_ODDS.song;
+  for (const role of Object.keys(SAMPLE_CHOICES)) {
+    const roll = r();
+    const id = pick(r, SAMPLE_CHOICES[role]);
+    if (roll >= odds[role]) continue;
+    if (role === "pad") song.pad = { sample: id };
+    else if (song.tracks[role]) song.tracks[role].sample = id;
+  }
+}
+
+/** Every sample id a song may ask for. */
+export const SAMPLE_IDS = [...new Set(Object.values(SAMPLE_CHOICES).flat())];
 
 /** A verse progression for the family: a drone sway, a borrowed-chord one, or a plain one in the mode. */
 function pickProgression(r, family, mode) {
@@ -767,8 +811,10 @@ export function validateSong(s) {
     else if (!(t.level >= 0 && t.level <= 1)) errs.push(`${role}.level must be 0-1`);
     else if (role === "drums" ? typeof t.pattern !== "object" : !Array.isArray(t.pattern)) errs.push(`${role}.pattern has the wrong shape`);
     else if (t.patternB != null && (role === "drums" ? typeof t.patternB !== "object" : !Array.isArray(t.patternB) || !t.patternB.length)) errs.push(`${role}.patternB has the wrong shape`);
+    else if (t.sample != null && typeof t.sample !== "string") errs.push(`${role}.sample must be a sample id`);
     else for (const e of checkAutomation(ROLE_INSTRUMENT[role], t.automation)) errs.push(`${role}: ${e}`);
   }
+  if (s.pad != null && (typeof s.pad !== "object" || (s.pad.sample != null && typeof s.pad.sample !== "string"))) errs.push("pad.sample must be a sample id");
   if (s.form != null) {
     if (!Array.isArray(s.form) || !s.form.length) errs.push("form must be a non-empty array");
     else s.form.forEach((f, i) => {

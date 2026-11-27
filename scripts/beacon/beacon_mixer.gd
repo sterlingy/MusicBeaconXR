@@ -106,7 +106,7 @@ static func validate(s) -> PackedStringArray:
 	return errs
 
 
-## Blends the active songs ([{id, w, song}]) into per-role {gain, params, sources}.
+## Blends the active songs ([{id, w, song}]) into per-role {gain, params, sample, sources}.
 static func blend(active: Array) -> Dictionary:
 	var roles := {}
 	for role in ROLES:
@@ -122,8 +122,20 @@ static func blend(active: Array) -> Dictionary:
 			total += s.share
 		for s in sources:
 			s.share = s.share / total if total > 0.0 else 0.0
-		roles[role] = {"gain": gain, "params": _blend_params(active, role, sources), "sources": sources}
+		roles[role] = {"gain": gain, "params": _blend_params(active, role, sources), "sample": _lead_sample(active, role, sources), "sources": sources}
 	return roles
+
+
+## The sampled instrument a part plays: the loudest song's choice in that role ("" = its synth).
+static func _lead_sample(active: Array, role: String, sources: Array) -> String:
+	var best := -1.0
+	var out := ""
+	for i in sources.size():
+		if sources[i].share > best:
+			best = sources[i].share
+			var t = active[i].song.tracks.get(role)
+			out = str(t.get("sample", "")) if t else ""
+	return out
 
 
 static func _blend_params(active: Array, role: String, sources: Array) -> Dictionary:

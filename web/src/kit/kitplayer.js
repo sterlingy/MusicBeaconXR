@@ -9,6 +9,7 @@
 
 import { Channel } from "../synths.js";
 import { toSynth } from "./parammap.js";
+import { SampleLibrary, PartSampler } from "./samples.js";
 
 export const INSTRUMENT = { drums: "Pulsar", bass: "Undertow", keys: "Prism", lead: "Prism", pluck: "Driftwood", texture: "Tangle", pad: "Prism" };
 export const BASE_PRESET = { drums: "Classic Eight", bass: "Deep Current", keys: "Prism Keys", lead: "Comet Tail", pluck: "Nylon Pluck", texture: "Drone Garden", pad: "Aurora Pad" };
@@ -55,39 +56,67 @@ export function changedParams(done, target) {
 }
 
 class KitPart {
-  constructor(role, synth, channel) {
+  constructor(role, synth, channel, sampler = null) {
     this.role = role;
     this.synth = synth;
     this.channel = channel;
+    this.sampler = sampler; // PartSampler: a recorded instrument the blend can switch to
+    this.useSampler = false;
     this.applied = {};
     this.held = []; // the pad's chord
   }
+  /** Where notes go: the Sampler once the program the blend wants is loaded, else the synth. */
+  get target() { return this.useSampler ? this.sampler.synth : this.synth; }
   setParams(params) {
     for (const [id, v] of Object.entries(changedParams(this.applied, toSynth(this.role, params || {})))) this.synth.setParam(id, v);
+  }
+  /** The sampled instrument the blend wants for this part (null = the synth). */
+  setSample(id) {
+    if (!this.sampler) return;
+    if (!id) {
+      this._switch(false);
+      this.sampler.wanted = null;
+      return;
+    }
+    if (this.sampler.ready && this.sampler.live === id) return this._switch(true);
+    this._switch(false);
+    this.sampler.want(id).then((ok) => { if (ok && this.sampler.wanted === id) this._switch(true); });
+  }
+  _switch(on) {
+    if (on === this.useSampler) return;
+    const now = this.synth.context.currentTime;
+    const held = this.held;
+    if (held.length) for (const n of held) this.target.noteOff(n, now);
+    this.useSampler = on;
+    if (held.length) for (const n of held) this.target.noteOn(n, 0.7, now);
   }
   setAutomation() {} // not yet: the app doesn't play automation either
   applyChannel() {} // the synth's own space and echo sends carry the sound
   hit(voice, t, vel) {
     const n = DRUM_NOTE[voice];
     if (n === undefined) return;
-    this.synth.noteOn(n, vel, t);
-    this.synth.noteOff(n, t + 0.1);
+    const s = this.target;
+    s.noteOn(n, vel, t);
+    s.noteOff(n, t + 0.1);
   }
   chord(notes, t, dur, vel) { for (const n of notes) this.note(n, t, dur, vel); }
   note(n, t, dur, vel) {
-    this.synth.noteOn(n, vel, t);
-    this.synth.noteOff(n, t + dur);
+    const s = this.target;
+    s.noteOn(n, vel, t);
+    s.noteOff(n, t + dur);
   }
   /** The pad holds a chord, tied across bars while it stays the same so it swells instead of retriggering. */
   hold(notes, t) {
     if (notes.length === this.held.length && notes.every((n, i) => n === this.held[i])) return false;
-    for (const n of this.held) this.synth.noteOff(n, t);
-    for (const n of notes) this.synth.noteOn(n, 0.7, t);
+    const s = this.target;
+    for (const n of this.held) s.noteOff(n, t);
+    for (const n of notes) s.noteOn(n, 0.7, t);
     this.held = notes.slice();
     return true;
   }
   release() {
     this.synth.allNotesOff();
+    this.sampler?.synth?.allNotesOff();
     this.held = [];
   }
 }
@@ -97,7 +126,7 @@ class KitPart {
  * Channel (level and meter; no browser sends, since the synths have their own).
  * `base` is where the site serves SynthKit (web/serve.py and build_site.py: synthkit/).
  */
-export async function makeKitInstruments(bus, { base = new URL("../../synthkit/", import.meta.url), phone = isPhone() } = {}) {
+export async function makeKitInstruments(bus, { base = new URL("../../synthkit/", import.meta.url), phone = isPhone(), samples = true } = {}) {
   const { loadSynthKit } = await import(new URL("synthkit.js", base).href);
   const kit = await loadSynthKit(bus.ctx);
   const index = await (await fetch(new URL("presets/factory/index.json", base))).json();
@@ -108,6 +137,9 @@ export async function makeKitInstruments(bus, { base = new URL("../../synthkit/"
   };
   const out = { kind: "kit", kit, channels: {}, parts: PARTS };
   const synths = [];
+  // Recorded instruments, when the site has the web sample pack (and the build has the Sampler).
+  const library = samples && kit.capabilities?.sampler ? new SampleLibrary(kit) : null;
+  const samplers = [];
   await Promise.all(PARTS.map(async (role) => {
     const synth = await kit.createSynth(INSTRUMENT[role]);
     await synth.applyPreset(await presetFor(INSTRUMENT[role], BASE_PRESET[role]));
@@ -120,13 +152,16 @@ export async function makeKitInstruments(bus, { base = new URL("../../synthkit/"
     ch.input.gain.value = Math.pow(10, KIT_GAIN_DB / 20);
     synth.connect(ch.input);
     out.channels[role] = wakeOnLevel(ch, synth, INSTRUMENT[role] === "Prism");
-    out[role] = new KitPart(role, synth, ch);
+    const sampler = library && role !== "texture" ? new PartSampler(kit, library, ch.input, { phone }) : null;
+    if (sampler) samplers.push(sampler);
+    out[role] = new KitPart(role, synth, ch, sampler);
     synths.push(synth);
   }));
   out.setTempo = (bpm) => { for (const s of synths) s.setTempo(bpm); };
   out.stop = () => { for (const r of PARTS) out[r].release(); };
   out.dispose = () => {
     for (const s of synths) s.dispose();
+    for (const s of samplers) s.dispose();
     for (const r of PARTS) out.channels[r].level.disconnect();
   };
   return out;

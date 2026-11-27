@@ -48,9 +48,16 @@ export function blend(active) {
     }
     const total = sources.reduce((s, x) => s + x.share, 0);
     for (const s of sources) s.share = total > 0 ? s.share / total : 0;
-    roles[role] = { gain, params: blendParams(active, role, sources), automation: leadAutomation(active, role, sources), sources };
+    roles[role] = { gain, params: blendParams(active, role, sources), automation: leadAutomation(active, role, sources), sample: leadSample(active, role, sources), sources };
   }
   return { roles };
+}
+
+/** The sampled instrument a part plays: the loudest song's choice in that role (null = its synth). */
+function leadSample(active, role, sources) {
+  let best = -1, out = null;
+  sources.forEach((s, i) => { if (s.share > best) { best = s.share; out = active[i].song.tracks[role]?.sample || null; } });
+  return out;
 }
 
 /** Automation comes whole from the song that's loudest in the role (shapes don't average well). */

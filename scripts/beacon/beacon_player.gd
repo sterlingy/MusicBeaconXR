@@ -58,6 +58,15 @@ var _param_t := 0.0
 var _gain := {} # role -> smoothed linear gain
 var _pad_notes: Array = [] # the chord the pad is holding
 var _awake := {} # role -> Prism part awake (out.gain 1) or asleep (0)
+## Sampled instruments: the pack this device carries, and per part a Sampler rig
+## (made when a song first asks for one) that plays instead of the synth once
+## the program the blend wants has loaded.
+var samples: SampleBank = null
+var sample_rigs := {} # role -> InstrumentRig (Sampler)
+var _sample_live := {} # role -> program id loaded in that rig
+var _sample_want := {} # role -> program id the blend wants ("" = synth)
+var _sample_level := {} # role -> dB matching the program to the synth (program.json level)
+var _use_sampler := {} # role -> true while notes go to the Sampler
 var muted := {} # role -> true: silenced by the mix panel's M
 var soloed := {} # role -> true: when any part is soloed, only soloed parts play
 
@@ -88,6 +97,8 @@ func _ready() -> void:
 	# someone turns the click on (the field's "Click" button, or M).
 	Transport.metronome_on = false
 	Transport.count_in_bars = 0
+	if ClassDB.class_has_method("JamSynth", "sampler_begin"):
+		samples = SampleBank.new()
 	Transport.register(self)
 	_refresh()
 
@@ -198,14 +209,22 @@ func set_soloed(role: String, on: bool) -> void:
 func _process(delta: float) -> void:
 	if mix.is_empty() or rigs.is_empty():
 		return
+	if samples:
+		samples.poll()
+		for role in rigs:
+			if role != "texture":
+				_want_sample(role, _wanted_sample(role))
 	for role in rigs:
 		# Smooth level changes so walking never clicks.
 		var want := float(mix[role].gain) if Transport.running and audible(role) else 0.0
 		_gain[role] = lerpf(_gain[role], want, minf(1.0, delta * 6.0))
-		rigs[role].set_volume_db(linear_to_db(maxf(_gain[role], 0.0001)) + KIT_GAIN_DB)
-		# A Prism part faded out of the blend sleeps: no voices, no CPU.
+		var db := linear_to_db(maxf(_gain[role], 0.0001)) + KIT_GAIN_DB
+		rigs[role].set_volume_db(db)
+		if sample_rigs.has(role):
+			sample_rigs[role].set_volume_db(db + float(_sample_level.get(role, 0.0)))
+		# A Prism part faded out of the blend (or played by its Sampler) sleeps: no voices, no CPU.
 		if _awake.has(role):
-			var awake: bool = _gain[role] > 0.0005
+			var awake: bool = _gain[role] > 0.0005 and not _use_sampler.get(role, false)
 			if awake != _awake[role]:
 				_awake[role] = awake
 				rigs[role].synth.set_param("out.gain", 1.0 if awake else 0.0)
@@ -225,6 +244,74 @@ func _apply_params(role: String) -> void:
 		if not done.has(id) or absf(done[id] - v) > 0.002 * maxf(1.0, absf(v)):
 			synth.set_param(id, v)
 			done[id] = v
+
+
+# ---- sampled instruments
+
+## The program the blend wants for a part: the loudest song's choice ("" = its synth).
+func _wanted_sample(role: String) -> String:
+	if role == "pad":
+		return str(harmony.song.get("pad", {}).get("sample", "")) if not harmony.song.is_empty() else ""
+	return str(mix.get(role, {}).get("sample", ""))
+
+
+func _want_sample(role: String, id: String) -> void:
+	if id == _sample_want.get(role, ""):
+		return
+	_sample_want[role] = id
+	if id == "" or not samples.has(id):
+		_switch(role, false)
+		return
+	if _sample_live.get(role, "") == id:
+		_switch(role, true)
+		return
+	_switch(role, false)
+	var rig := _sample_rig(role)
+	samples.load_async(rig.synth, id, func(ok: bool):
+		if not ok:
+			return
+		_sample_live[role] = id
+		var prog: Dictionary = samples.index.get(id, {})
+		_sample_level[role] = linear_to_db(maxf(float(prog.get("level", 1.0)), 0.001))
+		if OS.has_feature("mobile"):
+			rig.synth.set_param("voice.quality", 0)
+			rig.synth.set_param("voice.count", 16)
+		if _sample_want.get(role, "") == id:
+			_switch(role, true))
+
+
+func _sample_rig(role: String) -> InstrumentRig:
+	if sample_rigs.has(role):
+		return sample_rigs[role]
+	var rig := InstrumentRig.new()
+	rig.name = role.capitalize() + "Sampler"
+	rig.instrument = "Sampler"
+	rig.local_input = false
+	add_child(rig)
+	rig.sequencer.enabled = false
+	rig.set_volume_db(-80.0)
+	sample_rigs[role] = rig
+	return rig
+
+
+## Moves a part between its synth and its Sampler; the pad's held chord moves with it.
+func _switch(role: String, on: bool) -> void:
+	if on == _use_sampler.get(role, false):
+		return
+	var from := _synth_for(role)
+	_use_sampler[role] = on
+	if role == "pad" and not _pad_notes.is_empty():
+		var to := _synth_for(role)
+		for n in _pad_notes:
+			from.note_off(n)
+			to.note_on(n, 0.7)
+
+
+## Where a part's notes go right now.
+func _synth_for(role: String) -> JamSynth:
+	if _use_sampler.get(role, false) and sample_rigs.has(role):
+		return sample_rigs[role].synth
+	return rigs[role].synth
 
 
 # ---- Transport client
@@ -252,7 +339,7 @@ func _play_step(index: int, beat: float) -> void:
 	if step == 0:
 		_play_pad(bar, beat)
 	for ev in BeaconMixer.step_events(active, mix, harmony, bar, step):
-		var synth: JamSynth = rigs[ev.role].synth
+		var synth: JamSynth = _synth_for(ev.role)
 		var on := Transport.frame_for(synth, beat)
 		if ev.role == "drums":
 			var n: int = DRUM_NOTE[ev.voice]
@@ -270,6 +357,8 @@ func _play_step(index: int, beat: float) -> void:
 func transport_stopped() -> void:
 	for role in rigs:
 		rigs[role].synth.all_notes_off()
+	for role in sample_rigs:
+		sample_rigs[role].synth.all_notes_off()
 	_pad_notes = []
 
 
@@ -288,7 +377,7 @@ func _play_pad(bar: int, beat: float) -> void:
 	var chord: Array = BeaconMixer.chord_notes(harmony.song.key, harmony.chord_degree(bar), 3, 4)
 	if chord == _pad_notes:
 		return
-	var synth: JamSynth = rigs["pad"].synth
+	var synth: JamSynth = _synth_for("pad")
 	var at := Transport.frame_for(synth, beat)
 	for n in _pad_notes:
 		synth.note_off(n, at)

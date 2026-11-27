@@ -225,7 +225,45 @@ static func automatable(n: String) -> Array:
 static func generate(seed: String, hint := {}) -> Dictionary:
 	var g := SongGen.new()
 	g._a = hash_string(seed)
-	return g._song(hint)
+	var song := g._song(hint)
+	assign_samples(song, seed)
+	return song
+
+
+## Sampled instruments (SynthKit's Sampler; packs built by tools/build_samples.py):
+## which recorded instrument a part may play instead of its synth, in the order
+## the parts are rolled. Same as web/src/song.js SAMPLE_CHOICES and SAMPLE_ODDS.
+const SAMPLE_CHOICES := {
+	"drums": ["orch_kit"],
+	"bass": ["contrabass_pizz", "contrabass", "tuba", "bassoon"],
+	"keys": ["piano"],
+	"lead": ["horn", "flute", "clarinet", "oboe", "trumpet"],
+	"pluck": ["harp", "strings_pizz", "marimba", "glock", "xylo"],
+	"pad": ["strings", "strings", "trombone", "horn"],
+}
+const SAMPLE_ODDS := {
+	"ambient": {"drums": 0.1, "bass": 0.3, "keys": 0.5, "lead": 0.45, "pluck": 0.5, "pad": 0.6},
+	"journey": {"drums": 0.25, "bass": 0.35, "keys": 0.45, "lead": 0.55, "pluck": 0.45, "pad": 0.6},
+	"song": {"drums": 0.15, "bass": 0.3, "keys": 0.45, "lead": 0.35, "pluck": 0.35, "pad": 0.4},
+	"groove": {"drums": 0.08, "bass": 0.2, "keys": 0.3, "lead": 0.2, "pluck": 0.3, "pad": 0.25},
+}
+
+
+## Picks the song's sampled parts from its own seed (seed + "|samples"), so the
+## notes and synth sounds stay the same. A player without the sample plays the synth.
+static func assign_samples(song: Dictionary, seed: String) -> void:
+	var g := SongGen.new()
+	g._a = hash_string(seed + "|samples")
+	var odds: Dictionary = SAMPLE_ODDS.get(song.get("family", "song"), SAMPLE_ODDS.song)
+	for role in SAMPLE_CHOICES:
+		var roll := g.r()
+		var id: String = g.pick(SAMPLE_CHOICES[role])
+		if roll >= float(odds[role]):
+			continue
+		if role == "pad":
+			song["pad"] = {"sample": id}
+		elif song.tracks.has(role):
+			song.tracks[role]["sample"] = id
 
 
 func _song(hint := {}) -> Dictionary:
