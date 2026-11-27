@@ -473,6 +473,8 @@ func _parse_args() -> void:
 			_follow_flight_dev(a.trim_prefix("--flight="))
 		elif a == "--wander":
 			input.wander = true
+		elif a == "--menu": # dev: the Fields panel
+			get_tree().create_timer(0.3).timeout.connect(func(): menu.set_open(true, false))
 		elif a == "--speed-open": # dev: the Wander pop-up
 			get_tree().create_timer(0.3).timeout.connect(func(): speed.set_open(true, false))
 		elif a == "--drafts-demo":

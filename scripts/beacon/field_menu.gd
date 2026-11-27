@@ -216,7 +216,8 @@ func _build_panel() -> void:
 	# The metronome click and the orchestral samples live in the song panel;
 	# auto-walk (wander) in the Wander pop-up, by the travel speed.
 
-	v.add_child(_heading("LOCAL GRID"))
+	var head := _heading("MY LOCATION" if kind == "globe" else "LOCAL GRID")
+	v.add_child(head)
 	var side := _option(FieldPrefs.SIDES_KM, FieldPrefs.local_km(), "%s km a side")
 	side.item_selected.connect(func(i):
 		FieldPrefs.set_value("local_km", FieldPrefs.SIDES_KM[i])
@@ -247,12 +248,13 @@ func _build_panel() -> void:
 	loc.add_child(center)
 	follow.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	v.add_child(loc)
-	# The grid size is the local grid's; following your location works on the globe too.
+	# The grid size is the local grid's, so it shows only there; following your
+	# location works on the globe too. The test grid has none of these.
 	if kind != "local":
-		for c in ([side, spacing] if kind == "globe" else [side, spacing, follow, center]):
-			c.disabled = true
-		var note := _small("Grid size: open the local grid to use it." if kind == "globe" else "Open the local grid to use these.")
-		v.add_child(note)
+		sizes.visible = false
+		if kind != "globe":
+			head.visible = false
+			loc.visible = false
 	status = _small("")
 	status.visible = false
 	v.add_child(status)
