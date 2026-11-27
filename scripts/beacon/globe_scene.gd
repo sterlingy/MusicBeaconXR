@@ -72,6 +72,9 @@ func _ready() -> void:
 
 ## Walking comes from ListenerKit: keyboard / gamepad, click or tap the globe, wander.
 func _build_input() -> void:
+	speed = SpeedUi.new()
+	speed.note = "On the globe the speed also follows the zoom (10 m/s is the usual pace), so walking works from the whole Earth down to a street."
+	add_child(speed)
 	travel = TravelUi.new()
 	add_child(travel)
 	travel.chosen.connect(_go)
@@ -317,7 +320,7 @@ func _process(delta: float) -> void:
 		xf.basis = xf.basis * Basis(Vector3.UP, -deg_to_rad(float(mine.flight.fix.get("track", 0.0))))
 		plane.transform = xf.scaled_local(Vector3.ONE * 2.6 * k)
 	camera.near = clampf(altitude * 0.01, 0.0005, 0.05)
-	input.space.walk_speed = WALK_DEG * maxf(0.002, k)
+	input.space.walk_speed = WALK_DEG * maxf(0.002, k) * speed.mps / 10.0 # the speed button scales the zoom-following pace
 	_draw_user_beacons()
 	_draw_us_outline()
 	_draw_trail()
@@ -490,6 +493,7 @@ func _near_plane(at: Vector2) -> bool:
 # ---------------------------------------------------------------- turning the globe, Jump and Move
 
 var travel: TravelUi
+var speed: SpeedUi
 var _marker: MeshInstance3D
 var plane: Node3D # shown instead of the listener while following a flight
 var _plane_mat: StandardMaterial3D

@@ -50,6 +50,7 @@ var _replay_box: HBoxContainer
 
 func _init() -> void:
 	name = "BeaconWalks"
+	add_to_group("beacon_walks") # the speed button sits beside its button
 	layer = 6
 
 

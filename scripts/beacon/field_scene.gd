@@ -88,6 +88,9 @@ func _make_local(lat: float, lon: float) -> BeaconField:
 ## Walking comes from ListenerKit (keyboard / gamepad, click or tap, wander); this
 ## scene only listens for the position and the commands. Positions are meters.
 func _build_input() -> void:
+	speed = SpeedUi.new()
+	add_child(speed)
+	speed.changed.connect(func(mps: float): input.space.walk_speed = mps)
 	travel = TravelUi.new()
 	add_child(travel)
 	travel.chosen.connect(_go)
@@ -129,7 +132,8 @@ func _build_input() -> void:
 func _set_space() -> void:
 	var f := player.field
 	var m := 2.5 * f.spacing if kind == "grid" else (f.steps / 2.0 + 0.5) * f.spacing
-	input.space = ListenerSpace.planar(Rect2(-m, -m, 2 * m, 2 * m), WALK_SPEED / view_scale)
+	# Field units are meters: the walking speed is the speed button's m/s.
+	input.space = ListenerSpace.planar(Rect2(-m, -m, 2 * m, 2 * m), SpeedUi.saved())
 
 
 func _on_action(name: String, arg: Variant) -> void:
@@ -416,6 +420,7 @@ func _cam_pos() -> Vector2:
 # ---------------------------------------------------------------- panning, Jump and Move
 
 var travel: TravelUi
+var speed: SpeedUi
 var _marker: MeshInstance3D
 var _free := false # the map was panned away from the listener
 var _view := Vector2.ZERO # what the camera looks at while free (field units)
@@ -577,6 +582,8 @@ func _parse_args() -> void:
 			input.wander = true
 		elif a == "--menu":
 			menu.set_open(true)
+		elif a == "--speed-open": # dev: the walking speed pop-up
+			get_tree().create_timer(0.3).timeout.connect(func(): speed.set_open(true))
 		elif a.begins_with("--card="): # dev: the Jump / Move card for x,y (field units)
 			var cl := a.trim_prefix("--card=").split(",")
 			var at := Vector2(float(cl[0]), float(cl[1]))
