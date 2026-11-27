@@ -12,7 +12,33 @@ func check(ok: bool, msg: String) -> void:
 		printerr("FAIL: ", msg)
 
 
+## The table saves patch changes to user:// as they happen (PATCH_FILE),
+## and this check re-patches the dial: set any saved patches aside so it starts
+## from the defaults, and put them back afterwards, so runs never affect each
+## other or your own patches.
+const PATCH_FILE := "user://music_input_patches.json" # scripts/play/playground.gd's
+var _saved_patches: Variant = null
+
+
+func _set_patches_aside() -> void:
+	var path := ProjectSettings.globalize_path(PATCH_FILE)
+	if FileAccess.file_exists(PATCH_FILE):
+		_saved_patches = FileAccess.get_file_as_string(PATCH_FILE)
+		DirAccess.remove_absolute(path)
+
+
+func _put_patches_back() -> void:
+	var path := ProjectSettings.globalize_path(PATCH_FILE)
+	if _saved_patches is String:
+		var f := FileAccess.open(PATCH_FILE, FileAccess.WRITE)
+		f.store_string(_saved_patches)
+		f.close()
+	elif FileAccess.file_exists(PATCH_FILE):
+		DirAccess.remove_absolute(path)
+
+
 func _ready() -> void:
+	_set_patches_aside()
 	var table: Node3D = load("res://scenes/instrument_table.tscn").instantiate()
 	add_child(table)
 	await get_tree().process_frame
@@ -71,4 +97,5 @@ func _ready() -> void:
 	kit.send_action("lock", true)
 
 	print("instrument_table_check: %s (%d failure(s))" % ["OK" if failures == 0 else "FAILED", failures])
+	_put_patches_back()
 	get_tree().quit(0 if failures == 0 else 1)
