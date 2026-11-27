@@ -40,6 +40,7 @@ var _coast_lines: Array = []
 var _us_k := -1.0 # the altitude it was last built for
 var _drawn_pool := {} # the pool the user beacons were last drawn from
 var _drawn_at := Vector2(INF, INF)
+var _drawn_alt := -1.0 # the zoom they were sized for
 
 
 static func to_world(lat: float, lon: float, r := R) -> Vector3:
@@ -377,9 +378,21 @@ func _update_active() -> void:
 		# Neighbouring beacons' labels mustn't collide: name and share only (the
 		# panel has the coordinates), quieter ones smaller and lower.
 		lab.visible = a.w >= 0.03
-		lab.position = to_world(a.beacon.pos.y, a.beacon.pos.x, R + (14.0 + 10.0 * a.w) * _k())
-		lab.pixel_size = 0.06 * _k() * (0.7 + 0.3 * a.w)
+		lab.position = to_world(a.beacon.pos.y, a.beacon.pos.x, R + maxf((14.0 + 10.0 * a.w) * _k(), altitude * 0.04)) # above the pillars at any zoom
+		# The same size on screen at every zoom (it shrank to specks up close).
+		lab.fixed_size = true
+		lab.pixel_size = 0.0011 * (0.72 + 0.3 * a.w)
 		lab.text = "%s\n%d%%" % [a.song.title, roundi(a.w * 100)]
+		# Two labels that would land on top of each other: the quieter one stacks above.
+		lab.offset = Vector2.ZERO
+		var here := camera.unproject_position(lab.position)
+		var stack := 0
+		for j in i:
+			var other: Label3D = labels[j]
+			var there := camera.unproject_position(other.position)
+			if other.visible and absf(there.x - here.x) < 240.0 and absf(there.y - here.y) < 80.0:
+				stack += 1
+		lab.offset = Vector2(0, 125.0 * stack)
 		lab.modulate = Color.WHITE.lerp(col, 0.35)
 
 
@@ -630,8 +643,13 @@ func _build_user_beacons() -> void:
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D
 	mm.use_colors = true
-	var box := BoxMesh.new()
-	box.size = Vector3.ONE
+	# Slim tapered pillars, like the global beacons (they were cubes the size of the spacing).
+	var box := CylinderMesh.new()
+	box.top_radius = 0.32
+	box.bottom_radius = 0.5
+	box.height = 1.0
+	box.radial_segments = 10
+	box.rings = 1
 	var mat := StandardMaterial3D.new()
 	mat.vertex_color_use_as_albedo = true
 	mat.emission_enabled = true
@@ -674,10 +692,11 @@ func _build_user_beacons() -> void:
 func _draw_user_beacons() -> void:
 	var pool: Dictionary = mine.drafts.pool
 	var p := player.pos
-	if is_same(pool, _drawn_pool) and absf(p.x - _drawn_at.x) < 1.0 and absf(p.y - _drawn_at.y) < 1.0:
+	if is_same(pool, _drawn_pool) and absf(p.x - _drawn_at.x) < 1.0 and absf(p.y - _drawn_at.y) < 1.0 and absf(altitude / maxf(_drawn_alt, 1e-6) - 1.0) < 0.15:
 		return
 	_drawn_pool = pool
 	_drawn_at = p
+	_drawn_alt = altitude
 	var near := []
 	for e in pool.playing:
 		if absf(e.lat - p.y) < 3.0 and absf(BeaconDrafts._wrap180(e.lon - p.x)) < 3.0:
@@ -690,9 +709,11 @@ func _draw_user_beacons() -> void:
 	for i in near.size():
 		var e: Dictionary = near[i]
 		var gen: bool = e.kind == "gen" or e.kind == "edited"
-		var s: float = (float(e.spacingM) * 0.3 if gen else 120.0) * unit
-		var xf := _surface_xform(e.lat, e.lon, s * (0.5 if gen else 2.0))
-		xf.basis = xf.basis.scaled_local(Vector3(s, s * (1.0 if gen else 4.0), s))
+		# Width from the spacing, but never more than a marker on screen at this zoom.
+		var s: float = minf((float(e.spacingM) * 0.16 if gen else 60.0) * unit, altitude * 0.02)
+		var hgt: float = s * (3.2 if gen else 5.0)
+		var xf := _surface_xform(e.lat, e.lon, hgt * 0.5)
+		xf.basis = xf.basis.scaled_local(Vector3(s, hgt, s))
 		mm.set_instance_transform(i, xf)
 		var mood: Color = MOOD_COLOR.get(mine.drafts.song_of(e).get("mood", ""), Color.WHITE)
 		mm.set_instance_color(i, mood.lerp(Color(e.tint), 0.35))
