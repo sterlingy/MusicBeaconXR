@@ -59,6 +59,17 @@ func _ready() -> void:
 	var mid := sqrt(30.0 * 18000.0)
 	check(absf(keys.synth.get_param("f1.cutoff") - mid) / mid < 0.01, "dial half way = the log middle (got %s)" % keys.synth.get_param("f1.cutoff"))
 
+	# Patch the dial to Remix's brightness: Remix turns on with it, saved for the beacon music.
+	var was_remix = FieldPrefs.get_value("remix", {})
+	check(bridge.targets().any(func(t): return t[0] == "remix" and t[1] == "remix.brightness"), "Remix's dials are patch targets")
+	kit.patches.set_patch("Dial.turn", "remix", "remix.brightness")
+	dial.set_value(1.0)
+	for i in 30:
+		await get_tree().process_frame
+	await get_tree().create_timer(0.4).timeout
+	var saved: Dictionary = FieldPrefs.get_value("remix", {})
+	check(saved.get("on", false) and is_equal_approx(float(saved.get("brightness", 0.0)), 1.0), "the dial turned Remix on at full brightness (%s)" % saved)
+	FieldPrefs.set_value("remix", was_remix)
 	# Repatch the dial to the lead's resonance: the dial now moves that instead.
 	kit.patches.set_patch("Dial.turn", "lead", "filter.resonance")
 	dial.set_value(0.3)

@@ -12,6 +12,7 @@ import { shareGlow } from "./glow.js";
 import { drawPlane3D } from "./plane.js";
 import { gcPoint } from "./globe3d.js";
 import { initDrafts } from "./draftsui.js";
+import { initRemix } from "./remixui.js";
 import { Globe3D } from "./globe3d.js";
 import { initWalks, drawLines } from "./walkui.js";
 import { FlightTracker, supabaseFlightLookup, supabaseFlightRandom, randomFlight, describe as describeFlight } from "./flight.js";
@@ -1331,6 +1332,12 @@ drafts = initDrafts({
   moodColor: (m) => MOOD_COLOR[m] || "#888888",
   renderInspector: () => renderInspector(),
   inspectedSong: () => { const id = needBeacon(); return id ? engine.songFor(id) : null; },
+});
+// Remix: the listener's own settings over whatever plays (src/remixui.js, src/remix.js).
+initRemix({
+  el: $("remixBox"), engine,
+  place: (song) => drafts.placeMyVersion(song),
+  placeMsg: () => $("dMsg")?.textContent || "",
 });
 globe3d = new Globe3D({
   canvas, engine, ui,

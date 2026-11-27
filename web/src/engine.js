@@ -95,6 +95,9 @@ export class BeaconEngine {
     if (!s.hold) this._held = null;
     this.remix = s;
     this.refresh();
+    // The song setting the key changes at once too (not at the next bar line).
+    const cur = this.active.find((a) => a.id === this.harmony.id);
+    if (cur) this.harmony.song = cur.song;
   }
 
   _remixed(song, sig) {

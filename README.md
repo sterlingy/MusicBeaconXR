@@ -124,6 +124,19 @@ On the globe and the grids, one finger (or the mouse) turns the globe or pans th
 
 **The beacons you hear glow** in their mood colour, by how much each drives the music: the pillar lights up and a soft halo grows and brightens with its share, out on the world and on your own grids (sized to the grid's spacing there). Code: `_update_active` in `scripts/beacon/globe_scene.gd`; on the website `web/src/glow.js` (the 3D globe, the flat maps and your own beacons).
 
+## Remix: make what plays your own
+
+**Remix** (a switch in the song panel; **Edit** opens its window, and on the website it's at the top of the Instruments panel) is a layer over whatever is playing. Off, everything plays exactly as written. On, every song you hear goes through your settings before the blend, wherever you walk:
+
+- **Dials** (all resting at "as written"): Energy (sparser to busier patterns: the main hits stay, quiet off-beat hats come in), Brightness (every filter together), Space (reverb and delay), Mood (the mode, bright to dark: lydian, major, mixolydian, dorian, minor, phrygian, keeping the key), Tempo (±15%), Key (±6 semitones), Character (smooth to gritty), Width (chorus and detune). Every setting stays in tasteful, in-key ranges.
+- **Parts:** each part's level, and **Swap sound** to step through its other instruments (synth waves, pluck models and the orchestral samples).
+- **Dice** rolls a new flavour, **Hold** freezes the blend so the music stops changing as you move, **Reset** goes back to as written. **Flavours** save and load named settings.
+- **Place my version here** plants what you hear as a normal beacon where you are (needs your location): the song you hear most, with your settings baked in and named "(remix)", noting the song it came from. It plays the same everywhere (app, website, shared map) without anyone needing Remix; your own Remix layer still applies on top of remixed beacons while it's on.
+- Walks record what you hear, so replays sound the way you heard them.
+- In the Instrument Table, the patch bay's **remix** targets let a 3D object (a dial, the tilt cube, the XY pad) turn Remix's dials.
+
+The rules are `web/src/remix.js` and `scripts/beacon/remix.gd`; `tests/remix_check.gd` checks the app against the website's answers (`tests/fixtures/remix.json`, written by `node web/tools/export_remix.mjs`), and `tests/remix_app_check` plays the whole loop in the app. Settings are remembered (`FieldPrefs` "remix", `localStorage` "beacon.remix").
+
 ## Windows and sounds
 
 Pop-out windows (Options, Walks, My beacons, the Jump / Move card, the flight card) are one at a time: opening one closes the others. Each pops open from its own corner with a slight overshoot and fades in, shrinks away on close, and is frosted glass (the world shows through, blurred). A swoosh plays each way, and when the readout folds. Code: `scripts/beacon/popup_fx.gd`; on the website `web/src/popup.js` and the `.pop-in` / `.pop-out` styles in `web/index.html`.

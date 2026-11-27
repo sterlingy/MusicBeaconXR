@@ -166,7 +166,7 @@ export function initDrafts(ctx) {
       st.doc.prefs.plantsOn = true;
       changed();
       ctx.select(UID + p.id);
-      msg(`Planted "${p.song.title}" where you are, heard within ${ctx.fmtDist(p.rangeM)}.`);
+      msg(`${p.song.remixOf != null ? "Placed your version," : "Planted"} "${p.song.title}" where you are, heard within ${ctx.fmtDist(p.rangeM)}.`);
     } catch (err) { msg("Couldn't plant it: " + err.message, true); }
   }
 
@@ -761,6 +761,8 @@ export function initDrafts(ctx) {
 
   return {
     isUser, findBeacon, setSong, regenerate, inspectorHtml, placeAt, beaconAt, draw, tick,
+    /** Remix's "Place my version here": plants `song` where you are (needs your location). */
+    placeMyVersion(song) { return plant(song, +$("dRange").value || D.PLANT_RANGE_M); },
     noteFix(fix) { st.lastFix = { ...fix, at: Date.now() }; },
     get store() { return store; },
     get placing() { return st.placing; },

@@ -238,6 +238,10 @@ func set_remix(settings: Dictionary) -> void:
 	keep.hold = false
 	FieldPrefs.set_value("remix", keep)
 	_refresh()
+	# The song setting the key changes at once too (not at the next bar line).
+	for a in active:
+		if a.id == harmony.id:
+			harmony.song = a.song
 	remix_changed.emit()
 
 

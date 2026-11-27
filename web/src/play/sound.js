@@ -7,6 +7,7 @@
 // both: filter.cutoff, filter.resonance, vibrato.depth, reverb.mix, @bend...
 
 import { Bus, Channel, Driftwood, Pulsar, mtof } from "../synths.js";
+import * as Remix from "../remix.js";
 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 const logMap = (lo, hi) => (v) => lo * Math.pow(hi / lo, v);
@@ -80,7 +81,9 @@ export class PlaySound {
 
   /** [[part, param, label], ...] for a patch UI. */
   targets() {
-    return PARTS.flatMap((p) => Object.entries(this.knobs[p]).map(([id, [label]]) => [p, id, `${p} · ${label}`]));
+    // The "remix" targets turn Remix's dials (src/remix.js) for the beacon music (as the app's SynthBridge).
+    return [...PARTS.flatMap((p) => Object.entries(this.knobs[p]).map(([id, [label]]) => [p, id, `${p} · ${label}`])),
+      ...Remix.DIALS.map(([id, label]) => ["remix", `remix.${id}`, `remix · ${label.toLowerCase()}`])];
   }
 
   /** Makes the audio graph (call from a tap: browsers only start audio from one). */
@@ -123,10 +126,21 @@ export class PlaySound {
   }
 
   control(part, param, v) {
+    if (part === "remix") return this._remix(param.replace(/^remix\./, ""), v);
     const k = this.knobs[part]?.[param];
     if (!k) return;
     k[1](this.state[part], v);
     if (this.ctx) this._applyPart(part);
+  }
+
+  /** A patched object turning one of Remix's dials: Remix on, saved for the beacon music (localStorage "beacon.remix"). */
+  _remix(id, v) {
+    const d = Remix.DIALS.find((x) => x[0] === id);
+    if (!d) return;
+    let s = {};
+    try { s = JSON.parse(localStorage.getItem("beacon.remix")) || {}; } catch { /* fresh */ }
+    s = Remix.normalize({ ...s, on: true, [id]: Math.round((d[2] + (d[3] - d[2]) * Math.max(0, Math.min(1, v))) / d[4]) * d[4] });
+    try { localStorage.setItem("beacon.remix", JSON.stringify({ ...s, hold: false })); } catch { /* not kept */ }
   }
 
   _applyPart(part) {

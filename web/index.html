@@ -45,6 +45,17 @@ header { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
 h1 { font: 800 26px/1 var(--f-display); margin: 0; letter-spacing: -0.01em; }
 h1 span { color: var(--accent); }
 .hint { color: var(--muted); font-size: 13px; }
+/* Remix (src/remixui.js) */
+.rx { margin: 4px 0 8px; }
+.rx-head { display: flex; align-items: center; gap: 10px; }
+.rx-body { margin-top: 8px; display: flex; flex-direction: column; gap: 8px; }
+.rx-grid { display: grid; grid-template-columns: 6.5em minmax(0, 1fr) auto; gap: 4px 10px; align-items: center; font-size: 13px; }
+.rx-grid label { color: var(--muted); }
+.rx-v { color: var(--muted); font: 12px var(--f-mono); min-width: 9em; text-align: right; }
+.rx-h { margin: 6px 0 0; font: 600 11px/1 var(--f-mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+.rx-row { display: flex; gap: 6px; flex-wrap: wrap; }
+.rx-row input[type=text], .rx-row select { flex: 1; min-width: 8em; }
+#rxHold.on { border-color: var(--accent); color: var(--accent); }
 .spacer { flex: 1; }
 .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
 .seg button { background: transparent; border: 0; padding: 7px 12px; cursor: pointer; color: var(--muted); }
@@ -366,6 +377,7 @@ details summary { cursor: pointer; color: var(--muted); font-size: 13px; }
 
       <section class="unit" aria-label="Instruments">
         <h2>Instruments</h2>
+        <div class="rx" id="remixBox"></div>
         <label class="inline" for="samplesOn" title="The songs' sampled orchestral instruments (piano, strings, brass, the orchestral kit). Off: every part plays its own synth sound instead."><input id="samplesOn" type="checkbox" checked> Orchestral samples</label>
         <div class="tracks" id="tracks"></div>
         <div class="params" id="params"></div>

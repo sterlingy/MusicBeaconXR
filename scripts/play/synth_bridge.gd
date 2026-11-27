@@ -7,7 +7,9 @@ extends Node
 ## Each part ("keys", "lead"...) gets its own InstrumentRig with a starting
 ## preset. Knob values arrive as 0..1 and are turned into the knob's real range
 ## here (log knobs sweep in octaves). Two extra targets work on every part:
-## "@bend" (0.5 = no bend) and "@volume".
+## "@bend" (0.5 = no bend) and "@volume". The "remix" targets turn Remix's
+## dials (scripts/beacon/remix.gd): patch a dial to remix · brightness, say,
+## and Remix turns on with that setting for the beacon music (remembered).
 
 ## part -> [instrument, factory preset name (or "")]
 const PARTS := {
@@ -28,6 +30,8 @@ const ALIASES := {
 const BEND_PARAMS := ["perf.bend_range", "ctrl.bend_range", "voice.bend_range"]
 
 var kit: MusicInput
+var _remix_pending := {} # Remix settings waiting to be saved (twisting sends many moves)
+var _remix_save_in := 0.0
 var rigs := {} # part -> InstrumentRig
 var _notes := {} # voice -> [part, note]
 var _info := {} # part -> {param id -> info}
@@ -96,6 +100,8 @@ func targets() -> Array:
 			out.append([part, alias, "%s · %s" % [part, alias]])
 		for id in _info.get(part, {}):
 			out.append([part, id, "%s · %s" % [part, id]])
+	for d in Remix.DIALS:
+		out.append(["remix", "remix." + String(d[0]), "remix · %s" % String(d[1]).to_lower()])
 	return out
 
 
@@ -126,6 +132,9 @@ func _on_bend(part: String, _voice: int, semitones: float) -> void:
 
 
 func _on_control(part: String, param: String, value: float) -> void:
+	if part == "remix":
+		_remix_control(param.trim_prefix("remix."), value)
+		return
 	var rig: InstrumentRig = rigs.get(part)
 	if rig == null:
 		return
@@ -140,6 +149,37 @@ func _on_control(part: String, param: String, value: float) -> void:
 			if info.is_empty():
 				return
 			rig.set_param(param, real_value(info, value))
+
+
+## A patched object turning one of Remix's dials: 0..1 across the dial's range,
+## Remix on. The beacon player (if one is playing) hears it at once; it's saved
+## for the beacon music a moment later.
+func _remix_control(id: String, value: float) -> void:
+	var dial: Array = []
+	for d in Remix.DIALS:
+		if d[0] == id:
+			dial = d
+	if dial.is_empty():
+		return
+	var player := get_tree().get_first_node_in_group("beacon_player") as BeaconPlayer if is_inside_tree() else null
+	var s: Dictionary = _remix_pending if not _remix_pending.is_empty() else (player.remix.duplicate(true) if player else Remix.normalize(FieldPrefs.get_value("remix", {})))
+	s.on = true
+	s[id] = snappedf(lerpf(dial[2], dial[3], clampf(value, 0.0, 1.0)), dial[4])
+	_remix_pending = s
+	_remix_save_in = 0.3
+	if player:
+		player.set_remix(s)
+
+
+func _process(delta: float) -> void:
+	if _remix_pending.is_empty():
+		return
+	_remix_save_in -= delta
+	if _remix_save_in <= 0.0:
+		var keep := Remix.normalize(_remix_pending)
+		keep.hold = false
+		FieldPrefs.set_value("remix", keep)
+		_remix_pending = {}
 
 
 ## 0..1 -> the knob's own units (log knobs sweep evenly in octaves).

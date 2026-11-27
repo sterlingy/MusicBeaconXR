@@ -563,6 +563,15 @@ func _parse_args() -> void:
 			input.wander = true
 		elif a == "--remix-open": # dev: the Remix window
 			get_tree().create_timer(0.6).timeout.connect(func(): hud.remix_ui.set_open(true, false))
+		elif a == "--remix-demo": # dev: Remix on with a few dials turned (not saved)
+			get_tree().create_timer(0.3).timeout.connect(func():
+				var r := Remix.defaults()
+				r.on = true; r.energy = 0.4; r.brightness = 0.3; r.space = 0.5; r.mood = -0.5; r.key = 2
+				r.parts.lead.swap = Remix.SWAPS.lead.find("sample:flute")
+				r.parts.pluck.swap = Remix.SWAPS.pluck.find("model:bell")
+				var saved = FieldPrefs.get_value("remix", {})
+				player.set_remix(r)
+				FieldPrefs.set_value("remix", saved))
 		elif a == "--menu": # dev: the Options panel
 			get_tree().create_timer(0.3).timeout.connect(func(): menu.set_open(true, false))
 		elif a == "--speed-open": # dev: the Wander pop-up
