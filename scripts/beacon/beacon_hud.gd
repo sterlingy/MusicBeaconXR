@@ -32,7 +32,11 @@ var _collapse: Button
 ## Collapsed: only the key, chord and tempo show (phones start this way, out of the map's way).
 var collapsed := false
 var _body: Array[Control] = []
-var _links: Array[Control] = [] # Instruments and Synths, in the top row while open
+var _links: Array[Control] = []
+var _title: Control
+var _left: Control
+var _pad: Control
+var _sep: Control # Instruments and Synths, in the top row while open
 
 
 func _init(p_player: BeaconPlayer) -> void:
@@ -68,12 +72,20 @@ func _ready() -> void:
 	var head := HBoxContainer.new()
 	head.add_theme_constant_override("separation", 8)
 	var title := _label(title_text, 13, ACCENT)
+	_title = title
 	head.add_child(title)
-	# Instruments and Synths sit in the open panel's top row, between the title
-	# and the fold button (they fold away with the parts).
-	var gap_l := Control.new()
-	gap_l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	head.add_child(gap_l)
+	# Instruments and Synths sit in the open panel's top row, centred over the
+	# parts column (they fold away with the parts). The title also takes the fold
+	# button's width, so they centre on the whole column, not on what's left of it.
+	var links := HBoxContainer.new()
+	links.alignment = BoxContainer.ALIGNMENT_CENTER
+	links.add_theme_constant_override("separation", 8)
+	links.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	head.add_child(links)
+	_links.append(links)
+	var pad := Control.new()
+	head.add_child(pad)
+	_links.append(pad)
 	var menu := FieldMenu.new("grid")
 	for l in [["Instruments", "res://scenes/instrument_table.tscn", "3D instruments to play with your hands (I)"],
 			["Synths", "res://scenes/studio.tscn", "Play and shape each instrument"]]:
@@ -82,13 +94,10 @@ func _ready() -> void:
 		b.tooltip_text = l[2]
 		b.custom_minimum_size = Vector2(0, 32)
 		b.add_theme_font_size_override("font_size", 14)
-		head.add_child(b)
-		_links.append(b)
+		links.add_child(b)
 	menu.free()
-	var gap_r := Control.new()
-	gap_r.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	head.add_child(gap_r)
 	_collapse = _collapse_button()
+	_pad = pad
 	head.add_child(_collapse)
 	v.add_child(head)
 	_now = _label("", 22, Color.WHITE)
@@ -101,10 +110,12 @@ func _ready() -> void:
 	cols.add_theme_constant_override("separation", 14)
 	v.add_child(cols)
 	var left := VBoxContainer.new()
+	_left = left
 	left.add_theme_constant_override("separation", 8)
 	left.custom_minimum_size.x = 300
 	cols.add_child(left)
-	cols.add_child(VSeparator.new())
+	_sep = VSeparator.new()
+	cols.add_child(_sep)
 	var right := VBoxContainer.new()
 	right.add_theme_constant_override("separation", 3)
 	right.custom_minimum_size.x = 330
@@ -287,6 +298,13 @@ func _label(t: String, size: int, color: Color) -> Label:
 
 
 func _process(delta: float) -> void:
+	# The title takes the left column's width (and the gap to the parts), so the
+	# buttons beside it centre over the parts column.
+	if _left:
+		var want := 0.0 if collapsed else _left.size.x + 14.0 + _sep.size.x + 14.0 - 8.0 + _collapse.size.x + 8.0
+		if not is_equal_approx(_title.custom_minimum_size.x, want):
+			_title.custom_minimum_size.x = want
+			_panel.reset_size()
 	_fit_scale()
 	var h := player.harmony
 	if h.song.is_empty():
