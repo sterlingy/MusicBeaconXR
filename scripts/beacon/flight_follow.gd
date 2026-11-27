@@ -17,6 +17,9 @@ const R_M := 6371008.8
 
 var query := ""
 var fix := {}
+## The route being flown, {o: Vector2(lon, lat), d: Vector2(lon, lat)}, once
+## its details are in and only when the plane is really flying it; else {}.
+var route := {}
 var prev := {}
 var lost := ""
 var _ease_from := 0.0
@@ -70,6 +73,7 @@ func start(q: String) -> String:
 	prev = {}
 	lost = ""
 	_last_poll = now_s()
+	load_route()
 	return ""
 
 
@@ -77,6 +81,32 @@ func stop() -> void:
 	fix = {}
 	prev = {}
 	query = ""
+	route = {}
+
+
+## Fetches the route (adsbdb) for the flight now followed and keeps it when
+## it's confirmed: the plane must actually be flying it (see summary()).
+func load_route() -> void:
+	route = {}
+	var f := fix
+	if f.is_empty():
+		return
+	var d := await details(f)
+	if fix.is_empty() or fix.get("hex", "") != f.get("hex", ""):
+		return # stopped, or another plane, meanwhile
+	route = route_of(fix, d)
+
+
+## {o, d} (Vector2 lon, lat) for a confirmed route, or {}. Pure: tests call it.
+static func route_of(f: Dictionary, d: Dictionary) -> Dictionary:
+	var r: Dictionary = d.get("route", {}) if d.get("route") is Dictionary else {}
+	var o: Dictionary = r.get("origin", {}) if r.get("origin") is Dictionary else {}
+	var de: Dictionary = r.get("destination", {}) if r.get("destination") is Dictionary else {}
+	if o.get("latitude") == null or de.get("latitude") == null:
+		return {}
+	if not summary(f, d, now_s()).get("plausible", false):
+		return {}
+	return {"o": Vector2(float(o.longitude), float(o.latitude)), "d": Vector2(float(de.longitude), float(de.latitude))}
 
 
 ## Where the listener should be now ({} when not following).
@@ -291,6 +321,7 @@ func start_random() -> String:
 		prev = {}
 		lost = ""
 		_last_poll = now_s()
+		load_route()
 		return ""
 	return why
 

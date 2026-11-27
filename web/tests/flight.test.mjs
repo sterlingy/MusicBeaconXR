@@ -109,3 +109,12 @@ test("following sticks to one aircraft, and says when it can't see it", async ()
   now = 1042 + 90; // no fresh report for a while
   assert.equal(t.tracked, false, "a report over a minute old: out of sight");
 });
+
+import { routeOf } from "../src/flight.js";
+test("the route arc only for a route the plane is really flying", () => {
+  const r = routeOf(KAL, KAL_D);
+  assert.ok(r && Math.abs(r.o.lat - +KAL_D.route.origin.latitude) < 1e-9 && Math.abs(r.d.lon - +KAL_D.route.destination.longitude) < 1e-9);
+  assert.equal(routeOf({ ...KAL, lat: 51, lon: 10 }, KAL_D), null, "a schedule for another flight");
+  assert.equal(routeOf({ ...KAL, track: 210 }, KAL_D), null, "heading away from the destination");
+  assert.equal(routeOf(KAL, {}), null, "no details yet");
+});

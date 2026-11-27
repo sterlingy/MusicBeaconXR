@@ -99,6 +99,16 @@ func _build_input() -> void:
 	add_child(_marker)
 	plane = _make_plane()
 	add_child(plane)
+	route_arc = MeshInstance3D.new()
+	route_arc.mesh = ImmediateMesh.new()
+	var ram := StandardMaterial3D.new()
+	ram.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	ram.albedo_color = Color(0.3, 1.0, 0.45, 0.85)
+	ram.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	ram.cull_mode = BaseMaterial3D.CULL_DISABLED
+	route_arc.material_override = ram
+	route_arc.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(route_arc)
 	flight_card = FlightCard.new(mine.flight)
 	add_child(flight_card)
 	flight_card.stop_requested.connect(func(): menu.stop_flight())
@@ -372,9 +382,13 @@ func _process(delta: float) -> void:
 		var want := PLANE_SEEN if mine.flight.tracked() else PLANE_LOST
 		_plane_mat.albedo_color = _plane_mat.albedo_color.lerp(want, minf(1.0, delta * 4.0))
 		_plane_mat.emission = _plane_mat.albedo_color
-		var xf := _surface_xform(p.y, p.x, 4.0 * k)
-		xf.basis = xf.basis * Basis(Vector3.UP, -deg_to_rad(float(mine.flight.fix.get("track", 0.0))))
+		# Up in the air: riding just above its route's arc when the route is known,
+		# else well clear of the ground; nose tilted with the arc's climb and descent.
+		var air := _plane_air(p)
+		var xf := _surface_xform(p.y, p.x, air.x)
+		xf.basis = xf.basis * Basis(Vector3.UP, -deg_to_rad(float(mine.flight.fix.get("track", 0.0)))) * Basis(Vector3.RIGHT, air.y)
 		plane.transform = xf.scaled_local(Vector3.ONE * 2.6 * k)
+	_draw_route(flying)
 	camera.near = clampf(altitude * 0.01, 0.0005, 0.05)
 	input.space.walk_speed = speed.mps / 111320.0 # the speed button's m/s, for real (degrees of latitude per second)
 	_draw_user_beacons()
@@ -547,8 +561,16 @@ func _parse_args() -> void:
 			get_tree().create_timer(0.3).timeout.connect(func(): speed.set_open(true, false))
 		elif a == "--fake-flight": # dev: a plane over the listener, no network (for looking at it)
 			get_tree().create_timer(0.2).timeout.connect(func():
+				# London Heathrow to New York JFK, a third of the way across.
+				var o := Vector2(-0.46, 51.47)
+				var d := Vector2(-73.78, 40.64)
+				var w := to_world(o.y, o.x, 1.0).slerp(to_world(d.y, d.x, 1.0), 0.35)
+				var lat := rad_to_deg(asin(w.y))
+				var lon := rad_to_deg(atan2(w.x, w.z))
 				mine.flight._last_poll = FlightFollow.now_s() + 3600.0
-				mine.flight.fix = {"found": true, "lat": player.pos.y, "lon": player.pos.x, "gs_kt": 0.0, "track": 60.0, "at": FlightFollow.now_s() + 3600.0, "seen_pos": 0.0, "alt_ft": 35000.0, "flight": "TST1"})
+				mine.flight.fix = {"found": true, "lat": lat, "lon": lon, "gs_kt": 0.0, "track": FlightFollow.bearing(lat, lon, d.y, d.x), "at": FlightFollow.now_s() + 3600.0, "seen_pos": 0.0, "alt_ft": 35000.0, "flight": "TST1", "hex": "test"}
+				mine.flight.route = {"o": o, "d": d}
+				input.jump_to(Vector2(lon, lat)))
 		elif a == "--drafts-demo":
 			_drafts_demo()
 		elif a.begins_with("--card="): # dev: the Jump / Move card for lat,lon (after a frame, once the camera is placed)
@@ -585,6 +607,69 @@ func _parse_args() -> void:
 
 
 # ---------------------------------------------------------------- the plane you're riding with
+
+## The route's arc: up off the globe along the great circle, highest midway,
+## at most a third of the view's height so it stays on screen up close.
+func _arc_height(o: Vector3, d: Vector3) -> float:
+	return minf(0.17 * R * o.angle_to(d), altitude * 0.35)
+
+
+## Where the followed plane flies: x = its height above the ground (scene
+## units), y = its pitch (radians, nose up while the arc climbs).
+func _plane_air(p: Vector2) -> Vector2:
+	var k := _k()
+	var clear := 3.5 * k # just above the line
+	var r: Dictionary = mine.flight.route
+	if r.is_empty():
+		return Vector2(maxf(7.0 * k, altitude * 0.05), 0.0)
+	var o := to_world(r.o.y, r.o.x, 1.0)
+	var d := to_world(r.d.y, r.d.x, 1.0)
+	var here := to_world(p.y, p.x, 1.0)
+	var a := o.angle_to(here)
+	var b := here.angle_to(d)
+	var t := clampf(a / maxf(1e-6, a + b), 0.0, 1.0)
+	var h := _arc_height(o, d)
+	var span := R * o.angle_to(d)
+	return Vector2(h * sin(PI * t) + clear, atan2(h * PI * cos(PI * t), maxf(1e-6, span)))
+
+
+## The green arc from the flight's origin to its destination, and a faint line
+## from the plane down to the ground (where you are, and what you hear).
+func _draw_route(flying: bool) -> void:
+	var im: ImmediateMesh = route_arc.mesh
+	im.clear_surfaces()
+	var r: Dictionary = mine.flight.route if flying else {}
+	if r.is_empty():
+		return
+	var o := to_world(r.o.y, r.o.x, 1.0)
+	var d := to_world(r.d.y, r.d.x, 1.0)
+	var h := _arc_height(o, d)
+	var w := clampf(altitude * 0.0035, 0.0004, 0.9) # half-width, about the same on screen at any zoom
+	var n := 96
+	im.surface_begin(Mesh.PRIMITIVE_TRIANGLES)
+	var pts := []
+	for i in n + 1:
+		var t := float(i) / n
+		pts.append(o.slerp(d, t) * (R + h * sin(PI * t) + 0.002))
+	for i in n:
+		var p0: Vector3 = pts[i]
+		var p1: Vector3 = pts[i + 1]
+		var along := (p1 - p0).normalized()
+		var flat := along.cross(p0.normalized()) * w # a ribbon lying flat…
+		var stand := p0.normalized() * w # …and one standing up, so it reads from any angle
+		for side in [flat, stand]:
+			for v in [p0 - side, p0 + side, p1 + side, p0 - side, p1 + side, p1 - side]:
+				im.surface_add_vertex(v)
+	# The drop line from the plane to the ground.
+	var g := to_world(player.pos.y, player.pos.x, R)
+	var top := plane.global_position
+	var dl := (top - g).cross(g.normalized()).normalized() * w * 0.4
+	if dl.length() < 1e-9:
+		dl = g.normalized().cross(Vector3.UP).normalized() * w * 0.4
+	for v in [g - dl, g + dl, top + dl, g - dl, top + dl, top - dl]:
+		im.surface_add_vertex(v)
+	im.surface_end()
+
 
 ## A smooth little airliner (PlaneModel), nose along -z, lit by the sun and
 ## glowing a little so it still reads at night and from far away.
@@ -623,6 +708,7 @@ var travel: TravelUi
 var speed: SpeedUi
 var _marker: MeshInstance3D
 var plane: Node3D # shown instead of the listener while following a flight
+var route_arc: MeshInstance3D # the followed flight's route, origin to destination
 var _plane_mat: StandardMaterial3D
 const PLANE_SEEN := Color("ffb547") # amber: the app can see the plane
 const PLANE_LOST := Color(1.0, 0.25, 0.22) # red: no fresh data, gliding on its last course

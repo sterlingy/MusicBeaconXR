@@ -10,6 +10,7 @@ import { ListenerInput, planarSpace, geoSpace, localSpace, keyboardSource, point
 import * as Speed from "./speed.js";
 import { shareGlow } from "./glow.js";
 import { drawPlane3D } from "./plane.js";
+import { gcPoint } from "./globe3d.js";
 import { initDrafts } from "./draftsui.js";
 import { Globe3D } from "./globe3d.js";
 import { initWalks, drawLines } from "./walkui.js";
@@ -317,6 +318,19 @@ function draw(now) {
     const [tx, ty] = v.toScreen(input.target);
     g.strokeStyle = C.accent; g.lineWidth = 1.5 * d;
     g.beginPath(); g.moveTo(tx - 6 * d, ty - 6 * d); g.lineTo(tx + 6 * d, ty + 6 * d); g.moveTo(tx + 6 * d, ty - 6 * d); g.lineTo(tx - 6 * d, ty + 6 * d); g.stroke();
+  }
+  if (flight.active && ui.mode === "globe" && flight.route) { // the route, origin to destination, in green (as the app's arc)
+    g.save();
+    g.strokeStyle = "#4dff73"; g.lineWidth = 2.4 * d; g.shadowColor = "rgba(77,255,115,0.7)"; g.shadowBlur = 6 * d;
+    g.beginPath();
+    let last = null;
+    for (let i = 0; i <= 96; i++) {
+      const [x, y] = v.toScreen(gcPoint(flight.route.o, flight.route.d, i / 96));
+      if (last && Math.abs(x - last[0]) < W * 0.5) g.lineTo(x, y); else g.moveTo(x, y); // break across the map's edge
+      last = [x, y];
+    }
+    g.stroke();
+    g.restore();
   }
   if (flight.active && ui.mode === "globe") drawPlane(g, px, py, flight.fix.track, d, flight.tracked ? PLANE_SEEN : PLANE_LOST); // amber: seen; red: out of sight, gliding on
   g.fillStyle = C.accent;
@@ -1217,6 +1231,7 @@ async function startFlight() {
   setMsg("fieldMsg", `Looking for ${q}…`);
   try {
     const f = await flight.start(q);
+    flight.loadRoute(); // the green arc, once the route is in
     engine.setPosition({ lat: f.lat, lon: f.lon });
     if (globe3d && is3d()) { globe3d.flyTo(f.lat, f.lon, Math.max(globe3d.zoom, 6)); globe3d.mode = "follow"; }
     renderFlight();
@@ -1247,6 +1262,7 @@ async function startRandomFlight() {
   try {
     const got = await randomFlight(flightRandom);
     const f = flight.startWith(got, got.hex); // followed by its transponder code from here on
+    flight.loadRoute(); // the green arc, once the route is in
     $("flightQ").value = f.flight || f.reg || "";
     engine.setPosition({ lat: f.lat, lon: f.lon });
     if (globe3d && is3d()) { globe3d.flyTo(f.lat, f.lon, Math.max(globe3d.zoom, 6)); globe3d.mode = "follow"; }
@@ -1299,7 +1315,7 @@ globe3d = new Globe3D({
   select,
   place: (lat, lon) => !!drafts.placing && drafts.placeAt({ lat, lon }),
   lines: () => walk.lines(),
-  flight: () => (flight.active ? { track: flight.fix.track, label: flight.fix.reg || flight.fix.flight, tracked: flight.tracked } : null),
+  flight: () => (flight.active ? { track: flight.fix.track, label: flight.fix.reg || flight.fix.flight, tracked: flight.tracked, route: flight.route } : null),
   offer: ({ pos, label, song }, clientX, clientY) => offerPlace(pos, label ? { label } : null, { clientX, clientY }, song),
   flightCard: () => { if (!flight.active) return false; flightCard.open(); return true; },
   stopTravel: () => { if (!input.traveling) return false; input.stopTravel(); setMsg("fieldMsg", "Stopped here."); return true; },

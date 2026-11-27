@@ -44,6 +44,12 @@ func _init() -> void:
 	f.track = 210.0 # flying away from New York
 	check(not FlightFollow.summary(f, d, 1_800_000_000.0).get("plausible", true), "heading away from the destination: unconfirmed")
 	f.track = 30.0
+	# The route arc: only for a route the plane is really flying.
+	var r := FlightFollow.route_of(f, d)
+	check(not r.is_empty() and r.o.is_equal_approx(Vector2(-80.2906, 25.7932)) and r.d.is_equal_approx(Vector2(-73.7789, 40.6398)), "the route arc runs Miami to New York")
+	var away := f.duplicate()
+	away.track = 210.0
+	check(FlightFollow.route_of(away, d).is_empty() and FlightFollow.route_of(f, {}).is_empty(), "no arc for an unconfirmed or unknown route")
 	check(FlightFollow.summary({"flight": "ABC1", "lat": 0, "lon": 0, "alt_ft": 0, "gs_kt": 0, "track": 0}, {}, 0.0).lines[0] == "Route not known for ABC1", "no route known")
 	# Random flights: cruising only; daytime hubs first.
 	check(FlightFollow.is_cruising({"lat": 1, "alt_baro": 35000, "gs": 450, "flight": "DAL1 ", "seen_pos": 2}), "a cruising airliner counts")

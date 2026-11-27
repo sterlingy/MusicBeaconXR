@@ -540,6 +540,44 @@ export class Globe3D {
     }
   }
 
+  /** The route arc's height (globe radii): highest midway, at most a third of the view so it stays on screen up close. */
+  _arcHeight(angle) {
+    return Math.min(0.17 * angle, (0.35 * this.H) / Math.max(1, this.R));
+  }
+
+  /** How high the followed plane flies (globe radii): just above its route's arc, else well clear. */
+  _planeAir(route) {
+    const clear = (16 * (this.h.ui.dpr || 1)) / Math.max(1, this.R);
+    if (!route) return Math.max(clear * 2, 0.02);
+    const p = this.h.engine.pos;
+    const a = gcAngle(route.o, p), b = gcAngle(p, route.d), total = gcAngle(route.o, route.d);
+    const t = Math.max(0, Math.min(1, a / Math.max(1e-9, a + b)));
+    return this._arcHeight(total) * Math.sin(Math.PI * t) + clear;
+  }
+
+  /** The followed flight's route: a green arc up off the globe from origin to destination. */
+  _drawRoute(g, route, d) {
+    if (!route) return;
+    const total = gcAngle(route.o, route.d), h = this._arcHeight(total), n = 96;
+    g.save();
+    g.strokeStyle = "#4dff73";
+    g.lineWidth = 2.6 * d;
+    g.lineCap = "round";
+    g.shadowColor = "rgba(77,255,115,0.7)";
+    g.shadowBlur = 8 * d;
+    g.beginPath();
+    let pen = false;
+    for (let i = 0; i <= n; i++) {
+      const t = i / n, p = gcPoint(route.o, route.d, t);
+      const s = this.toScreen(p, 1 + h * Math.sin(Math.PI * t));
+      if (!s) { pen = false; continue; }
+      if (pen) g.lineTo(s[0], s[1]); else g.moveTo(s[0], s[1]);
+      pen = true;
+    }
+    g.stroke();
+    g.restore();
+  }
+
   _ring(g, x, y, r, color, d, w = 1.4) {
     g.strokeStyle = color;
     g.lineWidth = w * d;
@@ -642,8 +680,17 @@ export class Globe3D {
       // Following a flight: a plane along its track (screen-north is the view's north near the middle).
       const ahead = this.toScreen(destinationLite(this.h.engine.pos, fl.track, 0.05));
       const ang = ahead ? Math.atan2(ahead[0] - s[0], s[1] - ahead[1]) : (fl.track * Math.PI) / 180;
+      // Up in the air: riding just above its route's green arc when the route
+      // is known, else well clear of the ground (as the app's).
+      const air = this._planeAir(fl.route);
+      const ps = this.toScreen(this.h.engine.pos, 1 + air) || s;
+      this._drawRoute(g, fl.route, d);
+      // The drop line to the ground: where you are, and what you hear.
+      g.strokeStyle = "rgba(77,255,115,0.55)"; g.lineWidth = 1.2 * d;
+      g.beginPath(); g.moveTo(s[0], s[1]); g.lineTo(ps[0], ps[1]); g.stroke();
       // Amber while it's seen, red while it glides on out of sight (as the app's).
-      drawPlane3D(g, s[0], s[1], ang, d * 1.1, fl.tracked === false ? "#ff4d4d" : "#ffb547");
+      drawPlane3D(g, ps[0], ps[1], ang, d * 1.1, fl.tracked === false ? "#ff4d4d" : "#ffb547");
+      this._planeAt = [ps[0], ps[1]];
       this.h.label(`✈ ${fl.label || ""}${fl.tracked === false ? " · signal lost" : ""}`, s[0], s[1] + 34 * d, 11 * d, fl.tracked === false ? "#ff6b6b" : C.accent, "rgba(4,7,13,0.85)");
       return;
     }
@@ -673,4 +720,21 @@ export class Globe3D {
     const mode = this.mode === "spin" ? "spinning" : this.mode === "follow" ? "following you" : "turned by hand";
     this.h.label(`${view} · ${mode} · drag to turn, wheel or pinch to zoom, tap a beacon or long-press to go there`, 14 * d, this.H - 14 * d, 10.5 * d, light ? "#3b4a5c" : "#8d9aab", null, 1, "left");
   }
+}
+
+/** The angle (radians) between two lat/lon points on the sphere. */
+function gcAngle(a, b) {
+  const D = Math.PI / 180, p1 = a.lat * D, p2 = b.lat * D;
+  const h = Math.sin((p2 - p1) / 2) ** 2 + Math.cos(p1) * Math.cos(p2) * Math.sin(((b.lon - a.lon) * D) / 2) ** 2;
+  return 2 * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+
+/** The point a fraction t of the way along the great circle from a to b. */
+export function gcPoint(a, b, t) {
+  const D = Math.PI / 180, w = gcAngle(a, b);
+  if (w < 1e-9) return { lat: a.lat, lon: a.lon };
+  const v = (q) => [Math.cos(q.lat * D) * Math.cos(q.lon * D), Math.cos(q.lat * D) * Math.sin(q.lon * D), Math.sin(q.lat * D)];
+  const A = v(a), B = v(b), s = Math.sin(w), ka = Math.sin((1 - t) * w) / s, kb = Math.sin(t * w) / s;
+  const x = ka * A[0] + kb * B[0], y = ka * A[1] + kb * B[1], z = ka * A[2] + kb * B[2];
+  return { lat: Math.atan2(z, Math.hypot(x, y)) / D, lon: Math.atan2(y, x) / D };
 }

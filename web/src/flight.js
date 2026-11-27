@@ -65,6 +65,7 @@ export class FlightTracker {
     this.lastPoll = 0;
     this.polling = false;
     this.lost = ""; // why the latest update failed (it keeps gliding on the last fix)
+    this.route = null; // {o, d} ({lat, lon}) once a confirmed route is in (loadRoute)
   }
 
   get active() { return !!this.fix; }
@@ -93,7 +94,18 @@ export class FlightTracker {
     return fix;
   }
 
-  stop() { this.fix = null; this.prev = null; this.query = ""; }
+  stop() { this.fix = null; this.prev = null; this.query = ""; this.route = null; }
+
+  /** Fetches the route of the plane now followed and keeps it when it's confirmed (routeOf). */
+  async loadRoute(fetchFn) {
+    this.route = null;
+    const f = this.fix;
+    if (!f) return null;
+    const d = await flightDetails(f, fetchFn);
+    if (!this.fix || (this.fix.hex || "") !== (f.hex || "")) return null; // stopped, or another plane, meanwhile
+    this.route = routeOf(this.fix, d);
+    return this.route;
+  }
 
   /** Call often: fetches a new fix every POLL_S seconds. Resolves true when one arrived. */
   async poll() {
@@ -173,6 +185,18 @@ export async function randomFlight(random, { tries = 6, wait = (ms) => new Promi
 }
 
 const detailCache = new Map();
+
+/**
+ * The route the plane is flying, {o, d} as {lat, lon}, or null: only when the
+ * details name both airports and the plane is really flying between them
+ * (flightSummary's check). Same as the app's FlightFollow.route_of.
+ */
+export function routeOf(f, d = {}) {
+  const r = d.route || {}, o = r.origin, de = r.destination;
+  if (!o || !de || o.latitude == null || de.latitude == null) return null;
+  if (!flightSummary(f, d).plausible) return null;
+  return { o: { lat: +o.latitude, lon: +o.longitude }, d: { lat: +de.latitude, lon: +de.longitude } };
+}
 
 /**
  * The flight's airline, route and aircraft from adsbdb.com (cached; it
