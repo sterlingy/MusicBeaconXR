@@ -46,6 +46,14 @@ func _ready() -> void:
 	check(not g.travel.is_open() and PopupFx.is_open(fields), "Fields closes the card")
 	check(PopupFx._player != null and is_instance_valid(PopupFx._player) and PopupFx._streams.get(PopupFx.CLOSE_SFX) != null and PopupFx._streams.get(PopupFx.OPEN_SFX) != null, "the swooshes are loaded")
 	check(fields.material is ShaderMaterial, "panels are frosted glass")
+	# The readout folds when another window opens, and unfolding it closes the others.
+	g.hud.set_collapsed(false)
+	await wait(0.1)
+	check(not PopupFx.is_open(fields), "unfolding the readout closes Fields")
+	g.walks.set_open(true)
+	await wait(0.1)
+	check(g.hud.collapsed, "opening Walks folds the readout")
+	g.walks.set_open(false)
 	# Placement once open: each window entirely on screen, in its own corner.
 	var view := get_viewport().get_visible_rect().size
 	for w in [["Walks", g.walks, walks, "br"], ["My beacons", g.mine, mine, "bl"]]:

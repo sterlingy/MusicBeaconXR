@@ -145,6 +145,7 @@ details summary { cursor: pointer; color: var(--muted); font-size: 13px; }
 .travelcard[hidden] { display: none; }
 .travelcard .tc-title { font: 600 16px/1.25 var(--f-display); color: var(--fg); }
 .travelcard .tc-detail { font: 12px/1.4 var(--f-mono); color: var(--muted); margin: 3px 0 10px; }
+.travelcard .tc-song { white-space: pre-line; font-size: 13px; line-height: 1.45; color: var(--fg); margin: -4px 0 10px; max-width: 320px; }
 .travelcard .tc-row { display: flex; gap: 8px; }
 .travelcard .tc-row .btn { flex: 1; min-height: 42px; font-size: 15px; font-weight: 600; }
 .travelcard .tc-row .btn:hover, .travelcard .tc-row .btn:focus-visible { border-color: var(--accent); }
@@ -297,6 +298,7 @@ details summary { cursor: pointer; color: var(--muted); font-size: 13px; }
       <div class="travelcard" id="travelcard" role="dialog" aria-label="Go here" hidden>
         <div class="tc-title" id="tcTitle"></div>
         <div class="tc-detail" id="tcDetail"></div>
+        <div class="tc-song" id="tcSong" hidden></div>
         <div class="tc-row">
           <button class="btn" data-go="jump" title="Go there at once">⚡ Jump</button>
           <button class="btn" data-go="move" title="Glide there, hearing the music change on the way">➜ Move</button>

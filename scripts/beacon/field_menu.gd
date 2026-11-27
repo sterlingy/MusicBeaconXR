@@ -22,7 +22,7 @@ var kind := "grid"
 var panel: PanelContainer
 var status: Label
 var _play: Button
-var _click: Button
+var _click: CheckButton # the metronome (in the panel; M too)
 var _fields_btn: Button
 var _field_btns := {}
 var _row: HBoxContainer
@@ -62,6 +62,7 @@ func _ready() -> void:
 	row.grow_horizontal = Control.GROW_DIRECTION_BEGIN
 	row.offset_top = 12
 	row.alignment = BoxContainer.ALIGNMENT_END
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE # only its buttons take taps, not the empty space beside them
 	row.add_theme_constant_override("separation", 8)
 	add_child(row)
 	_row = row
@@ -71,9 +72,6 @@ func _ready() -> void:
 			ui_scale = float(a.trim_prefix("--ui-scale="))
 	_play = _button("▶ Play", func(): Transport.toggle())
 	row.add_child(_play)
-	_click = _button("Click", func(): pass, true)
-	_click.toggled.connect(func(t): Transport.metronome_on = t)
-	row.add_child(_click)
 	_fields_btn = _button("☰ Fields", func(): set_open(not PopupFx.is_open(panel)), true)
 	row.add_child(_fields_btn)
 	_build_panel()
@@ -115,7 +113,11 @@ func _fit() -> void:
 func row_left() -> float:
 	if _row == null:
 		return INF
-	return _row.get_global_transform_with_canvas().origin.x
+	var left := INF
+	for c in _row.get_children():
+		if c is Control and c.visible:
+			left = minf(left, (c as Control).get_global_transform_with_canvas().origin.x)
+	return left
 
 
 ## Another window is opening: this one closes.
@@ -211,6 +213,15 @@ func _build_panel() -> void:
 		_field_btns[k] = b
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		fields.add_child(b)
+
+	# The metronome click (M too). It lived in the top row; the row is shorter now,
+	# leaving the readout room beside it on phones.
+	_click = CheckButton.new()
+	_click.text = "Metronome click"
+	_click.focus_mode = Control.FOCUS_NONE
+	_click.add_theme_font_size_override("font_size", 15)
+	_click.toggled.connect(func(t): Transport.metronome_on = t)
+	v.add_child(_click)
 
 	# Auto-walk: the listener wanders between beacons by itself (the T key too).
 	_wander = CheckButton.new()

@@ -59,7 +59,7 @@ static func animate(panel: Control, open: bool, sound := true) -> void:
 		return
 	var was_open: bool = panel.get_meta("fx_open", panel.visible)
 	panel.set_meta("fx_open", open)
-	var old = panel.get_meta("fx_tween", null)
+	var old = panel.get_meta("fx_tween") if panel.has_meta("fx_tween") else null
 	if old is Tween and old.is_valid():
 		old.kill()
 	if open:

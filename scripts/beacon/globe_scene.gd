@@ -104,6 +104,7 @@ func _build_input() -> void:
 	ptr.camera = camera
 	ptr.pick = PointerSource.sphere_picker(R, PointerSource.unit_to_lonlat)
 	ptr.send_select = true # a tap places a map beacon while placing (MyBeacons)
+	ptr.drag_px = 16.0 if BuildInfo.is_phone() else 8.0 # a fingertip wobbles more than a mouse: still a tap
 	ptr.mode = "explore" # one finger turns the globe; tap a beacon or long-press to go somewhere
 	input.add_child(ptr)
 	add_child(input)
@@ -534,7 +535,7 @@ func _offer(pos: Vector2, snap_km: float, beacon_only: bool, screen := Vector2(-
 	_marker.scale = Vector3.ONE * 1.6 * _k()
 	_marker.visible = true
 	var secs := ListenerInput.travel_seconds(input.space, player.pos, d.pos)
-	travel.open(screen, d.pos, d.title, "%s · Move takes %d s" % [d.detail, roundi(secs)])
+	travel.open(screen, d.pos, d.title, "%s · Move takes %d s" % [d.detail, roundi(secs)], d.song)
 
 
 func _go(kind: String, pos: Vector2) -> void:

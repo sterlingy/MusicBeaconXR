@@ -466,7 +466,7 @@ const spaces = {
 const input = new ListenerInput({ space: spaces.grid, position: { x: -38, y: 27 }, speed: speedPerSec });
 input.add(keyboardSource(window));
 const travel = initTravelCard({
-  wrap: $("fieldwrap"), card: $("travelcard"), title: $("tcTitle"), detail: $("tcDetail"), back: $("backtome"),
+  wrap: $("fieldwrap"), card: $("travelcard"), title: $("tcTitle"), detail: $("tcDetail"), song: $("tcSong"), back: $("backtome"),
   onBack: () => { ui.pan = null; ui.panVel = null; if (is3d() && globe3d) globe3d.follow(); },
 });
 // One finger (or the mouse) pans the map; a tap on a beacon or a long press

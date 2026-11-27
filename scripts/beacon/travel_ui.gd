@@ -23,6 +23,7 @@ var _blocker: Control
 var _card: PanelContainer
 var _title: Label
 var _detail: Label
+var _song: Label # the beacon's song: mood, key, tempo, family, parts
 var _back: Button
 
 
@@ -72,6 +73,11 @@ func _ready() -> void:
 	_detail = menu._small("")
 	_detail.autowrap_mode = TextServer.AUTOWRAP_OFF # short; wrapping at zero width made the card tall
 	v.add_child(_detail)
+	_song = menu._small("")
+	_song.add_theme_color_override("font_color", Color(1, 1, 1, 0.85))
+	_song.add_theme_font_size_override("font_size", 14)
+	_song.custom_minimum_size.x = 300
+	v.add_child(_song)
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 8)
 	v.add_child(row)
@@ -98,11 +104,13 @@ static func describe(player: BeaconPlayer, p_pos: Vector2, snap: float) -> Dicti
 	var near: Array = f.nearest(p_pos, 1)
 	var at := p_pos
 	var title := ""
+	var info := ""
 	if not near.is_empty() and near[0].d <= snap:
 		var b: Dictionary = near[0].beacon
 		at = b.pos
 		var song := player.song_for(b.id)
 		title = "%s · %s" % [song.title, b.label] if not song.is_empty() else String(b.label)
+		info = song_info(song)
 	elif f.kind == "globe":
 		title = "%.1f°%s %.1f°%s" % [absf(p_pos.y), "N" if p_pos.y >= 0.0 else "S", absf(p_pos.x), "E" if p_pos.x >= 0.0 else "W"]
 	else:
@@ -113,7 +121,26 @@ static func describe(player: BeaconPlayer, p_pos: Vector2, snap: float) -> Dicti
 		how_far = "%d m away" % roundi(d * 1000.0) if d < 1.0 else ("%.1f km away" % d if d < 10.0 else "%s km away" % _thousands(roundi(d)))
 	else:
 		how_far = "%d m away" % roundi(d) if d < 1000.0 else "%.1f km away" % (d / 1000.0)
-	return {"pos": at, "title": title, "detail": how_far}
+	return {"pos": at, "title": title, "detail": how_far, "song": info}
+
+
+## A song in a few words: mood, key, tempo and kind of song, then the parts it
+## plays (the sampled ones with their instrument).
+static func song_info(song: Dictionary) -> String:
+	if song.is_empty():
+		return ""
+	var key: Dictionary = song.get("key", {})
+	var head := "%s · %s %s · %d BPM · %s" % [song.get("mood", ""), BeaconMixer.NOTE_NAMES[int(key.get("root", 0))], String(key.get("mode", "")), int(song.get("bpm", 0)), String(song.get("family", "song"))]
+	var parts := PackedStringArray()
+	for role in ["drums", "bass", "keys", "lead", "pluck", "texture"]:
+		var t: Dictionary = song.get("tracks", {}).get(role, {})
+		if t.is_empty() or float(t.get("level", 0.0)) <= 0.0:
+			continue
+		parts.append("%s (%s)" % [role, String(t.sample).replace("_", " ")] if t.has("sample") else role)
+	if song.has("pad") and song.pad.get("sample"):
+		parts.append("pad (%s)" % String(song.pad.sample).replace("_", " "))
+	return head + "
+" + ", ".join(parts)
 
 
 static func _thousands(n: int) -> String:
@@ -135,11 +162,13 @@ func close_popup(except: Object) -> void:
 
 
 ## Opens the card next to `screen` (where the finger was) about `p_pos`.
-func open(screen: Vector2, p_pos: Vector2, title: String, detail: String) -> void:
+func open(screen: Vector2, p_pos: Vector2, title: String, detail: String, song := "") -> void:
 	pos = p_pos
 	_at = screen
 	_title.text = title
 	_detail.text = detail
+	_song.text = song
+	_song.visible = song != ""
 	PopupFx.claim(self)
 	_blocker.visible = true
 	PopupFx.animate(_card, true)

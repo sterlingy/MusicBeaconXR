@@ -117,6 +117,7 @@ func _build_input() -> void:
 	ptr.pick = func(origin: Vector3, dir: Vector3) -> Variant:
 		var hit = ground_pick.call(origin, dir)
 		return null if hit == null else hit / view_scale
+	ptr.drag_px = 16.0 if BuildInfo.is_phone() else 8.0 # a fingertip wobbles more than a mouse: still a tap
 	ptr.mode = "explore" # one finger pans the map; tap a beacon or long-press to go somewhere
 	input.add_child(ptr)
 	add_child(input)
@@ -452,7 +453,7 @@ func _offer(pos: Vector2, snap: float, beacon_only: bool, screen := Vector2(-1, 
 	_marker.position = world
 	_marker.visible = true
 	var secs := ListenerInput.travel_seconds(input.space, player.pos, d.pos, input.space.bounds.size.x)
-	travel.open(screen, d.pos, d.title, "%s · Move takes %d s" % [d.detail, roundi(secs)])
+	travel.open(screen, d.pos, d.title, "%s · Move takes %d s" % [d.detail, roundi(secs)], d.song)
 
 
 func _go(kind_: String, pos: Vector2) -> void:

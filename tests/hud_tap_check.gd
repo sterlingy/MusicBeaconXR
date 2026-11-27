@@ -85,5 +85,19 @@ func _ready() -> void:
 		at = b.get_global_transform_with_canvas() * (b.size * 0.5)
 		await tap(at, touch)
 		check(not hud.collapsed, "%s again unfolds it" % ["a touch" if touch else "a click"])
+	# Folded and open at one scale (the title the same size).
+	hud.set_collapsed(true, false)
+	for i in 4:
+		await get_tree().process_frame
+	var folded: float = hud._panel.scale.x
+	hud.set_collapsed(false, false)
+	for i in 4:
+		await get_tree().process_frame
+	var opened: float = hud._panel.scale.x
+	check(absf(opened - folded) < 0.01, "open and folded at one scale (%.3f vs %.3f)" % [opened, folded])
+	var menu := get_tree().get_first_node_in_group("field_menu")
+	if menu:
+		var right_edge: float = hud._panel.get_global_transform_with_canvas().origin.x + hud._panel.size.x * hud._panel.scale.x
+		check(right_edge < menu.row_left(), "the open panel stays clear of the top buttons (%.0f < %.0f)" % [right_edge, menu.row_left()])
 	print("hud_tap_check: %s (%d failure(s))" % ["OK" if failures == 0 else "FAILED", failures])
 	get_tree().quit(0 if failures == 0 else 1)

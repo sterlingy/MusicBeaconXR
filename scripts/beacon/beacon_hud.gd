@@ -34,6 +34,13 @@ var _body: Array[Control] = []
 
 func _init(p_player: BeaconPlayer) -> void:
 	player = p_player
+	add_to_group(PopupFx.GROUP) # opening another window folds the readout (and unfolding it closes them)
+
+
+## Another window is opening: fold away.
+func close_popup(except: Object) -> void:
+	if except != self and not collapsed:
+		set_collapsed(true)
 
 
 func _ready() -> void:
@@ -77,7 +84,7 @@ func _ready() -> void:
 	cols.add_child(left)
 	cols.add_child(VSeparator.new())
 	var right := VBoxContainer.new()
-	right.add_theme_constant_override("separation", 6)
+	right.add_theme_constant_override("separation", 3)
 	right.custom_minimum_size.x = 330
 	cols.add_child(right)
 	for i in 3:
@@ -154,6 +161,8 @@ func _ready() -> void:
 func set_collapsed(on: bool, sound := true) -> void:
 	if sound and on != collapsed and is_inside_tree():
 		PopupFx.swoosh(get_tree(), not on)
+	if not on and sound and is_inside_tree():
+		PopupFx.claim(self) # one window at a time
 	collapsed = on
 	for c in _body:
 		c.visible = not on
@@ -189,7 +198,7 @@ func _toggle(text: String, on_color: Color, on_toggle: Callable) -> Button:
 	b.text = text
 	b.toggle_mode = true
 	b.focus_mode = Control.FOCUS_NONE
-	b.custom_minimum_size = Vector2(30, 26)
+	b.custom_minimum_size = Vector2(30, 24)
 	b.add_theme_font_size_override("font_size", 12)
 	b.tooltip_text = "Mute" if text == "M" else "Solo"
 	for state in ["normal", "hover", "pressed", "hover_pressed"]:
@@ -219,7 +228,9 @@ func _fit_scale() -> void:
 		# Never under the top-right buttons (they'd take the taps meant for this panel).
 		var menu := get_tree().get_first_node_in_group("field_menu")
 		var right: float = menu.row_left() - 16.0 if menu else view.x
-		var wide := minf(room.x * 0.62, right - 16.0 - 12.0)
+		var wide := right - 16.0 - 12.0
+		# One scale for folded and open (the title stays the same size); only
+		# if the open panel can't fit at all does it shrink.
 		k = minf(want, minf(wide / _panel.size.x, room.y / _panel.size.y))
 	if not is_equal_approx(_panel.scale.x, k):
 		_panel.scale = Vector2(k, k)
@@ -256,7 +267,8 @@ func _process(delta: float) -> void:
 			r.label.text = ""
 			r.bar.value = 0
 	for role in _parts:
-		_parts[role].value = float(player.mix[role].gain) if not player.mix.is_empty() else 0.0
+		# The part's live level (it pulses with the music), not just its share of the blend.
+		_parts[role].value = float(player.meters.get(role, 0.0)) if Transport.running else (float(player.mix[role].gain) if not player.mix.is_empty() else 0.0)
 		# Parts you can't hear (muted, or another part soloed) fade back.
 		var a := 1.0 if player.audible(role) else 0.3
 		_parts[role].modulate.a = a

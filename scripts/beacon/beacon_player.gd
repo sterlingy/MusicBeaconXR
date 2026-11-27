@@ -52,6 +52,9 @@ var active: Array = []
 var mix: Dictionary = {}
 var rigs := {} # role -> InstrumentRig
 var played := {} # role -> notes played (for tests and meters)
+## Live level meters, role -> 0..1 (a dB scale, fast rise, slow fall): what each
+## part actually sounds like right now, for the readout's bars.
+var meters := {}
 
 var _applied := {} # role -> {synth param id: value}
 var _param_t := 0.0
@@ -234,6 +237,7 @@ func _process(delta: float) -> void:
 			if awake != _awake[role]:
 				_awake[role] = awake
 				rigs[role].synth.set_param("out.gain", 1.0 if awake else 0.0)
+	_update_meters(delta)
 	_param_t -= delta
 	if _param_t <= 0.0:
 		_param_t = 0.1
@@ -250,6 +254,26 @@ func _apply_params(role: String) -> void:
 		if not done.has(id) or absf(done[id] - v) > 0.002 * maxf(1.0, absf(v)):
 			synth.set_param(id, v)
 			done[id] = v
+
+
+# ---- meters
+
+const METER_FLOOR_DB := -48.0
+
+
+func _update_meters(delta: float) -> void:
+	var kit := db_to_linear(KIT_GAIN_DB)
+	for role in rigs:
+		var pk: Vector2 = rigs[role].synth.take_peak()
+		var peak := maxf(pk.x, pk.y)
+		if sample_rigs.has(role):
+			var sp: Vector2 = sample_rigs[role].synth.take_peak()
+			peak = maxf(peak, maxf(sp.x, sp.y) * db_to_linear(float(_sample_level.get(role, 0.0))))
+		var level := peak * float(_gain.get(role, 0.0)) * kit
+		var v := clampf((linear_to_db(maxf(level, 1e-6)) - METER_FLOOR_DB) / -METER_FLOOR_DB, 0.0, 1.0)
+		var was := float(meters.get(role, 0.0))
+		# Rise at once, fall at about 1.6 per second, like a level meter.
+		meters[role] = v if v > was else maxf(v, was - delta * 1.6)
 
 
 # ---- quality
