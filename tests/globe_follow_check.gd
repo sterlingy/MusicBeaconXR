@@ -98,6 +98,21 @@ func _ready() -> void:
 	check(FieldPrefs.follow(), "following your location again")
 	scene.mine._plane_drives()
 	check(not FieldPrefs.follow() and not scene.menu._follow.button_pressed, "a flight stops following your location")
+	# Center on me while location is already running and you're standing still
+	# (Android sends no new fix): the last fix is used, the view comes back to you.
+	FieldPrefs.set_value("follow", false)
+	scene.menu.set_follow(false)
+	scene.mine.geo.running = true
+	scene.mine.geo.last_fix = {"lat": 37.77, "lon": -122.42, "accuracy": 8.0, "at": Time.get_ticks_msec()}
+	for n in 2:
+		scene.input.jump_to(Vector2(10, 45))
+		scene._free = true
+		scene.menu.center_requested.emit()
+		for i in 3:
+			await get_tree().process_frame
+		check(scene.input.position.distance_to(Vector2(-122.42, 37.77)) < 0.001 and not scene._free,
+			"Center on me works (try %d), at %s" % [n + 1, scene.input.position])
+	scene.mine.geo.running = false
 	FieldPrefs.set_value("follow", was_following)
 	scene.mine.flight.stop()
 	print("globe_follow_check: %s (%d failure(s))" % ["OK" if failures == 0 else "FAILED", failures])

@@ -167,6 +167,8 @@ func _start_local() -> void:
 		menu.set_status(reason + " The grid stays where it was last (London before the first fix)."))
 	menu.local_changed.connect(func(): _recenter(_here(), "Rebuilt the grid around you."))
 	menu.center_requested.connect(func():
+		input.wander = false # going to where you are ends auto-walk
+		_free = false # and brings the view back to you
 		_fixed = false
 		menu.set_status("Finding you…")
 		geo.start())

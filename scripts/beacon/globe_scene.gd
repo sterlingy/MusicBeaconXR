@@ -640,7 +640,10 @@ var _followed := false # had a fix since following started
 func _start_follow() -> void:
 	mine.geo.located.connect(_on_located)
 	mine.geo.unavailable.connect(func(reason: String):
-		if FieldPrefs.follow():
+		if _centering:
+			_centering = false
+			menu.set_status("Can't find you: %s" % reason)
+		elif FieldPrefs.follow():
 			menu.set_status("Can't follow your location: %s" % reason))
 	# Following your location, following a flight and wandering each drive the
 	# listener, so turning one on turns the other two off.
@@ -655,6 +658,10 @@ func _start_follow() -> void:
 		else:
 			menu.set_status("Not following your location: walk anywhere."))
 	menu.center_requested.connect(func():
+		# Going to where you are: wandering and a followed flight stop (they move you).
+		input.wander = false
+		if mine.flight.active():
+			menu.stop_flight()
 		_followed = false
 		_centering = true
 		menu.set_status("Finding you…")
@@ -675,6 +682,8 @@ var _centering := false # "Center on me": one jump even when not following
 func _on_located(lat: float, lon: float, accuracy_m: float) -> void:
 	if not (FieldPrefs.follow() or _centering) or mine.flight.active():
 		return
+	if _centering:
+		_free = false # bring the camera back to you, even if you'd turned the globe away
 	_centering = false
 	if not _followed:
 		_followed = true

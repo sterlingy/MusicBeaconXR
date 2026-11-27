@@ -20,6 +20,8 @@ const MIN_TIME_MS := 2000
 const MIN_DISTANCE_M := 3.0
 
 var running := false
+## The latest fix {lat, lon, accuracy, at (msec)}, or {} before the first.
+var last_fix := {}
 var _manager: JavaObject
 var _proxy: JavaObject
 var _listener: _Listener
@@ -52,8 +54,13 @@ class _Listener:
 		pass
 
 
+## Starts listening, or (already listening) sends the latest fix again at once:
+## Android only reports a new one after you move a few metres, so a second
+## "Center on me" while standing still would otherwise wait for ever.
 func start() -> void:
 	if running:
+		if not last_fix.is_empty():
+			call_deferred("_on_fix", last_fix.lat, last_fix.lon, last_fix.accuracy)
 		return
 	if OS.get_name() != "Android":
 		unavailable.emit("This device has no location service the app can use.")
@@ -126,4 +133,5 @@ func _listen() -> void:
 
 
 func _on_fix(lat: float, lon: float, accuracy_m: float) -> void:
+	last_fix = {"lat": lat, "lon": lon, "accuracy": accuracy_m, "at": Time.get_ticks_msec()}
 	located.emit(lat, lon, accuracy_m)
