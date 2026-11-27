@@ -622,6 +622,17 @@ $("vol").addEventListener("input", (e) => engine.setVolume(+e.target.value));
     e.target.disabled = false;
   });
 }
+// Orchestral samples, or synths only; remembered.
+{
+  let on = true;
+  try { on = localStorage.getItem("beacon.samples") !== "0"; } catch {}
+  engine.setSamples(on);
+  $("samplesOn").checked = on;
+  $("samplesOn").addEventListener("change", (e) => {
+    engine.setSamples(e.target.checked);
+    try { localStorage.setItem("beacon.samples", e.target.checked ? "1" : "0"); } catch {}
+  });
+}
 $("wander").addEventListener("change", (e) => { input.wander = e.target.checked; });
 $("speed").addEventListener("input", (e) => { ui.speed = +e.target.value; });
 $("zones").addEventListener("change", (e) => { ui.zones = e.target.checked; });

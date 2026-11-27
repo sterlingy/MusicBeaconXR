@@ -38,6 +38,7 @@ export class BeaconEngine {
     this.anchor = { t: 0, beat: 0, bpm: 108 }; // audio time -> beats, for automation
     this.beatAt = (t) => this.anchor.beat + ((t - this.anchor.t) * this.anchor.bpm) / 60;
     this.synthMode = "kit";
+    this.samplesOn = true; // orchestral samples, or every part on its own synth
     // Optional extra layer on the globe (the user's own beacons, src/drafts.js):
     // layer(pos, opts) -> {globeShare, entries: [{id, w, d, beacon, song}]},
     // and layerSong(id) -> the song for one of its ids (null if not its own).
@@ -240,6 +241,12 @@ export class BeaconEngine {
     return () => { try { this.bus.analyser.disconnect(node); node.disconnect(); sink.disconnect(); } catch {} node.port.onmessage = null; };
   }
 
+  /** Orchestral samples on, or off (every part plays its own synth). */
+  setSamples(on) {
+    this.samplesOn = !!on;
+    if (this.mix && this.inst) this._applyMix();
+  }
+
   setVolume(v) {
     this.volume = v;
     if (this.bus) this.bus.master.gain.setTargetAtTime(v, this.ctx.currentTime, 0.05);
@@ -250,14 +257,14 @@ export class BeaconEngine {
       const m = this.mix.roles[role];
       const inst = this.inst[role];
       inst.setParams(m.params);
-      inst.setSample?.(m.sample);
+      inst.setSample?.(this.samplesOn ? m.sample : null);
       inst.setAutomation(m.automation, this.beatAt);
       this.inst.channels[role].set("level", m.gain, tc);
       inst.applyChannel(this.ctx.currentTime, tc);
     }
     if (this.inst.pad) {
       this.inst.channels.pad.set("level", padGain(this.active), tc);
-      this.inst.pad.setSample?.(this.harmony?.song?.pad?.sample || null);
+      this.inst.pad.setSample?.((this.samplesOn && this.harmony?.song?.pad?.sample) || null);
     }
   }
 

@@ -24,6 +24,7 @@ var _buttons := {} # role -> [mute, solo]
 var _help: Label
 var _quality: Label
 var _quality_btn: Button
+var _samples: CheckButton
 var _flash := 0.0
 var _panel: PanelContainer
 var _collapse: Button
@@ -142,6 +143,14 @@ func _ready() -> void:
 	var gap := Control.new()
 	gap.size_flags_vertical = Control.SIZE_EXPAND_FILL # the sound line sits at the column's foot
 	left.add_child(gap)
+	# Orchestral samples, or every part on its own synth sound.
+	_samples = CheckButton.new()
+	_samples.text = "Orchestral samples"
+	_samples.tooltip_text = "The songs' sampled instruments (piano, strings, brass, the orchestral kit). Off: every part plays its own synth sound."
+	_samples.focus_mode = Control.FOCUS_NONE
+	_samples.add_theme_font_size_override("font_size", 13)
+	_samples.toggled.connect(func(on): player.set_samples_on(on))
+	left.add_child(_samples)
 	left.add_child(qrow)
 	_help = _label("", 12, Color(1, 1, 1, 0.5))
 	_help.autowrap_mode = TextServer.AUTOWRAP_WORD
@@ -277,6 +286,8 @@ func _process(delta: float) -> void:
 		_names[role].text = role.capitalize() if sample == "" else "%s · %s" % [role.capitalize(), sample.replace("_", " ")]
 		_buttons[role][0].set_pressed_no_signal(player.muted.has(role))
 		_buttons[role][1].set_pressed_no_signal(player.soloed.has(role))
+	if _samples.button_pressed != player.samples_on:
+		_samples.set_pressed_no_signal(player.samples_on)
 	if player.quality:
 		_quality.text = "Sound: " + player.quality.describe()
 		_quality_btn.text = AudioQuality.MODE_NAMES[player.quality.mode]

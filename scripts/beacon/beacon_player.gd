@@ -76,6 +76,9 @@ var soloed := {} # role -> true: when any part is soloed, only soloed parts play
 
 ## What this device can carry (sample tier, synth quality), adapted while playing.
 var quality: AudioQuality = null
+## Orchestral samples on (the songs' sampled instruments) or off (every part
+## plays its own synth). Remembered (FieldPrefs "samples").
+var samples_on := true
 
 
 func _ready() -> void:
@@ -105,6 +108,7 @@ func _ready() -> void:
 	Transport.count_in_bars = 0
 	if ClassDB.class_has_method("JamSynth", "sampler_begin"):
 		samples = SampleBank.new(quality.tier)
+	samples_on = bool(FieldPrefs.get_value("samples", true))
 	_apply_quality()
 	Transport.register(self)
 	_refresh()
@@ -327,8 +331,16 @@ func sample_playing(role: String) -> String:
 
 # ---- sampled instruments
 
+## Turns the orchestral samples on or off (and remembers it); parts move
+## between their samples and their synths at once.
+func set_samples_on(on: bool) -> void:
+	samples_on = on
+	FieldPrefs.set_value("samples", on)
+
 ## The program the blend wants for a part: the loudest song's choice ("" = its synth).
 func _wanted_sample(role: String) -> String:
+	if not samples_on:
+		return ""
 	if role == "pad":
 		return str(harmony.song.get("pad", {}).get("sample", "")) if not harmony.song.is_empty() else ""
 	return str(mix.get(role, {}).get("sample", ""))
