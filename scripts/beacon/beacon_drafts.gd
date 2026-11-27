@@ -24,8 +24,8 @@ const DEFAULT_HALF := 10
 const MAX_HALF := 25
 const MAX_HALF_M := 50000
 ## Grid side presets, km (the local grid's).
-const SIDES_KM := [1.0, 5.0, 10.0, 50.0, 100.0]
-const SPACINGS_M := [100, 200, 500, 1000, 2000, 5000]
+const SIDES_KM := [1.0, 5.0, 10.0, 25.0, 50.0, 75.0, 100.0]
+const SPACINGS_M := [100, 200, 500, 1000, 2000, 5000, 10000]
 const PLANT_RANGE_M := 500
 const MIN_RANGE_M := 100
 const MAX_RANGE_M := 10000

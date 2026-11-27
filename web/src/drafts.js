@@ -34,7 +34,7 @@ export const DEFAULT_HALF = 10;
 export const MAX_HALF = 25;
 export const MAX_HALF_M = 50000;
 /** Grid side presets, km (the local grid's). */
-export const SIDES_KM = [1, 5, 10, 50, 100];
+export const SIDES_KM = [1, 5, 10, 25, 50, 75, 100];
 /** Beacons from a grid's center to its edge. */
 export const halfOf = (grid) => grid.half ?? DEFAULT_HALF;
 /** Beacons along a side. */
@@ -45,7 +45,7 @@ export function halfFor(sideKm, spacingM) {
   return h >= 1 && h <= MAX_HALF && h * spacingM <= MAX_HALF_M ? h : 0;
 }
 /** Spacings a grid can be generated with, in meters. */
-export const SPACINGS_M = [100, 200, 500, 1000, 2000, 5000];
+export const SPACINGS_M = [100, 200, 500, 1000, 2000, 5000, 10000];
 /** Planted songs and map beacons: default, smallest and largest range, in meters. */
 export const PLANT_RANGE_M = 500;
 export const MIN_RANGE_M = 100;
