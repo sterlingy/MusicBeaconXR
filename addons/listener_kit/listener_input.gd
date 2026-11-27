@@ -42,6 +42,10 @@ var wander := false:
 			wander_changed.emit(v)
 ## Wander speed as a fraction of walking speed (1: auto-walk at the chosen speed).
 var wander_pace := 1.0
+## True while `moved` is being sent for a wandering step (auto-walk), false for
+## every other move (walking, travel, a jump, a source driving it). Views that
+## come back to the listener when it moves let you keep turning while it wanders.
+var moved_by_wander := false
 var heading := randf() * TAU
 ## Set false to freeze movement (menus, cut-scenes); actions still fire.
 var enabled := true
@@ -54,6 +58,7 @@ var _y := 0.0
 
 
 func set_position(p: Vector2, emit := true) -> void:
+	moved_by_wander = false
 	var c := space.clamp_pos(p)
 	_x = c.x
 	_y = c.y
@@ -177,7 +182,9 @@ func tick(delta: float) -> void:
 	if wander:
 		heading += randf_range(-1.1, 1.1) * delta
 		heading = space.bounce(position, heading)
+		moved_by_wander = true
 		_step(Vector2(cos(heading), sin(heading)), dist * wander_pace)
+		moved_by_wander = false
 
 
 ## One walking step from the exact position (see _x, _y).

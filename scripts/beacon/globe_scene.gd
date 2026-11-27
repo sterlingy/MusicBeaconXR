@@ -126,7 +126,11 @@ func _build_input() -> void:
 	input.add_child(ptr)
 	add_child(input)
 	input.moved.connect(player.set_position)
-	input.moved.connect(func(_p): _free = false) # walking, travel and following bring the view back to you
+	# Walking, travel and following bring the view back to you; wandering doesn't,
+	# so you can turn the globe (or pan the map) while it auto-walks.
+	input.moved.connect(func(_p):
+		if not input.moved_by_wander:
+			_free = false)
 	input.action.connect(_on_action)
 
 

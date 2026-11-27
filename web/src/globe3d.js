@@ -159,8 +159,8 @@ export class Globe3D {
     const pos = this.h.engine.pos;
     // Keyboard walking, jumps and GPS move the listener: follow them.
     // You moved (walking, Jump, Move): the camera comes back to you. Not while a
-    // followed plane carries you along, so the globe can still be turned then.
-    if (this._lastPos && (Math.abs(pos.lat - this._lastPos.lat) > 1e-7 || Math.abs(pos.lon - this._lastPos.lon) > 1e-7) && !this.drag && !(this.h.flight?.() && this.mode === "free")) this.follow();
+    // followed plane or auto-walk carries you along, so the globe can still be turned then.
+    if (this._lastPos && (Math.abs(pos.lat - this._lastPos.lat) > 1e-7 || Math.abs(pos.lon - this._lastPos.lon) > 1e-7) && !this.drag && !((this.h.flight?.() || this.h.wandering?.()) && this.mode === "free")) this.follow(); // a plane or auto-walk moving you leaves a turned globe alone
     this._lastPos = { ...pos };
     if (this.fly) {
       const t = clamp((now - this.fly.t0) / this.fly.ms, 0, 1), k = ease(t);

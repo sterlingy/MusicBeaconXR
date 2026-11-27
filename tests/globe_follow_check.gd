@@ -42,8 +42,15 @@ func _ready() -> void:
 	await get_tree().process_frame
 	check(not scene.input.wander and not scene.speed._wander.button_pressed, "T turns it off and the switch follows")
 	scene.input.wander = true
+	# Turning the globe while it auto-walks: the view stays where you turned it.
+	scene._turn(Vector2(-200, 60))
+	var start: Vector2 = scene.input.position
+	for i in 30:
+		await get_tree().process_frame
+	check(scene._free and scene.input.position != start, "turning the globe while wandering isn't undone (free %s, moved %s)" % [scene._free, scene.input.position != start])
 	scene._go("jump", Vector2(10, 45))
 	check(not scene.input.wander, "a Jump ends auto-walk")
+	check(not scene._free, "and a Jump brings the view back to you")
 	scene.menu.set_open(false, false)
 	# Following a flight: the plane moves you, but the globe still turns and zooms.
 	scene.mine.flight._last_poll = FlightFollow.now_s() # no real update during the test

@@ -482,7 +482,8 @@ const pointer = input.add(pointerSource(canvas, (x, y) => view().toWorld(x, y), 
   onOrbit: (dx, dy) => { ui.pan = { x: (ui.pan?.x || 0) + dx, y: (ui.pan?.y || 0) + dy }; ui.panVel = null; travel.close(); },
   onOrbitEnd: (vx, vy) => { ui.panVel = Math.hypot(vx, vy) > 60 ? { x: vx, y: vy } : null; },
 }));
-input.on("moved", (p) => { engine.setPosition(p); ui.pan = null; ui.panVel = null; });
+// Moving brings the view back to you, except wandering: you can keep turning the map while it auto-walks.
+input.on("moved", (p, byWander) => { engine.setPosition(p); if (!byWander) { ui.pan = null; ui.panVel = null; } });
 input.on("jumped", () => walk.markJump?.());
 input.on("manual", () => stopFlight("Walking by hand, so you stopped following the flight."));
 input.on("manual", (kind) => stopFollow(kind === "pointer" ? "Moved by hand, so the map stopped following your location." : "Walking by hand, so the map stopped following your location."));
@@ -1315,6 +1316,7 @@ globe3d = new Globe3D({
   select,
   place: (lat, lon) => !!drafts.placing && drafts.placeAt({ lat, lon }),
   lines: () => walk.lines(),
+  wandering: () => input.wander, // auto-walk: a turned globe isn't pulled back to you
   flight: () => (flight.active ? { track: flight.fix.track, label: flight.fix.reg || flight.fix.flight, tracked: flight.tracked, route: flight.route } : null),
   offer: ({ pos, label, song }, clientX, clientY) => offerPlace(pos, label ? { label } : null, { clientX, clientY }, song),
   flightCard: () => { if (!flight.active) return false; flightCard.open(); return true; },

@@ -139,9 +139,15 @@ export class ListenerInput {
   add(src) { this.sources.push(src); src.attach?.(this); return src; }
   remove(src) { this.sources = this.sources.filter((s) => s !== src); src.detach?.(); }
 
-  setPosition(p, emit = true) {
+  /**
+   * `byWander` is true for a wandering step (auto-walk): views that come back
+   * to the listener when it moves let you keep turning the map while it wanders.
+   */
+  setPosition(p, emit = true, byWander = false) {
     this.position = this.space.clamp(p);
-    if (emit) this.emit("moved", this.position);
+    this.movedByWander = byWander;
+    if (emit) this.emit("moved", this.position, byWander);
+    this.movedByWander = false;
   }
   jumpTo(p) { this.target = null; this.travel = null; const from = this.position; this.setPosition(p); this.emit("jumped", from, this.position); }
   setTarget(p) { this.travel = null; this.target = p ? this.space.clamp(p) : null; }
@@ -193,7 +199,7 @@ export class ListenerInput {
     if (this._wander) {
       this.heading += (Math.random() - 0.5) * 2.2 * dt;
       this.heading = this.space.bounce(this.position, this.heading);
-      this.setPosition(this.space.step(this.position, [Math.cos(this.heading), Math.sin(this.heading)], dist * this.wanderPace));
+      this.setPosition(this.space.step(this.position, [Math.cos(this.heading), Math.sin(this.heading)], dist * this.wanderPace), true, true);
     }
   }
 }

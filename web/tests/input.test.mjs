@@ -228,3 +228,14 @@ test("explore pointer: drag pans without moving, tap selects, long press and rig
   el.fire("contextmenu", { clientX: 20, clientY: 30 });
   assert.deepEqual(acts.map((a) => a[0]), ["point"], "right-click asks too");
 });
+
+import { ListenerInput as _LI, planarSpace as _ps } from "../src/input/listener.js";
+test("a wandering step says so, so views can leave a turned map alone", () => {
+  const li = new _LI({ space: _ps({ half: 500 }), speed: 10 });
+  const seen = [];
+  li.on("moved", (_p, byWander) => seen.push(byWander));
+  li.wander = true;
+  li.tick(0.1);
+  li.jumpTo({ x: 5, y: 5 });
+  assert.deepEqual(seen, [true, false]);
+});
