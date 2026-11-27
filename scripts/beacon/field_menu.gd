@@ -22,7 +22,6 @@ var kind := "grid"
 var panel: PanelContainer
 var status: Label
 var _play: Button
-var _click: CheckButton # the metronome (in the panel; M too)
 var _fields_btn: Button
 var _field_btns := {}
 var _row: HBoxContainer
@@ -83,8 +82,6 @@ func _process(_delta: float) -> void:
 	_play.text = "■ Stop" if Transport.running else "▶ Play"
 	if PopupFx.is_open(panel):
 		_show_quality()
-	if _click.button_pressed != Transport.metronome_on:
-		_click.set_pressed_no_signal(Transport.metronome_on)
 
 
 ## Scales the button row and the panel from their top-right corners; the
@@ -210,16 +207,8 @@ func _build_panel() -> void:
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		fields.add_child(b)
 
-	# The metronome click (M too). It lived in the top row; the row is shorter now,
-	# leaving the readout room beside it on phones.
-	_click = CheckButton.new()
-	_click.text = "Metronome click"
-	_click.focus_mode = Control.FOCUS_NONE
-	_click.add_theme_font_size_override("font_size", 15)
-	_click.toggled.connect(func(t): Transport.metronome_on = t)
-	v.add_child(_click)
-
-	# Auto-walk (wander) lives in the Wander pop-up, by the travel speed.
+	# The metronome click and the orchestral samples live in the song panel;
+	# auto-walk (wander) in the Wander pop-up, by the travel speed.
 
 	v.add_child(_heading("LOCAL GRID"))
 	var side := _option(FieldPrefs.SIDES_KM, FieldPrefs.local_km(), "%s km a side")

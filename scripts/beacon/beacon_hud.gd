@@ -25,6 +25,7 @@ var _help: Label
 var _quality: Label
 var _quality_btn: Button
 var _samples: CheckButton
+var _click: CheckButton # the metronome (M too)
 var _flash := 0.0
 var _panel: PanelContainer
 var _collapse: Button
@@ -151,6 +152,13 @@ func _ready() -> void:
 	_samples.add_theme_font_size_override("font_size", 13)
 	_samples.toggled.connect(func(on): player.set_samples_on(on))
 	left.add_child(_samples)
+	_click = CheckButton.new()
+	_click.text = "Metronome click"
+	_click.tooltip_text = "A click on every beat (M too)"
+	_click.focus_mode = Control.FOCUS_NONE
+	_click.add_theme_font_size_override("font_size", 13)
+	_click.toggled.connect(func(t): Transport.metronome_on = t)
+	left.add_child(_click)
 	left.add_child(qrow)
 	_help = _label("", 12, Color(1, 1, 1, 0.5))
 	_help.autowrap_mode = TextServer.AUTOWRAP_WORD
@@ -288,6 +296,8 @@ func _process(delta: float) -> void:
 		_buttons[role][1].set_pressed_no_signal(player.soloed.has(role))
 	if _samples.button_pressed != player.samples_on:
 		_samples.set_pressed_no_signal(player.samples_on)
+	if _click.button_pressed != Transport.metronome_on:
+		_click.set_pressed_no_signal(Transport.metronome_on)
 	if player.quality:
 		_quality.text = "Sound: " + player.quality.describe()
 		_quality_btn.text = AudioQuality.MODE_NAMES[player.quality.mode]
