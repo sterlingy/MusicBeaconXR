@@ -40,17 +40,23 @@ var wander := false:
 		if v != wander:
 			wander = v
 			wander_changed.emit(v)
-## Wander speed as a fraction of walking speed.
-var wander_pace := 0.6
+## Wander speed as a fraction of walking speed (1: auto-walk at the chosen speed).
+var wander_pace := 1.0
 var heading := randf() * TAU
 ## Set false to freeze movement (menus, cut-scenes); actions still fire.
 var enabled := true
 ## A glide in progress (travel_to): {from, to, t (seconds so far), dur}.
 var _travel := {}
+## The position in full precision (Vector2 is 32-bit: too coarse for a frame's
+## walking step on the globe); `position` is this, rounded.
+var _x := 0.0
+var _y := 0.0
 
 
 func set_position(p: Vector2, emit := true) -> void:
 	var c := space.clamp_pos(p)
+	_x = c.x
+	_y = c.y
 	if c == position:
 		return
 	position = c
@@ -142,13 +148,17 @@ func tick(delta: float) -> void:
 				set_position(p)
 				return
 	var dist := space.walk_speed * speed_scale * delta
+	# Someone set `position` directly: take it as the exact position.
+	if absf(_x - position.x) > 1e-3 or absf(_y - position.y) > 1e-3:
+		_x = position.x
+		_y = position.y
 	for s in srcs:
 		var dir: Vector2 = s.move_intent(self, delta)
 		if dir != Vector2.ZERO:
 			target = null
 			_travel = {}
 			# Analog sticks walk slower when pushed part way; keys are always full speed.
-			set_position(space.step(position, dir.normalized(), dist * minf(1.0, dir.length())))
+			_step(dir.normalized(), dist * minf(1.0, dir.length()))
 			return
 	if not _travel.is_empty():
 		set_position(travel_step(delta))
@@ -159,9 +169,20 @@ func tick(delta: float) -> void:
 			set_position(target)
 			target = null
 		else:
-			set_position(space.step(position, t.dir, dist))
+			_step(t.dir, dist)
 		return
 	if wander:
 		heading += randf_range(-1.1, 1.1) * delta
 		heading = space.bounce(position, heading)
-		set_position(space.step(position, Vector2(cos(heading), sin(heading)), dist * wander_pace))
+		_step(Vector2(cos(heading), sin(heading)), dist * wander_pace)
+
+
+## One walking step from the exact position (see _x, _y).
+func _step(dir: Vector2, dist: float) -> void:
+	var r: Array = space.step_xy(_x, _y, dir, dist)
+	_x = r[0]
+	_y = r[1]
+	var c := Vector2(_x, _y)
+	if c != position:
+		position = c
+		moved.emit(position)

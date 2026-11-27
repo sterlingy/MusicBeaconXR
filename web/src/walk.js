@@ -46,12 +46,15 @@ export class Trail {
    * (a jump further than `jumpM` starts a new stretch, so no line is drawn
    * across it). `mood` is the loudest song's mood there.
    */
-  add(pos, mood, t, { minM = 3, jumpM = 5000, jumped = false } = {}) {
+  add(pos, mood, t, { minM = 3, jumpM = 5000, jumped } = {}) {
     const last = this.points[this.points.length - 1];
     const d = moved(last?.p, pos);
     if (last && d < minM) return false;
     // A jump (beyond a GPS fix's few meters) or a leap too long to walk breaks the line.
-    this.points.push({ p: posOf(pos), m: mood || "", t: Math.round(t), b: !!last && (d > jumpM || (jumped && d > 4 * minM)) });
+    // Only a real jump breaks the line (not a GPS fix's few meters, and not fast
+    // walking, which covers long distances between samples). jumpM is for
+    // callers that can't report jumps.
+    this.points.push({ p: posOf(pos), m: mood || "", t: Math.round(t), b: !!last && (jumped === undefined ? d > jumpM : jumped && d > 4 * minM) });
     if (this.points.length > TRAIL_MAX) this.points.splice(0, this.points.length - TRAIL_MAX);
     return true;
   }

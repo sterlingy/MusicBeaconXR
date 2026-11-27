@@ -59,6 +59,24 @@ func step(p: Vector2, dir: Vector2, dist: float) -> Vector2:
 	return clamp_pos(p + Vector2(dir.x, -dir.y if y_down else dir.y) * dist)
 
 
+## step() in full (64-bit) precision, on separate x and y: Vector2 is 32-bit,
+## and at walking pace a frame's step on the globe (a millionth of a degree)
+## is smaller than a 32-bit degree can hold. Returns [x, y].
+func step_xy(x: float, y: float, dir: Vector2, dist: float) -> Array:
+	if dir == Vector2.ZERO or dist == 0.0:
+		return [x, y]
+	if dir.length() > 1.0:
+		dir = dir.normalized()
+	var dx := float(dir.x)
+	var dy := float(dir.y)
+	if kind == Kind.GEO:
+		var k := minf(4.0, 1.0 / maxf(0.15, cos(deg_to_rad(y))))
+		var nx := fposmod(x + dx * dist * k + 180.0, 360.0) - 180.0
+		return [nx, clampf(y + dy * dist, -90.0, 90.0)]
+	var ny := y + (-dy if y_down else dy) * dist
+	return [clampf(x + dx * dist, bounds.position.x, bounds.end.x), clampf(ny, bounds.position.y, bounds.end.y)]
+
+
 ## The (right, forward) direction from `a` toward `b`, and the distance in walk units.
 func toward(a: Vector2, b: Vector2) -> Dictionary:
 	if kind == Kind.GEO:

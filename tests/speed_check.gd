@@ -35,6 +35,29 @@ func _ready() -> void:
 	g.menu.set_open(true)
 	await get_tree().create_timer(0.1).timeout
 	check(not PopupFx.is_open(g.speed._panel), "opening Fields closes the speed pop-up")
-	g.speed.set_speed(was)
+	g.queue_free()
+	await get_tree().process_frame
+	# The globe: real metres per second too.
+	var gl: Node = load("res://scenes/globe_field.tscn").instantiate()
+	add_child(gl)
+	await get_tree().create_timer(0.3).timeout
+	gl.speed.set_speed(10.0)
+	await get_tree().process_frame
+	var p0: Vector2 = gl.input.position
+	gl.input.set_target(p0 + Vector2(0, 1.0)) # a degree north
+	for i in 100:
+		gl.input.tick(0.1)
+	var moved_m: float = (gl.input._y - p0.y) * 111194.9 # metres north, from the exact position
+	check(absf(moved_m - 100.0) < 5.0, "10 s at 10 m/s on the globe moves about 100 m (%.1f m)" % moved_m)
+	check(is_equal_approx(gl.input.wander_pace, 1.0), "auto-walk goes at the chosen speed")
+	# 1 m/s in real 60 fps frames: each step is far below what a 32-bit degree holds.
+	gl.speed.set_speed(1.0)
+	var y0: float = gl.input._y
+	gl.input.set_target(gl.input.position + Vector2(0, 1.0))
+	for i in 600:
+		gl.input.tick(1.0 / 60.0)
+	var slow_m: float = (gl.input._y - y0) * 111194.9
+	check(absf(slow_m - 10.0) < 0.5, "10 s at 1 m/s moves 10 m, frame by frame (%.2f m)" % slow_m)
+	gl.speed.set_speed(was)
 	print("speed_check: %s (%d failure(s))" % ["OK" if failures == 0 else "FAILED", failures])
 	get_tree().quit(0 if failures == 0 else 1)

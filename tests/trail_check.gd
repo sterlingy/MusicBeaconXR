@@ -39,6 +39,14 @@ func _ready() -> void:
 	var kinds := walks.lines().map(func(l): return [l.get("jump", false), l.pts.size()])
 	check(kinds == [[false, 4], [true, 2], [false, 2]], "a jump leaves a dotted gap between walked stretches (%s)" % [kinds])
 
+	# Fast walking: long steps between samples, no jump: still one solid line.
+	walks.trails["grid"] = []
+	for i in 6:
+		player.pos = Vector2(i * 600.0, 0) # 600 m a sample
+		walks._add_trail()
+	var fast := walks.lines()
+	check(fast.size() == 1 and not fast[0].get("jump", false) and fast[0].pts.size() == 6, "fast walking stays one solid line (%d pieces)" % fast.size())
+
 	var hud := BeaconHud.new(player)
 	add_child(hud)
 	await get_tree().process_frame

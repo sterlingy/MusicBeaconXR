@@ -335,7 +335,7 @@ export function initWalks(ctx) {
   function frame() {
     if (st.replay) return tick();
     const top = engine.active.reduce((m, a) => (!m || a.w > m.w ? a : m), null);
-    if (trail().add(engine.pos, top?.song?.mood, Date.now(), { minM: minStep(), jumpM: engine.field.kind === "grid" ? 400 : 20000, jumped: st.jumped })) st.jumped = false;
+    if (trail().add(engine.pos, top?.song?.mood, Date.now(), { minM: minStep(), jumpM: 0, jumped: !!st.jumped })) st.jumped = false;
     if (st.recorder) st.recorder.sample((performance.now() - st.recStart) / 1000, engine.pos, engine.active);
     return false;
   }

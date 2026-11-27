@@ -134,8 +134,10 @@ func _add_trail() -> void:
 		if a.w > top:
 			top = a.w
 			mood = a.song.get("mood", "")
-	# A jump (beyond a GPS fix's few meters) or a leap too long to have been walked breaks the line.
-	var leap := d > (400.0 if kind == "grid" else 20000.0) or (_jump and d > 4.0 * min_m)
+	# Only a real jump breaks the line (ListenerInput reports every one), and not
+	# a GPS fix's few meters. Fast walking covers long distances between samples
+	# and must stay one solid line.
+	var leap := _jump and d > 4.0 * min_m
 	_jump = false
 	t.append({"p": p, "m": mood, "t": Time.get_unix_time_from_system() * 1000.0, "b": not last.is_empty() and leap})
 	if t.size() > TRAIL_MAX:
