@@ -1,6 +1,7 @@
 class_name SpeedUi
 extends CanvasLayer
-## Travel speed: a button beside Walks showing the speed, and a pop-up with a
+## Wander and travel speed: a "Wander" button beside Walks (the speed under its
+## name, lit while auto-walk is on), and a pop-up with the auto-walk switch and a
 ## horizontal slider from 1 m/s (walking) to 250 m/s (a jet cruising). The
 ## slider is logarithmic (slow speeds get as much room as fast ones), snaps to
 ## 1, 2, 5, 10, 25, 50, 100 and 250 m/s, and names the ranges: walk, jog, run,
@@ -28,6 +29,9 @@ var ui_scale := 1.0
 var note := ""
 var mps := 10.0
 var _toggle: Button
+var _title: Label
+var _sub: Label
+var _wander: CheckButton
 var _panel: PanelContainer
 var _value: Label
 var _note: Label
@@ -88,8 +92,26 @@ func _ready() -> void:
 			ui_scale = float(a.trim_prefix("--ui-scale="))
 	mps = saved()
 	var menu := FieldMenu.new("grid")
-	_toggle = menu._button(_button_text(mps), func(): set_open(not PopupFx.is_open(_panel)), true)
-	_toggle.tooltip_text = "Travel speed"
+	# Two lines: "Wander", and the speed under it. Lit (pressed) while auto-walk is on.
+	_toggle = menu._button("", func(): set_open(not PopupFx.is_open(_panel)), true)
+	_toggle.tooltip_text = "Auto-walk and travel speed"
+	var lines := VBoxContainer.new()
+	lines.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	lines.add_theme_constant_override("separation", -3)
+	lines.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	lines.alignment = BoxContainer.ALIGNMENT_CENTER
+	_title = Label.new()
+	_title.text = "Wander"
+	_title.add_theme_font_size_override("font_size", 15)
+	_sub = Label.new()
+	_sub.add_theme_font_size_override("font_size", 11)
+	_sub.add_theme_color_override("font_color", Color(1, 1, 1, 0.62))
+	for l in [_title, _sub]:
+		l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		lines.add_child(l)
+	_toggle.add_child(lines)
+	_toggle.custom_minimum_size = Vector2(0, 46)
 	add_child(_toggle)
 	_panel = PanelContainer.new()
 	_panel.mouse_filter = Control.MOUSE_FILTER_STOP
@@ -107,6 +129,16 @@ func _ready() -> void:
 	v.custom_minimum_size = Vector2(440, 0)
 	v.add_theme_constant_override("separation", 6)
 	_panel.add_child(v)
+	# Auto-walk: the listener wanders between beacons by itself (the T key too).
+	_wander = CheckButton.new()
+	_wander.text = "Wander: auto-walk between beacons"
+	_wander.focus_mode = Control.FOCUS_NONE
+	_wander.add_theme_font_size_override("font_size", 15)
+	_wander.toggled.connect(func(on):
+		var li := _listener()
+		if li:
+			li.wander = on)
+	v.add_child(_wander)
 	var head := HBoxContainer.new()
 	var h := menu._heading("TRAVEL SPEED")
 	h.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -168,11 +200,15 @@ static func _button_text(v: float) -> String:
 	return "%s · %s" % [band_of(v), label_of(v)]
 
 
+func _listener() -> ListenerInput:
+	return get_tree().get_first_node_in_group("listener_input") as ListenerInput if is_inside_tree() else null
+
+
 ## Sets the speed (and saves it); `tell` sends changed.
 func set_speed(v: float, tell := true) -> void:
 	mps = clampf(v, MIN, MAX)
 	_value.text = describe(mps)
-	_toggle.text = _button_text(mps)
+	_sub.text = _button_text(mps)
 	_slider.set_value_no_signal(to_t(mps)) # dragging past a mark settles on it (a detent)
 	_ticks.queue_redraw()
 	_note.text = note
@@ -188,7 +224,6 @@ func set_open(open: bool, sound := true) -> void:
 		_note.text = note
 		_note.visible = note != ""
 	PopupFx.animate(_panel, open, sound)
-	_toggle.set_pressed_no_signal(open)
 
 
 func close_popup(except: Object) -> void:
@@ -198,6 +233,18 @@ func close_popup(except: Object) -> void:
 
 ## Bottom right, just left of the Walks button; the slider pops up above it.
 func _process(_delta: float) -> void:
+	# The button is lit while wandering (T, the switch, or something that stopped it).
+	var li := _listener()
+	var on := li != null and li.wander
+	if _toggle.button_pressed != on:
+		_toggle.set_pressed_no_signal(on)
+	if _wander.button_pressed != on:
+		_wander.set_pressed_no_signal(on)
+	_title.add_theme_color_override("font_color", FieldMenu.ACCENT if on else Color.WHITE)
+	var want := maxf(_title.get_minimum_size().x, _sub.get_minimum_size().x) + 26.0
+	if not is_equal_approx(_toggle.custom_minimum_size.x, want):
+		_toggle.custom_minimum_size.x = want
+		_toggle.reset_size()
 	var view := get_viewport().get_visible_rect().size
 	var ts := minf(ui_scale, (view.x * 0.25) / maxf(1.0, _toggle.size.x))
 	_toggle.scale = Vector2(ts, ts)

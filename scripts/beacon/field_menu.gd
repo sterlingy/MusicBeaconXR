@@ -28,7 +28,6 @@ var _field_btns := {}
 var _row: HBoxContainer
 var _scroll: ScrollContainer
 var _follow: CheckButton
-var _wander: CheckButton
 var _sound_btns := {} # quality mode -> button
 var _flight_q: LineEdit
 var _flight_btn: Button
@@ -84,9 +83,6 @@ func _process(_delta: float) -> void:
 	_play.text = "■ Stop" if Transport.running else "▶ Play"
 	if PopupFx.is_open(panel):
 		_show_quality()
-		var li := _listener()
-		if li and _wander.button_pressed != li.wander:
-			_wander.set_pressed_no_signal(li.wander) # T, or something that stopped it
 	if _click.button_pressed != Transport.metronome_on:
 		_click.set_pressed_no_signal(Transport.metronome_on)
 
@@ -223,16 +219,7 @@ func _build_panel() -> void:
 	_click.toggled.connect(func(t): Transport.metronome_on = t)
 	v.add_child(_click)
 
-	# Auto-walk: the listener wanders between beacons by itself (the T key too).
-	_wander = CheckButton.new()
-	_wander.text = "Auto-walk: wander between beacons"
-	_wander.focus_mode = Control.FOCUS_NONE
-	_wander.add_theme_font_size_override("font_size", 15)
-	_wander.toggled.connect(func(on):
-		var li := _listener()
-		if li:
-			li.wander = on)
-	v.add_child(_wander)
+	# Auto-walk (wander) lives in the Wander pop-up, by the travel speed.
 
 	v.add_child(_heading("LOCAL GRID"))
 	var side := _option(FieldPrefs.SIDES_KM, FieldPrefs.local_km(), "%s km a side")

@@ -471,6 +471,10 @@ func _parse_args() -> void:
 			altitude = float(a.trim_prefix("--alt="))
 		elif a.begins_with("--flight="):
 			_follow_flight_dev(a.trim_prefix("--flight="))
+		elif a == "--wander":
+			input.wander = true
+		elif a == "--speed-open": # dev: the Wander pop-up
+			get_tree().create_timer(0.3).timeout.connect(func(): speed.set_open(true, false))
 		elif a == "--drafts-demo":
 			_drafts_demo()
 		elif a.begins_with("--card="): # dev: the Jump / Move card for lat,lon (after a frame, once the camera is placed)

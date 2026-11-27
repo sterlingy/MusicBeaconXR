@@ -32,15 +32,15 @@ func _ready() -> void:
 	await get_tree().process_frame
 	check(scene.input.position.distance_to(Vector2(2.36, 48.86)) < 0.01, "not following: fixes are ignored")
 	FieldPrefs.set_value("follow", was_following)
-	# Auto-walk: the Fields switch, kept in step with T, ended by Jump / Move.
+	# Auto-walk: the Wander pop-up switch, kept in step with T, ended by Jump / Move.
 	scene.menu.set_open(true, false)
 	await get_tree().process_frame
-	scene.menu._wander.button_pressed = true
+	scene.speed._wander.button_pressed = true
 	check(scene.input.wander, "the Auto-walk switch starts wandering")
 	scene.input.send_action("toggle_wander") # T
 	await get_tree().process_frame
 	await get_tree().process_frame
-	check(not scene.input.wander and not scene.menu._wander.button_pressed, "T turns it off and the switch follows")
+	check(not scene.input.wander and not scene.speed._wander.button_pressed, "T turns it off and the switch follows")
 	scene.input.wander = true
 	scene._go("jump", Vector2(10, 45))
 	check(not scene.input.wander, "a Jump ends auto-walk")
