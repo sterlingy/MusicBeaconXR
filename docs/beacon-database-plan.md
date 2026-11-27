@@ -4,8 +4,8 @@ People add beacons to the world: generated grids and songs they make, wherever t
 
 ## What people can do
 
-- **Where:** creating beacons happens on the **Globe** tab, **only where you physically are** (GPS), and for now **only in the lower 48 United States**. Listening works everywhere.
-- **Generate a grid** at your location: a spacing from **0.1 to 5 km**, with the size capped to match (for example 100 km a side at 5 km spacing is 21 × 21 = 441 beacons). When you walk out of your grid, the app offers to **generate more**: the next grid along, on the same lattice and spacing.
+- **Where:** creating beacons happens on the **Globe** tab, **only where you physically are** (GPS), **anywhere in the world** (the lower-48 limit was lifted on 2026-11-27, for making and for sharing). Listening works everywhere.
+- **Generate a grid** at your location: a **size** (1, 5, 10, 25, 50, 75 or 100 km a side) and a **spacing** (100 m to 10 km), chosen apart as on the local grid, from 3 × 3 to 51 × 51 beacons and no more than 100 km a side (grids made before 2026-11-27 are 21 × 21). A second grid in the same spot needs a different size or spacing. When you walk out of your grid, the app offers to **generate more**: the next grid along, on the same lattice and spacing.
 - **Regenerate** all of a grid's songs, or one selected beacon's song.
 - **Plant a song:** put a single beacon with a song you made at your location, with a **range** (500 m by default, 10 km at most).
 - **My grids:** your own list of generated grids and custom maps. You can turn each on or off (several at once, merged into one pool, each in its own tint), open, rename, duplicate, delete, export, import, jump to it, submit or share.
@@ -32,11 +32,11 @@ People add beacons to the world: generated grids and songs they make, wherever t
 ## Build order
 
 1. **Drafts on the device, no server.** Website first, then the app.
-   - My grids; Generate (with the lower-48 and GPS check) and "generate more".
+   - My grids; Generate (with the GPS check) and "generate more".
    - Regenerate; Plant (on the website from its song editor; in the app with generated songs until it has an editor).
    - Custom maps; the two-layer crossfade; play modes; favorites; the status line.
 2. **Reading the shared map.** 1° tiles fetched and cached while traveling, in the app and the website.
-3. **Submitting and sharing.** Supabase tables and per-row security rules; sign-in; submit grids and songs; share custom maps; favorite counts; moderation and limits; the server also checks the lower-48 rule.
+3. **Submitting and sharing.** Supabase tables and per-row security rules; sign-in; submit grids and songs; share custom maps; favorite counts; moderation and limits; the server recomputes each grid's tiles (it checked a lower-48 rule until migration 0008 lifted it).
 
 ## Open decisions (for step 3)
 
