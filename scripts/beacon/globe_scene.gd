@@ -64,6 +64,7 @@ func _ready() -> void:
 	_build_input()
 	_build_walks()
 	input.jump_to(Vector2(-0.128, 51.507))
+	_start_follow()
 	_parse_args()
 
 
@@ -356,6 +357,50 @@ func _parse_args() -> void:
 			Transport.metronome_on = false
 			Transport.count_in_bars = 0
 			Transport.start()
+
+
+# ---------------------------------------------------------------- following the device's location
+
+var _followed := false # had a fix since following started
+
+
+## "Follow my location" (Fields) on the globe: the listener stands where the
+## device is and moves with it; the first fix zooms in close. Paused while
+## following a flight. Same setting as the local grid's.
+func _start_follow() -> void:
+	mine.geo.located.connect(_on_located)
+	mine.geo.unavailable.connect(func(reason: String):
+		if FieldPrefs.follow():
+			menu.set_status("Can't follow your location: %s" % reason))
+	menu.follow_changed.connect(func(on: bool):
+		_followed = false
+		if on:
+			menu.set_status("Finding you… (allow location if Android asks)")
+			mine.geo.start()
+		else:
+			menu.set_status("Not following your location: walk anywhere."))
+	menu.center_requested.connect(func():
+		_followed = false
+		_centering = true
+		menu.set_status("Finding you…")
+		mine.geo.start())
+	if FieldPrefs.follow():
+		mine.geo.start()
+
+
+var _centering := false # "Center on me": one jump even when not following
+
+
+func _on_located(lat: float, lon: float, accuracy_m: float) -> void:
+	if not (FieldPrefs.follow() or _centering) or mine.flight.active():
+		return
+	_centering = false
+	if not _followed:
+		_followed = true
+		_go_to(lat, lon, 30.0)
+		menu.set_status("Centered on you (accurate to %d m).%s" % [roundi(accuracy_m), " Following your location." if FieldPrefs.follow() else ""])
+	else:
+		input.jump_to(Vector2(lon, lat))
 
 
 # ---------------------------------------------------------------- my beacons on the globe

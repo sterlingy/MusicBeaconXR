@@ -16,6 +16,11 @@ var send_select := true
 
 var _down := false
 var _down_at := Vector2.ZERO
+## Two-finger pinch on touch screens, tracked from the raw touches (Android
+## sends no magnify gesture for them): finger index -> position.
+var _touches := {}
+var _pinch_d := 0.0
+var _pinching := false # from the second finger down until every finger is up
 
 
 func _init() -> void:
@@ -59,6 +64,42 @@ func _pick_at(screen: Vector2) -> Variant:
 	return pick.call(camera.project_ray_origin(screen), camera.project_ray_normal(screen))
 
 
+## Two fingers zoom: spreading them zooms in, pinching zooms out. The walk the
+## first finger started stops where the listener is. Returns true if it used the event.
+func _track_pinch(event: InputEvent, li: ListenerInput) -> bool:
+	if event is InputEventScreenTouch:
+		if event.pressed:
+			_touches[event.index] = event.position
+		else:
+			_touches.erase(event.index)
+		if _touches.size() >= 2:
+			if not _pinching:
+				_pinching = true
+				_down = false
+				li.set_target(null)
+			_pinch_d = _pinch_distance()
+			return true
+		if _touches.is_empty() and _pinching:
+			_pinching = false
+			return true
+		return _pinching
+	if event is InputEventScreenDrag and _touches.has(event.index):
+		_touches[event.index] = event.position
+		if _touches.size() >= 2:
+			var d := _pinch_distance()
+			if _pinch_d > 1.0 and d > 1.0:
+				li.send_action("zoom", _pinch_d / d)
+			_pinch_d = d
+			return true
+		return _pinching
+	return false
+
+
+func _pinch_distance() -> float:
+	var pts: Array = _touches.values()
+	return (pts[0] as Vector2).distance_to(pts[1])
+
+
 func _unhandled_input(event: InputEvent) -> void:
 	var li := listener()
 	if li == null or not enabled:
@@ -66,6 +107,11 @@ func _unhandled_input(event: InputEvent) -> void:
 	# Pinch (touch screens, trackpads) zooms like the mouse wheel.
 	if event is InputEventMagnifyGesture and event.factor > 0.0:
 		li.send_action("zoom", 1.0 / event.factor)
+		return
+	if _track_pinch(event, li):
+		return
+	# While pinching, the first finger's emulated mouse must not walk or select.
+	if _pinching and (event is InputEventMouseButton or event is InputEventMouseMotion):
 		return
 	# Godot turns touches into mouse events by default; only read raw touches when that's off.
 	if (event is InputEventScreenTouch or event is InputEventScreenDrag) and ProjectSettings.get_setting("input_devices/pointing/emulate_mouse_from_touch", true):

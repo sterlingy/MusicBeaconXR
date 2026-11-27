@@ -210,10 +210,11 @@ func _build_panel() -> void:
 	loc.add_child(center)
 	follow.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	v.add_child(loc)
+	# The grid size is the local grid's; following your location works on the globe too.
 	if kind != "local":
-		for c in [side, spacing, follow, center]:
+		for c in ([side, spacing] if kind == "globe" else [side, spacing, follow, center]):
 			c.disabled = true
-		var note := _small("Open the local grid to use these.")
+		var note := _small("Grid size: open the local grid to use it." if kind == "globe" else "Open the local grid to use these.")
 		v.add_child(note)
 	status = _small("")
 	status.visible = false
