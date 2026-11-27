@@ -28,6 +28,7 @@ var _field_btns := {}
 var _row: HBoxContainer
 var _scroll: ScrollContainer
 var _follow: CheckButton
+var _wander: CheckButton
 var _sound_btns := {} # quality mode -> button
 var _flight_q: LineEdit
 var _flight_btn: Button
@@ -85,6 +86,9 @@ func _process(_delta: float) -> void:
 	_play.text = "■ Stop" if Transport.running else "▶ Play"
 	if PopupFx.is_open(panel):
 		_show_quality()
+		var li := _listener()
+		if li and _wander.button_pressed != li.wander:
+			_wander.set_pressed_no_signal(li.wander) # T, or something that stopped it
 	if _click.button_pressed != Transport.metronome_on:
 		_click.set_pressed_no_signal(Transport.metronome_on)
 
@@ -208,6 +212,17 @@ func _build_panel() -> void:
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		fields.add_child(b)
 
+	# Auto-walk: the listener wanders between beacons by itself (the T key too).
+	_wander = CheckButton.new()
+	_wander.text = "Auto-walk: wander between beacons"
+	_wander.focus_mode = Control.FOCUS_NONE
+	_wander.add_theme_font_size_override("font_size", 15)
+	_wander.toggled.connect(func(on):
+		var li := _listener()
+		if li:
+			li.wander = on)
+	v.add_child(_wander)
+
 	v.add_child(_heading("LOCAL GRID"))
 	var side := _option(FieldPrefs.SIDES_KM, FieldPrefs.local_km(), "%s km a side")
 	side.item_selected.connect(func(i):
@@ -318,6 +333,10 @@ static func fit_scroll(sc: ScrollContainer, avail: float) -> void:
 	var w := want.x + (14.0 if h < want.y else 0.0)
 	if not sc.custom_minimum_size.is_equal_approx(Vector2(w, h)):
 		sc.custom_minimum_size = Vector2(w, h)
+
+
+func _listener() -> ListenerInput:
+	return get_tree().get_first_node_in_group("listener_input") as ListenerInput
 
 
 func _mine() -> MyBeacons:

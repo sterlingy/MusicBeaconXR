@@ -32,6 +32,19 @@ func _ready() -> void:
 	await get_tree().process_frame
 	check(scene.input.position.distance_to(Vector2(2.36, 48.86)) < 0.01, "not following: fixes are ignored")
 	FieldPrefs.set_value("follow", was_following)
+	# Auto-walk: the Fields switch, kept in step with T, ended by Jump / Move.
+	scene.menu.set_open(true, false)
+	await get_tree().process_frame
+	scene.menu._wander.button_pressed = true
+	check(scene.input.wander, "the Auto-walk switch starts wandering")
+	scene.input.send_action("toggle_wander") # T
+	await get_tree().process_frame
+	await get_tree().process_frame
+	check(not scene.input.wander and not scene.menu._wander.button_pressed, "T turns it off and the switch follows")
+	scene.input.wander = true
+	scene._go("jump", Vector2(10, 45))
+	check(not scene.input.wander, "a Jump ends auto-walk")
+	scene.menu.set_open(false, false)
 	# Following a flight: the plane moves you, but the globe still turns and zooms.
 	scene.mine.flight._last_poll = FlightFollow.now_s() # no real update during the test
 	scene.mine.flight.fix = {"found": true, "lat": 40.0, "lon": -100.0, "gs_kt": 450.0, "track": 90.0, "at": FlightFollow.now_s(), "seen_pos": 0.0, "alt_ft": 35000.0, "flight": "TST1"}

@@ -114,7 +114,7 @@ On the globe and the grids, one finger (or the mouse) turns the globe or pans th
 - **Jump:** there at once.
 - **Move:** glide there along the great circle (a straight line on a grid), hearing the music change through every beacon on the way. About 3 seconds for a short hop, up to 12 across the world. Tap the map to stop.
 
-**Back to me** (bottom middle) returns the view after you've turned it away. Going somewhere stops following your location. Pinch or the wheel zooms; keys still walk. In a headset, tap the right trigger on a beacon or hold it on any spot, and the card floats there: point at Jump or Move and pull the trigger. The website's flat maps and 3D globe work the same way. Code: ListenerKit (`PointerSource` mode `explore`, `ListenerInput.travel_to`), `scripts/beacon/travel_ui.gd`, `xr_travel_card.gd`; on the web `src/input/listener.js` and `src/travelcard.js`.
+**Auto-walk** (a switch in the Fields panel, or T) lets the listener wander between beacons by itself; a Jump, a Move or following a flight ends it. **Back to me** (bottom middle) returns the view after you've turned it away. Going somewhere stops following your location. Pinch or the wheel zooms; keys still walk. In a headset, tap the right trigger on a beacon or hold it on any spot, and the card floats there: point at Jump or Move and pull the trigger. The website's flat maps and 3D globe work the same way. Code: ListenerKit (`PointerSource` mode `explore`, `ListenerInput.travel_to`), `scripts/beacon/travel_ui.gd`, `xr_travel_card.gd`; on the web `src/input/listener.js` and `src/travelcard.js`.
 
 ## Windows and sounds
 

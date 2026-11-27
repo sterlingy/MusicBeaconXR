@@ -531,6 +531,8 @@ func _build() -> void:
 func start_flight(q: String) -> String:
 	var why := await flight.start(q)
 	if why == "":
+		player.get_tree().call_group("listener_input", "set", "wander", false) # the plane drives now
+	if why == "":
 		go_to.emit(flight.fix.lat, flight.fix.lon, 1500.0)
 	return why
 
@@ -538,6 +540,8 @@ func start_flight(q: String) -> String:
 ## Follows a random flight in the air somewhere in the world. Returns "" or why not.
 func start_random_flight() -> String:
 	var why := await flight.start_random()
+	if why == "":
+		player.get_tree().call_group("listener_input", "set", "wander", false) # the plane drives now
 	if why == "":
 		go_to.emit(flight.fix.lat, flight.fix.lon, 1500.0)
 	return why

@@ -108,6 +108,7 @@ func _build_input() -> void:
 	add_child(_marker)
 	input = ListenerInput.new()
 	input.name = "ListenerInput"
+	input.add_to_group("listener_input") # the Fields panel's Auto-walk switch finds it
 	_set_space()
 	input.add_child(KeyboardSource.new())
 	var ptr := PointerSource.new()
@@ -457,6 +458,7 @@ func _offer(pos: Vector2, snap: float, beacon_only: bool, screen := Vector2(-1, 
 func _go(kind_: String, pos: Vector2) -> void:
 	_marker.visible = false
 	_free = false
+	input.wander = false # going somewhere on purpose ends auto-walk
 	if not walks.replay.is_empty():
 		walks.stop_replay(true) # you chose to go somewhere else
 	input.enabled = true

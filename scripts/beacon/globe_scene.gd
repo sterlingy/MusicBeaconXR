@@ -97,6 +97,7 @@ func _build_input() -> void:
 	flight_card.stop_requested.connect(func(): menu.stop_flight())
 	input = ListenerInput.new()
 	input.name = "ListenerInput"
+	input.add_to_group("listener_input") # the Fields panel's Auto-walk switch finds it
 	input.space = ListenerSpace.geo(WALK_DEG)
 	input.add_child(KeyboardSource.new())
 	var ptr := PointerSource.new()
@@ -538,6 +539,7 @@ func _offer(pos: Vector2, snap_km: float, beacon_only: bool, screen := Vector2(-
 
 func _go(kind: String, pos: Vector2) -> void:
 	_marker.visible = false
+	input.wander = false # going somewhere on purpose ends auto-walk
 	if mine.flight.active():
 		menu.stop_flight() # you chose to go somewhere else
 	if not walks.replay.is_empty():
