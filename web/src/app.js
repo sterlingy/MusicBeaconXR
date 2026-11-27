@@ -7,6 +7,9 @@ import { songPosition, sectionName, clock, hasForm, totalBars, lengthSeconds, SE
 import { BeaconEngine } from "./engine.js";
 import { SongEditor } from "./editor.js";
 import { ListenerInput, planarSpace, geoSpace, localSpace, keyboardSource, pointerSource, travelSeconds } from "./input/listener.js";
+import * as Speed from "./speed.js";
+import { shareGlow } from "./glow.js";
+import { drawPlane3D } from "./plane.js";
 import { initDrafts } from "./draftsui.js";
 import { Globe3D } from "./globe3d.js";
 import { initWalks, drawLines } from "./walkui.js";
@@ -57,7 +60,7 @@ const g = canvas.getContext("2d");
 const ui = {
   mode: "grid",
   zoom: "local",
-  speed: 1,
+  mps: (() => { try { const v = +localStorage.getItem("beacon.speed"); return v >= Speed.MIN && v <= Speed.MAX ? v : 10; } catch { return 10; } })(), // travel speed, m/s (src/speed.js)
   zones: true,
   zoneImg: null,
   zoneKey: "",
@@ -279,6 +282,8 @@ function draw(now) {
     const fl = ui.flashes.get(b.id);
     const pulse = fl ? Math.max(0, 1 - (now - fl) / 260) : 0;
     const r = baseR * (1 + 0.35 * w) + pulse * 6 * d;
+    // Driving the music: a glow by its share, up to about two beacon spacings across.
+    shareGlow(g, x, y, Math.max(baseR * 8, Math.min(gap * d * 2.2, baseR * 22)), col, w, b.id === harmonyId);
     if (pulse > 0) {
       g.globalAlpha = 0.35 * pulse;
       g.fillStyle = col;
@@ -313,7 +318,7 @@ function draw(now) {
     g.strokeStyle = C.accent; g.lineWidth = 1.5 * d;
     g.beginPath(); g.moveTo(tx - 6 * d, ty - 6 * d); g.lineTo(tx + 6 * d, ty + 6 * d); g.moveTo(tx + 6 * d, ty - 6 * d); g.lineTo(tx - 6 * d, ty + 6 * d); g.stroke();
   }
-  if (flight.active && ui.mode === "globe") drawPlane(g, px, py, flight.fix.track, d, flight.tracked ? C.accent : "#ff4d4d"); // amber: seen; red: out of sight, gliding on
+  if (flight.active && ui.mode === "globe") drawPlane(g, px, py, flight.fix.track, d, flight.tracked ? PLANE_SEEN : PLANE_LOST); // amber: seen; red: out of sight, gliding on
   g.fillStyle = C.accent;
   g.beginPath(); g.arc(px, py, 8 * d, 0, Math.PI * 2); g.fill();
   g.strokeStyle = C.field; g.lineWidth = 2.5 * d;
@@ -408,22 +413,13 @@ function drawGraticule(v, d) {
   }
 }
 
-/** A small plane pointing along `track` (degrees from north), for following a flight. */
+/** The plane's colours, as the app's: amber while it's seen, red while it glides on out of sight. */
+export const PLANE_SEEN = "#ffb547";
+export const PLANE_LOST = "#ff4d4d";
+
+/** The followed plane pointing along `track` (degrees from north), drawn to look 3D (src/plane.js). */
 export function drawPlane(g, x, y, track, d, color) {
-  g.save();
-  g.translate(x, y);
-  g.rotate(((track || 0) * Math.PI) / 180);
-  g.scale(d, d);
-  g.fillStyle = color;
-  g.strokeStyle = "#04070d";
-  g.lineWidth = 1.5;
-  g.beginPath();
-  // Nose up: fuselage, wings, tail.
-  g.moveTo(0, -22); g.lineTo(3, -12); g.lineTo(3, -4); g.lineTo(18, 4); g.lineTo(18, 8); g.lineTo(3, 4);
-  g.lineTo(2.5, 14); g.lineTo(8, 19); g.lineTo(8, 22); g.lineTo(0, 19); g.lineTo(-8, 22); g.lineTo(-8, 19);
-  g.lineTo(-2.5, 14); g.lineTo(-3, 4); g.lineTo(-18, 8); g.lineTo(-18, 4); g.lineTo(-3, -4); g.lineTo(-3, -12); g.closePath();
-  g.fill(); g.stroke();
-  g.restore();
+  drawPlane3D(g, x, y, ((track || 0) * Math.PI) / 180, d, color);
 }
 
 function label(text, x, y, size, color, halo, alpha = 1, align = "center") {
@@ -443,14 +439,10 @@ function label(text, x, y, size, color, halo, alpha = 1, align = "center") {
 
 // ------------------------------------------------------------------ movement
 
+/** Walking speed in the field's own units: the real travel speed everywhere (as the app). */
 function speedPerSec() {
-  if (ui.mode === "grid") return 55 * ui.speed; // meters per second
-  if (ui.mode === "local") { // meters per second: half a spacing nearby, a 25th of the grid on the whole-grid view
-    const f = engine.field;
-    return (ui.zoom === "world" ? Math.max(0.5 * f.spacing, f.sideM / 25) : 0.5 * f.spacing) * ui.speed;
-  }
-  if (ui.zoom === "close") return (ui.closeKm / 111.2 / 12) * ui.speed; // a 12th of the map per second
-  return (ui.zoom === "world" ? 18 : 5) * ui.speed; // degrees per second
+  if (ui.mode === "globe") return ui.mps / Speed.M_PER_DEG; // degrees of latitude per second
+  return ui.mps; // the grids are in metres
 }
 
 // Walking comes from ListenerKit (src/input/listener.js): keyboard and gamepad,
@@ -519,7 +511,7 @@ function offerPlace(pos, beacon, at, songOverride = null) {
   }
   let song = songOverride;
   try { if (!song && beacon?.id) song = engine.songFor(beacon); } catch { /* a beacon without a song yet */ }
-  travel.open(clientX, clientY, describePlace({ beacon, song, pos, kind: ui.mode, meters, seconds: travelSeconds(sp, engine.pos, pos, span) }),
+  travel.open(clientX, clientY, describePlace({ beacon, song, pos, kind: ui.mode, meters, seconds: travelSeconds(sp, engine.pos, pos, span, ui.mps) }),
     (kind) => goTo(kind, pos, span));
 }
 
@@ -531,7 +523,7 @@ function goTo(kind, pos, span) {
   input.space = spaces[ui.mode];
   input.setPosition(engine.pos, false);
   if (kind === "jump") input.jumpTo(pos);
-  else { input.travelTo(pos, travelSeconds(input.space, engine.pos, pos, span)); setMsg("fieldMsg", "Moving… tap the map to stop."); }
+  else { input.travelTo(pos, travelSeconds(input.space, engine.pos, pos, span, ui.mps)); setMsg("fieldMsg", "Moving… tap the map to stop."); }
   globe3d?.follow?.();
 }
 
@@ -642,7 +634,20 @@ $("vol").addEventListener("input", (e) => engine.setVolume(+e.target.value));
   });
 }
 $("wander").addEventListener("change", (e) => { input.wander = e.target.checked; });
-$("speed").addEventListener("input", (e) => { ui.speed = +e.target.value; });
+// Travel speed (src/speed.js): a log slider that snaps to the marks, named by range.
+function showSpeed() {
+  $("speed").value = Speed.toT(ui.mps);
+  $("speedV").textContent = `${Speed.bandOf(ui.mps)} · ${Speed.label(ui.mps)}`;
+  $("speed").title = Speed.describe(ui.mps);
+}
+$("speed").addEventListener("input", (e) => {
+  ui.mps = Speed.snappedSpeed(+e.target.value);
+  $("speedV").textContent = `${Speed.bandOf(ui.mps)} · ${Speed.label(ui.mps)}`;
+  $("speed").title = Speed.describe(ui.mps);
+  try { localStorage.setItem("beacon.speed", String(ui.mps)); } catch { /* not kept */ }
+});
+$("speed").addEventListener("change", showSpeed); // settle on the snapped mark
+showSpeed();
 $("zones").addEventListener("change", (e) => { ui.zones = e.target.checked; });
 
 const MODE_HINT = {

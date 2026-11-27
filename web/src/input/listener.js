@@ -82,8 +82,10 @@ function unit(p) {
  * the world (geo spaces, km), or 1.5 to 6 s across a floor `span` units wide.
  * Same as ListenerInput.travel_seconds in the Godot ListenerKit.
  */
-export function travelSeconds(space, a, b, span = 500) {
+export function travelSeconds(space, a, b, span = 500, mps = 0) {
   const d = space.distance(a, b);
+  // On a grid at a set travel speed, Move takes as long as that speed would (as the app).
+  if (space.kind !== "geo" && mps > 0) return Math.max(0.3, d / mps);
   if (space.kind === "geo") return 3 + 9 * Math.max(0, Math.min(1, (Math.log10(1 + d) - 1) / 3.3));
   return 1.5 + 4.5 * Math.max(0, Math.min(1, d / Math.max(1, span)));
 }

@@ -16,6 +16,8 @@
 // the camera back to you.
 
 import { drawLines } from "./walkui.js";
+import { shareGlow } from "./glow.js";
+import { drawPlane3D } from "./plane.js";
 
 const D2R = Math.PI / 180, R2D = 180 / Math.PI;
 const EARTH_KM = 6371.0088;
@@ -529,6 +531,7 @@ export class Globe3D {
       const fl = ui.flashes.get(b.id);
       const pulse = fl ? Math.max(0, 1 - (now - fl) / 300) : 0;
       const r = size * (1 + 0.6 * w + 0.5 * pulse);
+      if (v.z > 0) shareGlow(g, s[0], s[1], size * (14 + 30 * w), col, w, b.id === engine.harmony.id);
       this._glow(g, s[0], s[1], r, col, (0.35 + 0.65 * v.z) * (w > 0 ? 1 : 0.8));
       if (b.id === ui.selected) this._ring(g, s[0], s[1], r + 7 * d, "#fff", d);
       if (b.id === engine.harmony.id) this._ring(g, s[0], s[1], r + 4 * d, ui.colors.accent, d, 2);
@@ -580,6 +583,7 @@ export class Globe3D {
       const w = active.get(id) || 0;
       const special = e.kind !== "gen";
       const r = (special ? 4.2 : 3) * d * (1 + 0.5 * w);
+      if (w > 0) shareGlow(g, s[0], s[1], Math.max(r * 10, Math.min(((e.spacingM || 500) / 1000 / kmpp) * 6, this.W * 0.4)), this.h.moodColor(song.mood), w);
       if (special) {
         g.fillStyle = this.h.moodColor(song.mood);
         g.beginPath(); g.moveTo(s[0], s[1] - r * 1.3); g.lineTo(s[0] + r * 1.3, s[1]); g.lineTo(s[0], s[1] + r * 1.3); g.lineTo(s[0] - r * 1.3, s[1]); g.closePath(); g.fill();
@@ -638,17 +642,8 @@ export class Globe3D {
       // Following a flight: a plane along its track (screen-north is the view's north near the middle).
       const ahead = this.toScreen(destinationLite(this.h.engine.pos, fl.track, 0.05));
       const ang = ahead ? Math.atan2(ahead[0] - s[0], s[1] - ahead[1]) : (fl.track * Math.PI) / 180;
-      g.save();
-      g.translate(s[0], s[1]);
-      g.rotate(ang);
-      g.scale(d * 1.1, d * 1.1);
-      g.fillStyle = fl.tracked === false ? "#ff4d4d" : C.accent; g.strokeStyle = "#04070d"; g.lineWidth = 1.5; // red: out of sight, gliding on
-      g.beginPath();
-      g.moveTo(0, -22); g.lineTo(3, -12); g.lineTo(3, -4); g.lineTo(18, 4); g.lineTo(18, 8); g.lineTo(3, 4);
-      g.lineTo(2.5, 14); g.lineTo(8, 19); g.lineTo(8, 22); g.lineTo(0, 19); g.lineTo(-8, 22); g.lineTo(-8, 19);
-      g.lineTo(-2.5, 14); g.lineTo(-3, 4); g.lineTo(-18, 8); g.lineTo(-18, 4); g.lineTo(-3, -4); g.lineTo(-3, -12); g.closePath();
-      g.fill(); g.stroke();
-      g.restore();
+      // Amber while it's seen, red while it glides on out of sight (as the app's).
+      drawPlane3D(g, s[0], s[1], ang, d * 1.1, fl.tracked === false ? "#ff4d4d" : "#ffb547");
       this.h.label(`✈ ${fl.label || ""}${fl.tracked === false ? " · signal lost" : ""}`, s[0], s[1] + 34 * d, 11 * d, fl.tracked === false ? "#ff6b6b" : C.accent, "rgba(4,7,13,0.85)");
       return;
     }

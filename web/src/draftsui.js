@@ -10,6 +10,7 @@ import { SUPABASE_URL, SUPABASE_KEY } from "./config.js";
 import { Auth } from "./auth.js";
 import * as S from "./submit.js";
 import { tilesAround } from "./shared.js";
+import { shareGlow } from "./glow.js";
 
 const KIND_LABEL = { gen: "generated", edited: "edited", plant: "planted song", map: "map beacon" };
 /** How often the shared map checks the tiles around you, and how far you move before it checks sooner. */
@@ -705,6 +706,8 @@ export function initDrafts(ctx) {
       const special = e.kind !== "gen";
       const r = (special ? 4.5 : Math.max(1.8, Math.min(5, gap / 10))) * d * (1 + 0.35 * w);
       const song = e.song();
+      // Driving the music: a glow by its share, about two to six spacings across.
+      if (w > 0 && song) shareGlow(g, x, y, Math.max(r * 8, Math.min(gap * d * 6, W * 0.4)), ctx.moodColor(song.mood), w);
       g.fillStyle = song ? ctx.moodColor(song.mood) : C.muted;
       g.globalAlpha = w > 0 ? 1 : 0.8;
       g.beginPath();
