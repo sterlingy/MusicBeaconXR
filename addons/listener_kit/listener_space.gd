@@ -71,6 +71,35 @@ func toward(a: Vector2, b: Vector2) -> Dictionary:
 	return {"dir": f.normalized() if f.length() > 0.0 else Vector2.ZERO, "dist": f.length()}
 
 
+## The point a fraction `t` (0..1) of the way from `a` to `b`: a straight line
+## on a floor, the great circle on the globe (the way a plane flies).
+func interp(a: Vector2, b: Vector2, t: float) -> Vector2:
+	if kind == Kind.GEO:
+		var va := _unit(a)
+		var vb := _unit(b)
+		var ang := va.angle_to(vb)
+		if ang < 1e-6:
+			return b
+		var v := (va * sin((1.0 - t) * ang) + vb * sin(t * ang)) / sin(ang)
+		v = v.normalized()
+		return clamp_pos(Vector2(rad_to_deg(atan2(v.x, v.z)), rad_to_deg(asin(clampf(v.y, -1.0, 1.0)))))
+	return clamp_pos(a.lerp(b, t))
+
+
+## How far `a` is from `b`: kilometers along the great circle on the globe,
+## space units (meters) on a floor.
+func distance(a: Vector2, b: Vector2) -> float:
+	if kind == Kind.GEO:
+		return _unit(a).angle_to(_unit(b)) * 6371.0
+	return a.distance_to(b)
+
+
+static func _unit(p: Vector2) -> Vector3:
+	var lat := deg_to_rad(p.y)
+	var lon := deg_to_rad(p.x)
+	return Vector3(cos(lat) * sin(lon), sin(lat), cos(lat) * cos(lon))
+
+
 ## Wander heading after one step: turns back from the edges. Heading is radians in (right, forward).
 func bounce(p: Vector2, heading: float) -> float:
 	var dir := Vector2(cos(heading), sin(heading))

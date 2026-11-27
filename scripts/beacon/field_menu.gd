@@ -27,6 +27,7 @@ var _fields_btn: Button
 var _field_btns := {}
 var _row: HBoxContainer
 var _scroll: ScrollContainer
+var _follow: CheckButton
 var _sound_btns := {} # quality mode -> button
 var _sound_now: Label
 ## 1 on desktops, PHONE_SCALE on phones (dev: --ui-scale=N).
@@ -127,6 +128,12 @@ func _unhandled_key_input(event: InputEvent) -> void:
 				set_open(false)
 
 
+## Shows the follow switch as on or off without announcing it (the scene turned it off).
+func set_follow(on: bool) -> void:
+	if _follow:
+		_follow.set_pressed_no_signal(on)
+
+
 func set_status(text: String) -> void:
 	status.text = text
 	status.visible = text != ""
@@ -197,6 +204,7 @@ func _build_panel() -> void:
 	sizes.add_child(spacing)
 	v.add_child(sizes)
 	var follow := CheckButton.new()
+	_follow = follow
 	follow.text = "Follow my location"
 	follow.button_pressed = FieldPrefs.follow()
 	follow.focus_mode = Control.FOCUS_NONE

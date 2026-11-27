@@ -129,6 +129,50 @@ func _check_xr() -> void:
 	for i in 30:
 		li.tick(0.1)
 	check(li.position != before and absf(li.position.x) <= 250.0, "XR: wander moves the play space")
+	li.wander = false
+	# Explore: a trigger tap selects, a hold asks where to go; Move glides, Jump teleports.
+	var acts := []
+	li.action.connect(func(n, a): acts.append(n))
+	src._on_right("trigger_click")
+	src._on_right_up("trigger_click")
+	check(acts == ["select"] and li.target == null, "XR: a trigger tap selects without walking (%s)" % [acts])
+	acts.clear()
+	src._on_right("trigger_click")
+	src.hold_tick(0.3)
+	check(acts.is_empty(), "XR: not a hold yet")
+	src.hold_tick(0.3)
+	src._on_right_up("trigger_click")
+	check(acts == ["point"], "XR: holding the trigger asks where to go (%s)" % [acts])
+	origin.global_position = Vector3(0, 0, 0)
+	li.tick(0.01)
+	li.travel_to(Vector2(100, 0), 1.0)
+	li.tick(0.5)
+	check(li.position.x > 30.0 and li.position.x < 70.0, "XR: Move glides the play space (at %s)" % li.position)
+	li.tick(0.6)
+	check(near(li.position, Vector2(100, 0)) and not li.traveling(), "XR: Move arrives (at %s)" % li.position)
+	src.teleport(Vector2(-50, 20))
+	li.tick(0.01)
+	check(near(li.position, Vector2(-50, 20)), "XR: Jump puts you there at once (at %s)" % li.position)
+	var used := [false]
+	src.intercept = func(_o, _d): used[0] = true; return true
+	acts.clear()
+	src._on_right("trigger_click")
+	src._on_right_up("trigger_click")
+	check(used[0] and acts.is_empty(), "XR: a floating card gets the trigger first")
+	# The card: the ray finds its buttons.
+	var card := XRTravelCard.new()
+	add_child(card)
+	card.open(Vector3(0, 0, 0), Vector3(0, 0.35, 2.0), "Test", "here")
+	var face := card.global_transform * Vector3(0.11, -0.05, 0) # the Move button's centre
+	check(card.hit(face + Vector3(0, 0, 1), Vector3(0, 0, -1)) == "move", "XR card: the ray hits Move")
+	face = card.global_transform * Vector3(-0.11, -0.05, 0)
+	check(card.hit(face + Vector3(0, 0, 1), Vector3(0, 0, -1)) == "jump", "XR card: the ray hits Jump")
+	check(card.hit(Vector3(3, 0.35, 1), Vector3(0, 0, -1)) == "", "XR card: elsewhere misses")
+	var picked := [""]
+	card.chosen.connect(func(k): picked[0] = k)
+	card.click(face + Vector3(0, 0, 1), Vector3(0, 0, -1))
+	check(picked[0] == "jump" and not card.visible, "XR card: pulling the trigger on Jump chooses it")
+	card.queue_free()
 	li.queue_free()
 	origin.queue_free()
 

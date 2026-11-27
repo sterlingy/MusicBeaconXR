@@ -1,8 +1,9 @@
 extends "res://scripts/beacon/field_scene.gd"
 ## The beacon field in OpenXR (PC VR through SteamVR / Oculus / WMR, and Quest).
 ## You are the listener: walk the room, glide with the left stick, snap-turn with
-## the right, point the right trigger at the floor to walk there, grip to switch
-## between life size and a tabletop field. A / X play, B / Y auto-walk.
+## the right; tap the right trigger on a beacon, or hold it on any spot, and a
+## card offers to Jump or Move there (point at a button and pull the trigger);
+## grip switches between life size and a tabletop field. A / X play, B / Y auto-walk.
 ## On headsets with passthrough (Quest 3, Pro) the tabletop field floats in your
 ## room; the left menu button toggles passthrough.
 ##
@@ -17,6 +18,7 @@ var left_hand: XRController3D
 var right_hand: XRController3D
 var loco: XRLocomotionSource
 var panel: Label3D
+var card: XRTravelCard
 var passthrough := false
 var xr_active := false
 
@@ -65,6 +67,12 @@ func _start_xr(real := true) -> void:
 	if ptr:
 		ptr.enabled = false
 	left_hand.button_pressed.connect(_on_left_button)
+	card = XRTravelCard.new()
+	card.pointer = right_hand
+	add_child(card)
+	card.chosen.connect(func(k: String): _go(k, travel.pos))
+	card.closed.connect(func(): _marker.visible = false)
+	loco.intercept = func(o: Vector3, d: Vector3) -> bool: return card.click(o, d)
 
 	panel = Label3D.new()
 	panel.font_size = 32
@@ -122,6 +130,35 @@ func _on_left_button(a: String) -> void:
 			get_tree().change_scene_to_file("res://scenes/instrument_table.tscn")
 
 
+## In the headset the card floats over the spot instead of popping up on a screen.
+func _offer(pos: Vector2, snap: float, beacon_only: bool, screen := Vector2(-1, -1)) -> void:
+	if not xr_active:
+		super._offer(pos, snap, beacon_only, screen)
+		return
+	var d := TravelUi.describe(player, pos, maxf(snap, 0.6 * player.field.spacing) if beacon_only else snap)
+	if beacon_only and d.pos == pos:
+		return
+	travel.pos = d.pos # the chosen place, read back when a button is pulled
+	var at: Vector3 = loco.from_pos.call(d.pos)
+	_marker.position = at + Vector3(0, 0.02, 0)
+	_marker.visible = true
+	var secs := ListenerInput.travel_seconds(input.space, player.pos, d.pos, input.space.bounds.size.x)
+	card.world_scale = loco.world_scale()
+	card.open(at, xr_camera.global_position, d.title, "%s · Move takes %d s" % [d.detail, roundi(secs)])
+
+
+func _go(kind_: String, pos: Vector2) -> void:
+	if not xr_active:
+		super._go(kind_, pos)
+		return
+	_marker.visible = false
+	if kind_ == "jump":
+		input.stop_travel()
+		loco.teleport(pos)
+	else:
+		input.travel_to(pos, ListenerInput.travel_seconds(input.space, player.pos, pos, input.space.bounds.size.x))
+
+
 func _on_action(name: String, arg: Variant) -> void:
 	# In the headset the menu button is passthrough, not a jump to the flat globe.
 	if xr_active and name == "switch_scene":
@@ -173,7 +210,7 @@ func _process(delta: float) -> void:
 func help_text() -> String:
 	if not xr_active:
 		return "No headset: flat view. " + super.help_text()
-	return "XR: stick glide · trigger walk there · grip tabletop · A play · B auto-walk · left stick click: instruments%s" % (" (on)" if input.wander else "")
+	return "XR: stick glide · trigger a beacon, or hold it anywhere: Jump or Move · grip tabletop · A play · B auto-walk · left stick click: instruments%s" % (" (on)" if input.wander else "")
 
 
 func _update_panel() -> void:

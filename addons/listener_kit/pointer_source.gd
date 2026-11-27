@@ -3,6 +3,13 @@ extends ListenerSource
 ## Click or tap the world to walk there; drag to keep steering; pinch to zoom.
 ## Works with the mouse and with touch screens (phones, tablets).
 ##
+## mode "explore" instead leaves the listener alone: one finger (or the left
+## mouse button) dragging sends "orbit" (arg: the screen movement, Vector2) so
+## the host turns the globe or pans the map, and "orbit_end" (arg: the release
+## velocity in px/s, for a flick); a tap sends "select" (arg: position); a long
+## press or a right-click sends "point" (arg: {pos, screen}) so the host can
+## offer to Jump or Move there.
+##
 ## `pick` turns a camera ray into a listener position (or null for a miss). Use
 ## PointerSource.ground_picker() for a flat floor or sphere_picker() for a globe.
 
@@ -13,6 +20,10 @@ var pick: Callable
 var drag_px := 8.0
 ## Taps also send "select" (arg: position) so the host can snap to a beacon.
 var send_select := true
+## "walk" (press to walk, drag to steer) or "explore" (drag turns the view; see above).
+var mode := "walk"
+## Explore: holding still this long (seconds) is a long press.
+var long_press := 0.5
 
 var _down := false
 var _down_at := Vector2.ZERO
@@ -21,6 +32,12 @@ var _down_at := Vector2.ZERO
 var _touches := {}
 var _pinch_d := 0.0
 var _pinching := false # from the second finger down until every finger is up
+# Explore: the current press.
+var _down_t := 0.0 # seconds held
+var _moved := false # dragged past drag_px: an orbit, not a tap
+var _pointed := false # the long press already fired
+var _vel := Vector2.ZERO # px/s while dragging
+var _last_move_ms := 0
 
 
 func _init() -> void:
@@ -116,6 +133,9 @@ func _unhandled_input(event: InputEvent) -> void:
 	# Godot turns touches into mouse events by default; only read raw touches when that's off.
 	if (event is InputEventScreenTouch or event is InputEventScreenDrag) and ProjectSettings.get_setting("input_devices/pointing/emulate_mouse_from_touch", true):
 		return
+	if mode == "explore":
+		_explore_input(event, li)
+		return
 	var pressed_btn: bool = (event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT) or event is InputEventScreenTouch
 	if pressed_btn:
 		if event.pressed:
@@ -134,3 +154,59 @@ func _unhandled_input(event: InputEvent) -> void:
 		var p: Variant = _pick_at(event.position)
 		if p != null:
 			li.set_target(p)
+
+
+# ---------------------------------------------------------------- explore mode
+
+func _explore_input(event: InputEvent, li: ListenerInput) -> void:
+	# Right-click: the Jump / Move choice at once.
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
+		_point(event.position, li)
+		return
+	var pressed_btn: bool = (event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT) or event is InputEventScreenTouch
+	if pressed_btn:
+		if event.pressed:
+			_down = true
+			_down_at = event.position
+			_down_t = 0.0
+			_moved = false
+			_pointed = false
+			_vel = Vector2.ZERO
+			_last_move_ms = Time.get_ticks_msec()
+		elif _down:
+			_down = false
+			if _moved:
+				# A flick keeps turning; a drag that stopped before letting go doesn't.
+				var still := Time.get_ticks_msec() - _last_move_ms > 120
+				li.send_action("orbit_end", Vector2.ZERO if still else _vel)
+			elif not _pointed and send_select:
+				var p: Variant = _pick_at(event.position)
+				if p != null:
+					li.send_action("select", p)
+	elif _down and (event is InputEventMouseMotion or event is InputEventScreenDrag):
+		if not _moved and event.position.distance_to(_down_at) >= drag_px and not _pointed:
+			_moved = true
+		if _moved:
+			var rel: Vector2 = event.relative
+			var now := Time.get_ticks_msec()
+			var dt := maxf(0.008, (now - _last_move_ms) / 1000.0)
+			_vel = _vel.lerp(rel / dt, 0.5)
+			_last_move_ms = now
+			li.send_action("orbit", rel)
+
+
+func _point(screen: Vector2, li: ListenerInput) -> void:
+	var p: Variant = _pick_at(screen)
+	if p != null:
+		li.send_action("point", {"pos": p, "screen": screen})
+
+
+func _process(delta: float) -> void:
+	if mode != "explore" or not _down or _moved or _pointed or _pinching:
+		return
+	_down_t += delta
+	if _down_t >= long_press:
+		_pointed = true
+		var li := listener()
+		if li and enabled:
+			_point(_down_at, li)

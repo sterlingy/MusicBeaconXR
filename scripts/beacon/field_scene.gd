@@ -88,6 +88,24 @@ func _make_local(lat: float, lon: float) -> BeaconField:
 ## Walking comes from ListenerKit (keyboard / gamepad, click or tap, wander); this
 ## scene only listens for the position and the commands. Positions are meters.
 func _build_input() -> void:
+	travel = TravelUi.new()
+	add_child(travel)
+	travel.chosen.connect(_go)
+	travel.closed.connect(func(): _marker.visible = false)
+	travel.back_pressed.connect(func(): _free = false)
+	_marker = MeshInstance3D.new()
+	var ring := TorusMesh.new()
+	ring.inner_radius = 7.0
+	ring.outer_radius = 10.0
+	_marker.mesh = ring
+	var rm := StandardMaterial3D.new()
+	rm.albedo_color = FieldMenu.ACCENT
+	rm.emission_enabled = true
+	rm.emission = FieldMenu.ACCENT
+	rm.emission_energy_multiplier = 2.0
+	_marker.material_override = rm
+	_marker.visible = false
+	add_child(_marker)
 	input = ListenerInput.new()
 	input.name = "ListenerInput"
 	_set_space()
@@ -98,9 +116,11 @@ func _build_input() -> void:
 	ptr.pick = func(origin: Vector3, dir: Vector3) -> Variant:
 		var hit = ground_pick.call(origin, dir)
 		return null if hit == null else hit / view_scale
+	ptr.mode = "explore" # one finger pans the map; tap a beacon or long-press to go somewhere
 	input.add_child(ptr)
 	add_child(input)
 	input.moved.connect(player.set_position)
+	input.moved.connect(func(_p): _free = false) # walking, travel and following bring the view back to you
 	input.action.connect(_on_action)
 
 
@@ -119,10 +139,16 @@ func _on_action(name: String, arg: Variant) -> void:
 		"zoom":
 			zoom = clampf(zoom * float(arg), 0.35, 2.0)
 		"select":
-			# A tap near a beacon walks onto it, like the browser playfield.
-			var near: Array = player.field.nearest(arg, 1)
-			if not near.is_empty() and near[0].d < 14.0 / view_scale:
-				input.set_target(near[0].beacon.pos)
+			if input.traveling():
+				input.stop_travel() # a tap while moving stops there
+			else:
+				_offer(arg, _tap_m(), true) # a tap on a beacon offers to go there
+		"point":
+			_offer(arg.pos, _tap_m() * 0.6, false, arg.screen)
+		"orbit":
+			_pan(arg)
+		"orbit_end":
+			_glide = -arg * _m_per_px()
 
 
 # ---------------------------------------------------------------- local grid
@@ -191,7 +217,8 @@ func _recenter(at: Dictionary, message := "") -> void:
 func _update_window() -> void:
 	var f := player.field
 	var half := f.steps / 2.0
-	var cell := Vector2i(clampi(roundi(half + player.pos.x / f.spacing), 0, f.n - 1), clampi(roundi(half + player.pos.y / f.spacing), 0, f.n - 1))
+	var at := _view if _free else player.pos # around what you're looking at
+	var cell := Vector2i(clampi(roundi(half + at.x / f.spacing), 0, f.n - 1), clampi(roundi(half + at.y / f.spacing), 0, f.n - 1))
 	if cell == _window_at:
 		return
 	_window_at = cell
@@ -379,8 +406,74 @@ func _view_pos() -> Vector2:
 	return player.pos * view_scale
 
 
+## What the camera looks at: the listener, or the spot the map was panned to.
+func _cam_pos() -> Vector2:
+	return (_view if _free else player.pos) * view_scale
+
+
+# ---------------------------------------------------------------- panning, Jump and Move
+
+var travel: TravelUi
+var _marker: MeshInstance3D
+var _free := false # the map was panned away from the listener
+var _view := Vector2.ZERO # what the camera looks at while free (field units)
+var _glide := Vector2.ZERO # a flick's panning speed, field units per second
+
+
+## Field units (meters) under one screen pixel at this zoom.
+func _m_per_px() -> float:
+	var h := maxf(1.0, get_viewport().get_visible_rect().size.y)
+	var dist := Vector3(0, 230, 210).length() * zoom
+	return dist * 2.0 * tan(deg_to_rad(camera.fov * 0.5)) / h / view_scale
+
+
+## How close a tap must be to a beacon to mean it: about 30 px.
+func _tap_m() -> float:
+	return _m_per_px() * 30.0 * (FieldMenu.PHONE_SCALE if BuildInfo.is_phone() else 1.0) * 0.6
+
+
+## One finger dragging moves the map under it.
+func _pan(rel: Vector2) -> void:
+	if not _free:
+		_free = true
+		_view = player.pos
+	_glide = Vector2.ZERO
+	_view = input.space.clamp_pos(_view - rel * _m_per_px())
+
+
+func _offer(pos: Vector2, snap: float, beacon_only: bool, screen := Vector2(-1, -1)) -> void:
+	var d := TravelUi.describe(player, pos, snap)
+	if beacon_only and d.pos == pos:
+		return
+	var world := Vector3(d.pos.x * view_scale, 1.0, d.pos.y * view_scale)
+	if screen.x < 0.0:
+		screen = camera.unproject_position(world)
+	_marker.position = world
+	_marker.visible = true
+	var secs := ListenerInput.travel_seconds(input.space, player.pos, d.pos, input.space.bounds.size.x)
+	travel.open(screen, d.pos, d.title, "%s · Move takes %d s" % [d.detail, roundi(secs)])
+
+
+func _go(kind_: String, pos: Vector2) -> void:
+	_marker.visible = false
+	_free = false
+	if geo and FieldPrefs.follow():
+		FieldPrefs.set_value("follow", false)
+		menu.set_follow(false)
+		geo.stop()
+		menu.set_status("Went somewhere else, so the grid stopped following your location.")
+	if kind_ == "jump":
+		input.jump_to(pos)
+	else:
+		input.travel_to(pos, ListenerInput.travel_seconds(input.space, player.pos, pos, input.space.bounds.size.x))
+
+
 func _update_camera(delta: float) -> void:
-	var p := _view_pos()
+	if _free and _glide != Vector2.ZERO:
+		_view = input.space.clamp_pos(_view + _glide * delta)
+		_glide *= exp(-3.0 * delta)
+	travel.set_back_visible(_free)
+	var p := _cam_pos()
 	# Look a little left of the listener so the HUD panel doesn't cover the beacons around them.
 	var cam_target := Vector3(p.x - 40.0 * zoom, 0, p.y)
 	camera.position = camera.position.lerp(cam_target + Vector3(0, 230, 210) * zoom, minf(1.0, delta * 4.0)) if camera.position != Vector3.ZERO else cam_target + Vector3(0, 230, 210) * zoom
@@ -392,8 +485,9 @@ func _update_world(delta: float) -> void:
 	var p := _view_pos()
 	listener.position = Vector3(p.x, 6.0 + sin(Time.get_ticks_msec() / 300.0) * 0.6, p.y)
 	if kind == "local":
-		# The floor and its lines move with the listener (snapped to a spacing).
-		var snap := Vector3(snappedf(p.x, 100.0), 0, snappedf(p.y, 100.0))
+		# The floor and its lines move with the view (snapped to a spacing).
+		var cp := _cam_pos()
+		var snap := Vector3(snappedf(cp.x, 100.0), 0, snappedf(cp.y, 100.0))
 		ground.position = snap
 		grid_lines.position = snap
 	_draw_lines()
@@ -403,7 +497,7 @@ func _update_world(delta: float) -> void:
 
 
 func help_text() -> String:
-	return "WASD walk · click to go · T auto-walk%s · wheel zoom · F fields · I instruments · M click" % (" (on)" if input.wander else "")
+	return "WASD walk · drag to pan · tap a beacon or long-press to go · T auto-walk%s · wheel zoom · F fields · I instruments · M click" % (" (on)" if input.wander else "")
 
 
 func _check_shot() -> void:
@@ -477,6 +571,13 @@ func _parse_args() -> void:
 			input.wander = true
 		elif a == "--menu":
 			menu.set_open(true)
+		elif a.begins_with("--card="): # dev: the Jump / Move card for x,y (field units)
+			var cl := a.trim_prefix("--card=").split(",")
+			var at := Vector2(float(cl[0]), float(cl[1]))
+			get_tree().create_timer(0.5).timeout.connect(func(): _offer(at, _tap_m() * 0.6, false))
+		elif a.begins_with("--pan="): # dev: pan the view by dx,dy pixels
+			var pl := a.trim_prefix("--pan=").split(",")
+			get_tree().create_timer(0.3).timeout.connect(func(): _pan(Vector2(float(pl[0]), float(pl[1]))))
 
 
 # ---------------------------------------------------------------- walks: trail

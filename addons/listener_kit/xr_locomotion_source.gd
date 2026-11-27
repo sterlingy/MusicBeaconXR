@@ -5,7 +5,9 @@ extends ListenerSource
 ## The head's floor position (mapped by `to_pos`) is the listener position, so
 ## walking around the room moves you through the field. On top of that:
 ##   left stick       glide (head-relative)            right stick x   snap turn
-##   right trigger    point at the floor to walk there (sends "select" too)
+##   right trigger    tap: "select" where it points; hold (long_press s): "point"
+##                    ({pos, world}) so the host can offer to Jump or Move there
+##                    (in "walk" mode a tap walks there instead)
 ##   right grip       toggle tabletop scale (see `scales`)
 ##   A / X            toggle_play       B / Y   toggle_wander     menu   switch_scene
 ## Walk targets and wander from the ListenerInput move the play space, so they
@@ -34,6 +36,15 @@ var from_pos := func(p: Vector2) -> Vector3: return Vector3(p.x, 0.0, p.y)
 var require_interface := true
 ## Optional laser line from the right controller (a MeshInstance3D is made if null).
 var show_ray := true
+## "explore" (tap selects, hold asks where to go) or "walk" (tap walks there).
+var mode := "explore"
+var long_press := 0.5
+## func(origin: Vector3, dir: Vector3) -> bool: gets trigger presses first (a
+## floating card's buttons); true means it used the press.
+var intercept := Callable()
+
+var _trigger_t := -1.0 # seconds the trigger has been held, -1 = up
+var _trigger_hit: Variant = null
 
 var _scale_i := 0
 var _snapped := false
@@ -48,6 +59,7 @@ func _init() -> void:
 func _ready() -> void:
 	if right:
 		right.button_pressed.connect(_on_right)
+		right.button_released.connect(_on_right_up)
 		if show_ray:
 			_ray = MeshInstance3D.new()
 			_ray.name = "Ray"
@@ -96,17 +108,52 @@ func _on_right(action: String) -> void:
 		return
 	match action:
 		"trigger_click":
+			if intercept.is_valid() and intercept.call(right.global_position, -right.global_transform.basis.z.normalized()):
+				return
 			var hit: Variant = floor_hit()
-			if hit != null:
+			if hit == null:
+				return
+			if mode == "walk":
 				var p: Vector2 = to_pos.call(hit)
 				li.set_target(p)
 				li.send_action("select", p)
+			else:
+				_trigger_t = 0.0
+				_trigger_hit = hit
 		"grip_click":
 			set_scale_index(_scale_i + 1)
 		"ax_button":
 			li.send_action("toggle_play")
 		"by_button":
 			li.send_action("toggle_wander")
+
+
+## Trigger let go before the long press: a tap.
+func _on_right_up(action: String) -> void:
+	if action != "trigger_click" or _trigger_t < 0.0:
+		return
+	_trigger_t = -1.0
+	var li := listener()
+	if li and enabled and _trigger_hit != null:
+		li.send_action("select", to_pos.call(_trigger_hit))
+
+
+## Counts a held trigger; fires "point" once it's a long press.
+func hold_tick(delta: float) -> void:
+	if _trigger_t < 0.0:
+		return
+	_trigger_t += delta
+	if _trigger_t >= long_press:
+		_trigger_t = -1.0
+		var li := listener()
+		if li and enabled and _trigger_hit != null:
+			li.send_action("point", {"pos": to_pos.call(_trigger_hit), "world": _trigger_hit})
+
+
+## Puts the head at listener position `p` at once (Jump).
+func teleport(p: Vector2) -> void:
+	if origin:
+		_place_head_at(from_pos.call(p))
 
 
 func _on_left(action: String) -> void:
@@ -144,10 +191,14 @@ func driven_position(li: ListenerInput, delta: float) -> Variant:
 	fwd.y = 0.0
 	fwd = fwd.normalized() if fwd.length() > 1e-3 else Vector3.FORWARD
 	var rgt := fwd.cross(Vector3.UP)
+	hold_tick(delta)
 	var stick := left.get_vector2("primary") if left else Vector2.ZERO
 	if stick.length() > 0.15:
 		li.target = null
+		li.stop_travel()
 		origin.global_position += (rgt * stick.x + fwd * stick.y) * speed * minf(1.0, stick.length())
+	elif li.traveling():
+		_place_head_at(from_pos.call(li.travel_step(delta))) # Move: glide the play space along
 	elif li.target != null:
 		var goal: Vector3 = from_pos.call(li.target)
 		var h := _head_floor()

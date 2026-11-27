@@ -70,6 +70,24 @@ func _ready() -> void:
 
 ## Walking comes from ListenerKit: keyboard / gamepad, click or tap the globe, wander.
 func _build_input() -> void:
+	travel = TravelUi.new()
+	add_child(travel)
+	travel.chosen.connect(_go)
+	travel.closed.connect(func(): _marker.visible = false)
+	travel.back_pressed.connect(func(): _free = false)
+	_marker = MeshInstance3D.new()
+	var pin := SphereMesh.new()
+	pin.radius = 1.0
+	pin.height = 2.0
+	_marker.mesh = pin
+	var pm := StandardMaterial3D.new()
+	pm.albedo_color = FieldMenu.ACCENT
+	pm.emission_enabled = true
+	pm.emission = FieldMenu.ACCENT
+	pm.emission_energy_multiplier = 2.0
+	_marker.material_override = pm
+	_marker.visible = false
+	add_child(_marker)
 	input = ListenerInput.new()
 	input.name = "ListenerInput"
 	input.space = ListenerSpace.geo(WALK_DEG)
@@ -78,9 +96,11 @@ func _build_input() -> void:
 	ptr.camera = camera
 	ptr.pick = PointerSource.sphere_picker(R, PointerSource.unit_to_lonlat)
 	ptr.send_select = true # a tap places a map beacon while placing (MyBeacons)
+	ptr.mode = "explore" # one finger turns the globe; tap a beacon or long-press to go somewhere
 	input.add_child(ptr)
 	add_child(input)
 	input.moved.connect(player.set_position)
+	input.moved.connect(func(_p): _free = false) # walking, travel and following bring the view back to you
 	input.action.connect(_on_action)
 
 
@@ -93,7 +113,17 @@ func _on_action(name: String, arg: Variant) -> void:
 		"zoom":
 			altitude = clampf(altitude * float(arg), MIN_ALT, 900.0)
 		"select":
-			mine.place_at(arg.x, arg.y)
+			if input.traveling():
+				input.stop_travel() # a tap while moving stops there
+				_status = "Stopped here."
+			elif not mine.place_at(arg.x, arg.y):
+				_offer(arg, _tap_km(), true)
+		"point":
+			_offer(arg.pos, _tap_km() * 0.5, false, arg.screen)
+		"orbit":
+			_turn(arg)
+		"orbit_end":
+			_spin = Vector2(-arg.x, arg.y) * _deg_per_px()
 		"jump":
 			var c: Array = CITIES[int(arg)]
 			input.jump_to(Vector2(c[2], c[1]))
@@ -265,7 +295,15 @@ func _process(delta: float) -> void:
 	input.space.walk_speed = WALK_DEG * maxf(0.002, k)
 	_draw_user_beacons()
 	_draw_trail()
-	# Camera: above and a little south of the listener, north at the top of the screen.
+	# Camera: above and a little south of the listener (or of the spot the globe
+	# was turned to), north at the top of the screen.
+	if _free:
+		_view += Vector2(_spin.x / maxf(0.2, cos(deg_to_rad(_view.y))), _spin.y) * delta
+		_view.y = clampf(_view.y, -85.0, 85.0)
+		_view.x = wrapf(_view.x, -180.0, 180.0)
+		_spin *= exp(-2.5 * delta)
+		up = to_world(_view.y, _view.x, 1.0)
+	travel.set_back_visible(_free)
 	var east := Vector3.UP.cross(up)
 	if east.length() < 1e-3:
 		east = _cam_basis.x if _cam_basis.x != Vector3.ZERO else Vector3.RIGHT
@@ -277,7 +315,7 @@ func _process(delta: float) -> void:
 	camera.look_at(up * R + north * altitude * 0.1, north)
 	_update_active()
 	_draw_arcs()
-	hud.help_text = "WASD walk · click to go · 1-9 cities · T auto-walk%s · wheel zoom · G grid%s" % [" (on)" if input.wander else "", ("  ·  " + _status) if _status != "" else ""]
+	hud.help_text = "WASD walk · drag to turn · long-press or right-click to go · 1-9 cities · T auto-walk%s · wheel zoom · G grid%s" % [" (on)" if input.wander else "", ("  ·  " + _status) if _status != "" else ""]
 	if _shot != "":
 		_frames -= 1
 		if _frames <= 0:
@@ -353,10 +391,81 @@ func _parse_args() -> void:
 			_follow_flight_dev(a.trim_prefix("--flight="))
 		elif a == "--drafts-demo":
 			_drafts_demo()
+		elif a.begins_with("--card="): # dev: the Jump / Move card for lat,lon (after a frame, once the camera is placed)
+			var cl := a.trim_prefix("--card=").split(",")
+			var at := Vector2(float(cl[1]), float(cl[0]))
+			get_tree().create_timer(0.5).timeout.connect(func(): _offer(at, _tap_km() * 0.5, false))
+		elif a.begins_with("--turn="): # dev: turn the view by dx,dy pixels
+			var tl := a.trim_prefix("--turn=").split(",")
+			get_tree().create_timer(0.3).timeout.connect(func(): _turn(Vector2(float(tl[0]), float(tl[1]))))
 		elif a == "--play":
 			Transport.metronome_on = false
 			Transport.count_in_bars = 0
 			Transport.start()
+
+
+# ---------------------------------------------------------------- turning the globe, Jump and Move
+
+var travel: TravelUi
+var _marker: MeshInstance3D
+var _free := false # the view was turned away from the listener
+var _view := Vector2(-0.128, 51.507) # what the camera looks at while free (lon, lat)
+var _spin := Vector2.ZERO # a flick's turning speed, (lon, lat) degrees per second
+
+
+## Degrees of the globe under one screen pixel at this zoom.
+func _deg_per_px() -> float:
+	var h := maxf(1.0, get_viewport().get_visible_rect().size.y)
+	return rad_to_deg(altitude * 2.0 * tan(deg_to_rad(camera.fov * 0.5)) / R) / h
+
+
+## How close (km) a tap must be to a beacon to mean it: about 40 px.
+func _tap_km() -> float:
+	return deg_to_rad(_deg_per_px() * 40.0 * (FieldMenu.PHONE_SCALE if BuildInfo.is_phone() else 1.0) * 0.5) * BeaconField.EARTH_RADIUS_KM
+
+
+## One finger dragging turns the globe under it.
+func _turn(rel: Vector2) -> void:
+	if not _free:
+		_free = true
+		_view = player.pos
+	_spin = Vector2.ZERO
+	var k := _deg_per_px()
+	_view.y = clampf(_view.y + rel.y * k, -85.0, 85.0)
+	_view.x = wrapf(_view.x - rel.x * k / maxf(0.2, cos(deg_to_rad(_view.y))), -180.0, 180.0)
+
+
+## The card for a place (a tapped beacon only opens it when the tap was on one).
+func _offer(pos: Vector2, snap_km: float, beacon_only: bool, screen := Vector2(-1, -1)) -> void:
+	var d := TravelUi.describe(player, pos, snap_km)
+	if beacon_only and d.pos == pos:
+		return
+	var world := to_world(d.pos.y, d.pos.x, R + 0.6 * _k())
+	if screen.x < 0.0:
+		screen = camera.unproject_position(world)
+	_marker.position = world
+	_marker.scale = Vector3.ONE * 1.6 * _k()
+	_marker.visible = true
+	var secs := ListenerInput.travel_seconds(input.space, player.pos, d.pos)
+	travel.open(screen, d.pos, d.title, "%s · Move takes %d s" % [d.detail, roundi(secs)])
+
+
+func _go(kind: String, pos: Vector2) -> void:
+	_marker.visible = false
+	_stop_following("Went somewhere else, so the globe stopped following your location.")
+	_free = false
+	if kind == "jump":
+		input.jump_to(pos)
+	else:
+		input.travel_to(pos, ListenerInput.travel_seconds(input.space, player.pos, pos))
+		_status = "Moving… tap to stop"
+
+
+func _stop_following(why: String) -> void:
+	if FieldPrefs.follow():
+		FieldPrefs.set_value("follow", false)
+		menu.set_follow(false)
+		menu.set_status(why)
 
 
 # ---------------------------------------------------------------- following the device's location
