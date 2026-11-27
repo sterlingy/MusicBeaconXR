@@ -197,6 +197,13 @@ export function flightSummary(f, d = {}, now = Date.now() / 1000) {
     const total = kmBetween(o.latitude, o.longitude, de.latitude, de.longitude);
     const done = kmBetween(o.latitude, o.longitude, f.lat, f.lon), left = kmBetween(f.lat, f.lon, de.latitude, de.longitude);
     out.plausible = done + left < total * 1.25 + 150;
+    // Near one end the distances fit either way: a plane heading well away
+    // from the destination is on some other flight (arriving, not leaving).
+    if (out.plausible && left > 300 && (f.gs_kt || 0) > 100) {
+      const D = Math.PI / 180, p1 = f.lat * D, p2 = de.latitude * D, dl = (de.longitude - f.lon) * D;
+      const brg = (Math.atan2(Math.sin(dl) * Math.cos(p2), Math.cos(p1) * Math.sin(p2) - Math.sin(p1) * Math.cos(p2) * Math.cos(dl)) / D + 360) % 360;
+      out.plausible = Math.abs(((brg - (f.track || 0) + 540) % 360) - 180) < 100;
+    }
     Object.assign(out, { oCode: o.iata_code || o.icao_code, dCode: de.iata_code || de.icao_code, oCity: o.municipality || o.name, dCity: de.municipality || de.name });
     if (!out.plausible) { out.code = call; out.airline = ""; } // that schedule is some other flight with this number
     else if (done + left > 0) {

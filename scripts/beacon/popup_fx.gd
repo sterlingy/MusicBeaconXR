@@ -96,12 +96,20 @@ static func alpha_of(panel: Control) -> float:
 	return clampf(float(panel.get_meta("fx", 1.0)), 0.0, 1.0)
 
 
-## Applies the animation to a panel already scaled to `s` around `pivot` (its own corner).
-static func apply(panel: Control, s: float, pivot: Vector2) -> void:
+## Places and animates a window. `s` is its scale when open and `top_left`
+## where its top-left corner goes then (screen); the pop animation scales it
+## around `pivot` (its own corner, in its own unscaled size) inside that spot.
+## Without `top_left` (anchored panels) it scales around the pivot where it is.
+static func apply(panel: Control, s: float, pivot: Vector2, top_left := Vector2(INF, INF)) -> void:
+	var f := scale_of(panel)
+	var k := s * f
 	panel.pivot_offset = pivot
-	var k := s * scale_of(panel)
 	panel.scale = Vector2(k, k)
 	panel.modulate.a = alpha_of(panel)
+	if top_left.x != INF:
+		# Visual top-left = position + pivot * (1 - scale); keep the open rect at
+		# top_left and shrink it toward pivot (in screen space) while animating.
+		panel.position = top_left + pivot * s * (1.0 - f) - pivot * (1.0 - k)
 
 
 ## Frosted glass: the panel's own background shows the world behind it,

@@ -39,6 +39,11 @@ func _init() -> void:
 	var s2 := FlightFollow.summary(f, d, 1_800_000_000.0)
 	check(s2.lines[0].ends_with("(route unconfirmed)") and not s2.has("progress"), "a route the plane isn't flying is unconfirmed")
 	check(s2.airline == "" and s2.code == "KAL251", "and its airline isn't named (%s, %s)" % [s2.airline, s2.code])
+	f.lat = 33.0
+	f.lon = -78.0
+	f.track = 210.0 # flying away from New York
+	check(not FlightFollow.summary(f, d, 1_800_000_000.0).get("plausible", true), "heading away from the destination: unconfirmed")
+	f.track = 30.0
 	check(FlightFollow.summary({"flight": "ABC1", "lat": 0, "lon": 0, "alt_ft": 0, "gs_kt": 0, "track": 0}, {}, 0.0).lines[0] == "Route not known for ABC1", "no route known")
 	# Random flights: cruising only; daytime hubs first.
 	check(FlightFollow.is_cruising({"lat": 1, "alt_baro": 35000, "gs": 450, "flight": "DAL1 ", "seen_pos": 2}), "a cruising airliner counts")

@@ -308,6 +308,14 @@ static func km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
 	return 2.0 * 6371.0 * asin(minf(1.0, sqrt(h)))
 
 
+## Initial great-circle bearing (degrees from north) from one point to another.
+static func bearing(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+	var p1 := deg_to_rad(lat1)
+	var p2 := deg_to_rad(lat2)
+	var dl := deg_to_rad(lon2 - lon1)
+	return fposmod(rad_to_deg(atan2(sin(dl) * cos(p2), cos(p1) * sin(p2) - sin(p1) * cos(p2) * cos(dl))), 360.0)
+
+
 const COMPASS := ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"]
 
 
@@ -340,6 +348,11 @@ static func summary(f: Dictionary, d: Dictionary, now: float, tz_offset_s := 0.0
 		var left := km(float(f.lat), float(f.lon), float(de.latitude), float(de.longitude))
 		# A route from schedules that the plane isn't actually flying (a reused callsign).
 		var plausible := done + left < total * 1.25 + 150.0
+		# Near one end the distances fit either way: a plane heading well away
+		# from the destination is on some other flight (arriving, not leaving).
+		if plausible and left > 300.0 and float(f.get("gs_kt", 0.0)) > 100.0:
+			var off := absf(fposmod(bearing(float(f.lat), float(f.lon), float(de.latitude), float(de.longitude)) - float(f.get("track", 0.0)) + 180.0, 360.0) - 180.0)
+			plausible = off < 100.0
 		var oname := _s(o, "municipality") if _s(o, "municipality") != "" else _s(o, "name")
 		var dname := _s(de, "municipality") if _s(de, "municipality") != "" else _s(de, "name")
 		out["from"] = "%s (%s)" % [oname, _s(o, "iata_code") if _s(o, "iata_code") != "" else _s(o, "icao_code")]

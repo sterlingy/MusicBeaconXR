@@ -185,12 +185,12 @@ func _process(_delta: float) -> void:
 		_card.reset_size()
 		# Beside the finger (above it, so the finger doesn't hide it), kept on screen.
 		var s := minf(ui_scale, (view.x - 24.0) / maxf(1.0, _card.size.x))
-		PopupFx.apply(_card, s, Vector2(_card.size.x * 0.5, _card.size.y)) # pops up out of the finger
 		var sz := _card.size * s
 		var p := _at + Vector2(-sz.x * 0.5, -sz.y - 28.0 * s)
 		if p.y < 12.0:
 			p.y = _at.y + 28.0 * s # no room above: below the finger
-		_card.position = Vector2(clampf(p.x, 12.0, view.x - 12.0 - sz.x), clampf(p.y, 12.0, view.y - 12.0 - sz.y))
+		var top_left := Vector2(clampf(p.x, 12.0, view.x - 12.0 - sz.x), clampf(p.y, 12.0, view.y - 12.0 - sz.y))
+		PopupFx.apply(_card, s, Vector2(_card.size.x * 0.5, _card.size.y), top_left) # pops up out of the finger
 	if _back.visible:
 		# Bottom middle, between My beacons (left) and Walks (right).
 		var bs := minf(ui_scale, (view.x * 0.3) / maxf(1.0, _back.size.x))

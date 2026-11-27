@@ -77,6 +77,11 @@ test("a schedule route the plane isn't flying is unconfirmed, and its airline is
   assert.equal(s.progress, undefined);
 });
 
+test("a plane flying away from the listed destination: route unconfirmed", () => {
+  assert.equal(flightSummary({ ...KAL, track: 210 }, KAL_D, 1.8e9).plausible, false);
+  assert.equal(flightSummary(KAL, KAL_D, 1.8e9).plausible, true);
+});
+
 test("a random flight: quiet hubs retry, then a plane", async () => {
   const answers = [{ found: false, retry: true }, { found: false, retry: true }, { found: true, hex: "abc123", flight: "DAL1" }];
   const f = await randomFlight(async () => answers.shift(), { wait: async () => {} });

@@ -45,7 +45,8 @@ func _init(p_flight: FlightFollow) -> void:
 
 
 func _ready() -> void:
-	ui_scale = FieldMenu.PHONE_SCALE if BuildInfo.is_phone() else 1.0
+	# Phones: a little smaller than the menus, so the whole card fits with the globe around it.
+	ui_scale = FieldMenu.PHONE_SCALE * 0.68 if BuildInfo.is_phone() else 1.0
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--ui-scale="):
 			ui_scale = float(a.trim_prefix("--ui-scale="))
@@ -314,8 +315,7 @@ func _process(delta: float) -> void:
 		_show()
 	var view := get_viewport().get_visible_rect().size
 	var s := minf(ui_scale, minf((view.x - 24.0) / maxf(1.0, _card.size.x), (view.y - 24.0) / maxf(1.0, _card.size.y)))
-	PopupFx.apply(_card, s, _card.size * 0.5) # pops open from its middle
-	_card.position = (view - _card.size * s) * 0.5
+	PopupFx.apply(_card, s, _card.size * 0.5, (view - _card.size * s) * 0.5) # centred; pops open from its middle
 
 
 func _unhandled_key_input(event: InputEvent) -> void:

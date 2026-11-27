@@ -46,5 +46,17 @@ func _ready() -> void:
 	check(not g.travel.is_open() and PopupFx.is_open(fields), "Fields closes the card")
 	check(PopupFx._player != null and is_instance_valid(PopupFx._player) and PopupFx._streams.get(PopupFx.CLOSE_SFX) != null and PopupFx._streams.get(PopupFx.OPEN_SFX) != null, "the swooshes are loaded")
 	check(fields.material is ShaderMaterial, "panels are frosted glass")
+	# Placement once open: each window entirely on screen, in its own corner.
+	var view := get_viewport().get_visible_rect().size
+	for w in [["Walks", g.walks, walks, "br"], ["My beacons", g.mine, mine, "bl"]]:
+		w[1].set_open(true)
+		await wait(0.45)
+		var r: Rect2 = w[2].get_global_rect()
+		var vis := Rect2(w[2].get_global_transform_with_canvas().origin, w[2].size * w[2].scale)
+		check(vis.position.x >= 0.0 and vis.position.y >= 0.0 and vis.end.x <= view.x + 1.0 and vis.end.y <= view.y + 1.0, "%s is fully on screen (%s in %s)" % [w[0], vis, view])
+		if w[3] == "br":
+			check(vis.end.x > view.x * 0.8 and vis.end.y > view.y * 0.6, "%s sits bottom right (%s)" % [w[0], vis])
+		else:
+			check(vis.position.x < view.x * 0.2 and vis.end.y > view.y * 0.6, "%s sits bottom left (%s)" % [w[0], vis])
 	print("popup_check: %s (%d failure(s))" % ["OK" if failures == 0 else "FAILED", failures])
 	get_tree().quit(0 if failures == 0 else 1)

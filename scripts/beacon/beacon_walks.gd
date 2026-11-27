@@ -462,8 +462,8 @@ func _fit() -> void:
 	var s := minf(ui_scale, (view.x - 24.0) / maxf(1.0, _panel.size.x))
 	FieldMenu.fit_scroll(_scroll, room / s - 26.0)
 	_panel.reset_size()
-	PopupFx.apply(_panel, s, _panel.size) # pops open from its bottom-right corner, above the button
-	_panel.position = Vector2(view.x - 12.0 - _panel.size.x * s, _toggle.position.y - 8.0 - _panel.size.y * s)
+	# Bottom right, just above the button; it pops open from its bottom-right corner.
+	PopupFx.apply(_panel, s, _panel.size, Vector2(view.x - 12.0 - _panel.size.x * s, _toggle.position.y - 8.0 - _panel.size.y * s))
 
 
 func set_open(open: bool, sound := true) -> void:
