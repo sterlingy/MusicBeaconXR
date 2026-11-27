@@ -63,7 +63,9 @@ func start(q: String) -> String:
 	var f := await lookup(q)
 	if not f.get("found", false):
 		return String(f.get("reason", "That flight wasn't found."))
-	query = q
+	# From here on, ask for this aircraft only (its transponder code): a flight
+	# number can match another plane, and a failed update must never switch planes.
+	query = ("hex:" + String(f.hex)) if String(f.get("hex", "")) != "" else q
 	fix = f
 	prev = {}
 	lost = ""
@@ -104,13 +106,31 @@ func _poll() -> void:
 	_polling = false
 	if fix.is_empty():
 		return
-	if f.get("found", false):
+	if f.get("found", false) and (String(fix.get("hex", "")) == "" or String(f.get("hex", "")).to_lower() == String(fix.hex).to_lower()):
 		prev = fix
 		fix = f
 		_ease_from = now_s()
 		lost = ""
+	elif f.get("found", false):
+		lost = "a different aircraft answered" # never switch planes: keep gliding on this one
 	else:
 		lost = String(f.get("reason", "no update"))
+
+
+## How old the plane's last position report is, in seconds.
+func data_age() -> float:
+	if fix.is_empty():
+		return INF
+	return maxf(0.0, now_s() - (float(fix.get("at", now_s())) - float(fix.get("seen_pos", 0.0))))
+
+
+## Whether the app can see the plane: the last update worked and its position
+## report is under a minute old. Otherwise it glides on along its last course.
+const STALE_S := 60.0
+
+
+func tracked() -> bool:
+	return not fix.is_empty() and lost == "" and data_age() < STALE_S
 
 
 ## Asks adsb.lol by registration, then by callsign (or the other way round for flight numbers).

@@ -16,6 +16,8 @@ export const POLL_S = 20;
 export const MAX_AHEAD_S = 90;
 /** A new fix is eased in over this many seconds. */
 export const EASE_S = 4;
+/** A position report older than this (seconds) means the plane isn't being seen. */
+export const STALE_S = 60;
 
 /** The point `m` meters from lat/lon on bearing `deg` (great circle). */
 export function destination(lat, lon, deg, m) {
@@ -71,7 +73,9 @@ export class FlightTracker {
   async start(query) {
     const f = await this.lookup(query);
     if (!f || !f.found) throw new Error(f?.reason || "That flight wasn't found.");
-    this.query = query;
+    // From here on, ask for this aircraft only (its transponder code): a flight
+    // number can match another plane, and a failed update must never switch planes.
+    this.query = f.hex || query;
     this.fix = f;
     this.prev = null;
     this.lastPoll = this.now();
@@ -99,6 +103,10 @@ export class FlightTracker {
     try {
       const f = await this.lookup(this.query);
       if (!this.fix) return false; // stopped meanwhile
+      if (f?.found && this.fix.hex && f.hex && f.hex.toLowerCase() !== this.fix.hex.toLowerCase()) {
+        this.lost = "a different aircraft answered"; // never switch planes: keep gliding on this one
+        return false;
+      }
       if (f?.found) {
         this.prev = this.fix;
         this.fix = f;
@@ -113,6 +121,15 @@ export class FlightTracker {
       return false;
     } finally { this.polling = false; }
   }
+
+  /** How old the plane's last position report is, in seconds. */
+  dataAge(t = this.now()) { return this.fix ? Math.max(0, t - ((this.fix.at || t) - (this.fix.seen_pos || 0))) : Infinity; }
+
+  /**
+   * Whether we can see the plane: the last update worked and its position
+   * report is under a minute old. Otherwise it glides on along its last course.
+   */
+  get tracked() { return !!this.fix && !this.lost && this.dataAge() < STALE_S; }
 
   /** Where the listener should be now. */
   position(t = this.now()) {

@@ -313,7 +313,7 @@ function draw(now) {
     g.strokeStyle = C.accent; g.lineWidth = 1.5 * d;
     g.beginPath(); g.moveTo(tx - 6 * d, ty - 6 * d); g.lineTo(tx + 6 * d, ty + 6 * d); g.moveTo(tx + 6 * d, ty - 6 * d); g.lineTo(tx - 6 * d, ty + 6 * d); g.stroke();
   }
-  if (flight.active && ui.mode === "globe") drawPlane(g, px, py, flight.fix.track, d, C.accent);
+  if (flight.active && ui.mode === "globe") drawPlane(g, px, py, flight.fix.track, d, flight.tracked ? C.accent : "#ff4d4d"); // amber: seen; red: out of sight, gliding on
   g.fillStyle = C.accent;
   g.beginPath(); g.arc(px, py, 8 * d, 0, Math.PI * 2); g.fill();
   g.strokeStyle = C.field; g.lineWidth = 2.5 * d;
@@ -1275,7 +1275,7 @@ globe3d = new Globe3D({
   select,
   place: (lat, lon) => !!drafts.placing && drafts.placeAt({ lat, lon }),
   lines: () => walk.lines(),
-  flight: () => (flight.active ? { track: flight.fix.track, label: flight.fix.reg || flight.fix.flight } : null),
+  flight: () => (flight.active ? { track: flight.fix.track, label: flight.fix.reg || flight.fix.flight, tracked: flight.tracked } : null),
   offer: ({ pos, label, song }, clientX, clientY) => offerPlace(pos, label ? { label } : null, { clientX, clientY }, song),
   flightCard: () => { if (!flight.active) return false; flightCard.open(); return true; },
   stopTravel: () => { if (!input.traveling) return false; input.stopTravel(); setMsg("fieldMsg", "Stopped here."); return true; },

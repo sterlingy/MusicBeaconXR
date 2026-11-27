@@ -88,3 +88,24 @@ test("a random flight: quiet hubs retry, then a plane", async () => {
   assert.equal(f.hex, "abc123");
   await assert.rejects(randomFlight(async () => ({ found: false, retry: false, reason: "daily limit" }), { wait: async () => {} }), /daily limit/);
 });
+
+test("following sticks to one aircraft, and says when it can't see it", async () => {
+  let now = 1000;
+  const answers = { DL934: { found: true, hex: "a1b2c3", lat: 33, lon: -84, gs_kt: 400, track: 90, at: 1000, seen_pos: 1 } };
+  const asked = [];
+  const t = new FlightTracker({ lookup: async (q) => { asked.push(q); return answers[q]; }, now: () => now });
+  await t.start("DL934");
+  assert.equal(t.query, "a1b2c3", "updates ask for the transponder code");
+  assert.equal(t.tracked, true);
+  answers.a1b2c3 = { found: true, hex: "ffffff", lat: 10, lon: 10, at: 1021, seen_pos: 0 }; // some other plane
+  now = 1021;
+  assert.equal(await t.poll(), false);
+  assert.equal(t.fix.hex, "a1b2c3", "never switches planes");
+  assert.equal(t.tracked, false, "and shows it's out of sight");
+  answers.a1b2c3 = { found: true, hex: "a1b2c3", lat: 33.1, lon: -83, at: 1042, seen_pos: 2 };
+  now = 1042;
+  assert.equal(await t.poll(), true);
+  assert.equal(t.tracked, true, "seen again");
+  now = 1042 + 90; // no fresh report for a while
+  assert.equal(t.tracked, false, "a report over a minute old: out of sight");
+});

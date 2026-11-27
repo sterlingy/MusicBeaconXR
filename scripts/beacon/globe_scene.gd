@@ -307,6 +307,10 @@ func _process(delta: float) -> void:
 	plane.visible = flying
 	listener.visible = not flying
 	if flying:
+		# White while the plane is seen, red while it's out of sight (it glides on).
+		var want := PLANE_SEEN if mine.flight.tracked() else PLANE_LOST
+		_plane_mat.albedo_color = _plane_mat.albedo_color.lerp(want, minf(1.0, delta * 4.0))
+		_plane_mat.emission = _plane_mat.albedo_color
 		var xf := _surface_xform(p.y, p.x, 4.0 * k)
 		xf.basis = xf.basis * Basis(Vector3.UP, -deg_to_rad(float(mine.flight.fix.get("track", 0.0))))
 		plane.transform = xf.scaled_local(Vector3.ONE * 2.6 * k)
@@ -446,10 +450,11 @@ func _make_plane() -> Node3D:
 	var root := Node3D.new()
 	root.name = "Plane"
 	var mat := StandardMaterial3D.new()
-	mat.albedo_color = Color(0.95, 0.96, 1.0)
+	mat.albedo_color = PLANE_SEEN
 	mat.emission_enabled = true
-	mat.emission = Color(1.0, 0.85, 0.6)
+	mat.emission = PLANE_SEEN
 	mat.emission_energy_multiplier = 1.2
+	_plane_mat = mat
 	for part in [[Vector3(0.34, 0.34, 2.2), Vector3.ZERO], [Vector3(2.4, 0.08, 0.55), Vector3(0, 0, 0.05)],
 			[Vector3(0.95, 0.06, 0.32), Vector3(0, 0, 0.92)], [Vector3(0.06, 0.6, 0.38), Vector3(0, 0.3, 0.92)]]:
 		var m := MeshInstance3D.new()
@@ -485,6 +490,9 @@ func _near_plane(at: Vector2) -> bool:
 var travel: TravelUi
 var _marker: MeshInstance3D
 var plane: Node3D # shown instead of the listener while following a flight
+var _plane_mat: StandardMaterial3D
+const PLANE_SEEN := Color("ffb547") # amber: the app can see the plane
+const PLANE_LOST := Color(1.0, 0.25, 0.22) # red: no fresh data, gliding on its last course
 var flight_card: FlightCard
 var _free := false # the view was turned away from the listener
 var _view := Vector2(-0.128, 51.507) # what the camera looks at while free (lon, lat)

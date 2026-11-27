@@ -53,6 +53,16 @@ func _init() -> void:
 	var first_lon := float(order[0][1])
 	check(first_lon > -40.0, "at 08:00 UTC the first hub is in daylight (lon %.0f)" % first_lon)
 	check(order.size() == FlightFollow.HUBS.size(), "every hub is in the order")
+	# Tracked: a fresh report, no failed update; out of sight otherwise.
+	var ff0 := FlightFollow.new()
+	ff0.fix = {"found": true, "hex": "a1b2c3", "at": FlightFollow.now_s(), "seen_pos": 2.0}
+	check(ff0.tracked(), "a fresh report: seen")
+	ff0.lost = "no update"
+	check(not ff0.tracked(), "a failed update: out of sight")
+	ff0.lost = ""
+	ff0.fix.at = FlightFollow.now_s() - 90.0
+	check(not ff0.tracked(), "a report over a minute old: out of sight")
+	ff0.free()
 	if "--live" in OS.get_cmdline_user_args():
 		var ff := FlightFollow.new()
 		root.add_child(ff)

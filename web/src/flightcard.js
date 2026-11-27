@@ -7,6 +7,7 @@
 import { flightDetails, flightSummary } from "./flight.js";
 import { openPopup, closePopup, isOpen } from "./popup.js";
 
+const ago = (s) => (s < 120 ? `${Math.round(s)} s` : `${Math.round(s / 60)} min`);
 const esc = (t) => String(t ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 
 export function initFlightCard({ el, flight, onStop }) {
@@ -29,6 +30,7 @@ export function initFlightCard({ el, flight, onStop }) {
     const times = s.toGo ? `<div class="fc-tiles">${tile("To go", s.toGo)}${tile("Lands (your time)", s.lands)}${tile("In the air", s.airborne)}</div>` : "";
     el.innerHTML = `<div class="fc-head"><span class="fc-airline">${esc(s.airline || "In the air")}</span><button class="fc-x" data-x aria-label="Close">✕</button></div>
       <div class="fc-title"><span class="fc-code">${esc(s.code || f.flight || f.reg)}</span><span class="fc-sub">${esc(sub)}</span></div>
+      <div class="fc-status ${flight.tracked ? "live" : "lost"}">${flight.tracked ? "● Live" : `● Signal lost · gliding on its last course (last seen ${ago(flight.dataAge())} ago)`}</div>
       ${route}${note ? `<div class="fc-note">${esc(note)}</div>` : ""}${times}
       <div class="fc-tiles">${tile("Altitude", s.alt, s.altM)}${tile("Speed", s.speed, s.speedAlt)}${tile("Heading", s.heading)}${tile("Mach", s.mach)}${tile("Outside", s.oat)}${tile("Squawk", s.squawk)}</div>
       ${s.aircraft ? `<div class="fc-plane">${esc(s.aircraft)}</div>` : ""}${s.owner ? `<div class="fc-owner">${esc(s.owner)}</div>` : ""}

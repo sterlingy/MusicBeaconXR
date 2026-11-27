@@ -30,6 +30,7 @@ var _d_code: Label
 var _d_city: Label
 var _track: Control
 var _route_note: Label
+var _status: Label
 var _route_row: HBoxContainer
 var _times := {} # key -> [value Label, caption Label, tile]
 var _stats := {} # key -> [value Label, sub Label, tile]
@@ -137,6 +138,8 @@ func _build() -> void:
 	_sub.size_flags_vertical = Control.SIZE_SHRINK_END
 	title.add_child(_sub)
 	v.add_child(title)
+	_status = _label(12, MUTED, true)
+	v.add_child(_status)
 	# Route: PER ✈──── SYD, cities under the codes.
 	_route_row = HBoxContainer.new()
 	_route_row.add_theme_constant_override("separation", 12)
@@ -269,6 +272,15 @@ func _show() -> void:
 	if String(f.get("type", "")) != "":
 		sub.append(String(f.type))
 	_sub.text = " · ".join(sub)
+	# Live, or out of sight (the plane glides on along its last known course).
+	if flight.tracked():
+		_status.text = "● Live"
+		_status.add_theme_color_override("font_color", Color("6fdc8c"))
+	else:
+		var age := flight.data_age()
+		var since := "%d s" % roundi(age) if age < 120.0 else "%d min" % roundi(age / 60.0)
+		_status.text = "● Signal lost · gliding on its last course (last seen %s ago)" % since if age < 86400.0 else "● Signal lost · gliding on its last course"
+		_status.add_theme_color_override("font_color", Color("ff6b6b"))
 	var has_route := s.has("o_code")
 	_route_row.visible = has_route
 	_o_code.text = String(s.get("o_code", ""))

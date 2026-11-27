@@ -627,14 +627,14 @@ export class Globe3D {
       g.translate(s[0], s[1]);
       g.rotate(ang);
       g.scale(d * 1.1, d * 1.1);
-      g.fillStyle = C.accent; g.strokeStyle = "#04070d"; g.lineWidth = 1.5;
+      g.fillStyle = fl.tracked === false ? "#ff4d4d" : C.accent; g.strokeStyle = "#04070d"; g.lineWidth = 1.5; // red: out of sight, gliding on
       g.beginPath();
       g.moveTo(0, -22); g.lineTo(3, -12); g.lineTo(3, -4); g.lineTo(18, 4); g.lineTo(18, 8); g.lineTo(3, 4);
       g.lineTo(2.5, 14); g.lineTo(8, 19); g.lineTo(8, 22); g.lineTo(0, 19); g.lineTo(-8, 22); g.lineTo(-8, 19);
       g.lineTo(-2.5, 14); g.lineTo(-3, 4); g.lineTo(-18, 8); g.lineTo(-18, 4); g.lineTo(-3, -4); g.lineTo(-3, -12); g.closePath();
       g.fill(); g.stroke();
       g.restore();
-      this.h.label(`✈ ${fl.label || ""}`, s[0], s[1] + 34 * d, 11 * d, C.accent, "rgba(4,7,13,0.85)");
+      this.h.label(`✈ ${fl.label || ""}${fl.tracked === false ? " · signal lost" : ""}`, s[0], s[1] + 34 * d, 11 * d, fl.tracked === false ? "#ff6b6b" : C.accent, "rgba(4,7,13,0.85)");
       return;
     }
     const ph = (now / 1600) % 1;
