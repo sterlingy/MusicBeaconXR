@@ -71,8 +71,13 @@ var muted := {} # role -> true: silenced by the mix panel's M
 var soloed := {} # role -> true: when any part is soloed, only soloed parts play
 
 
+## What this device can carry (sample tier, synth quality), adapted while playing.
+var quality: AudioQuality = null
+
+
 func _ready() -> void:
-	var phone := OS.has_feature("mobile")
+	if quality == null:
+		quality = AudioQuality.new()
 	for role in PARTS:
 		var rig := InstrumentRig.new()
 		rig.name = role.capitalize()
@@ -85,9 +90,6 @@ func _ready() -> void:
 				rig.load_preset(p)
 		rig.set_volume_db(-80.0)
 		if INSTRUMENT[role] == "Prism":
-			# Phones and Quest: lighter voices and a smaller shared voice budget.
-			rig.set_param("voice.quality", 0 if phone else 2)
-			rig.set_param("voice.budget", 12 if phone else 24)
 			_awake[role] = true
 		rigs[role] = rig
 		_applied[role] = {}
@@ -98,7 +100,8 @@ func _ready() -> void:
 	Transport.metronome_on = false
 	Transport.count_in_bars = 0
 	if ClassDB.class_has_method("JamSynth", "sampler_begin"):
-		samples = SampleBank.new()
+		samples = SampleBank.new(quality.tier)
+	_apply_quality()
 	Transport.register(self)
 	_refresh()
 
@@ -209,6 +212,8 @@ func set_soloed(role: String, on: bool) -> void:
 func _process(delta: float) -> void:
 	if mix.is_empty() or rigs.is_empty():
 		return
+	if Transport.running and quality.update(audio_load(), delta):
+		_apply_quality()
 	if samples:
 		samples.poll()
 		for role in rigs:
@@ -246,6 +251,55 @@ func _apply_params(role: String) -> void:
 			done[id] = v
 
 
+# ---- quality
+
+## The audio thread's load: every synth's share of the audio deadline, summed.
+func audio_load() -> float:
+	var total := 0.0
+	for role in rigs:
+		total += rigs[role].synth.get_cpu_load()
+	for role in sample_rigs:
+		total += sample_rigs[role].synth.get_cpu_load()
+	return total
+
+
+## Sets every synth to the current quality level (Prism voices, Sampler interpolation and voices).
+func _apply_quality() -> void:
+	var q := quality.settings()
+	for role in rigs:
+		if INSTRUMENT[role] == "Prism":
+			rigs[role].set_param("voice.quality", q.prism_quality)
+			rigs[role].set_param("voice.budget", q.prism_budget)
+	for role in sample_rigs:
+		_apply_sampler_quality(sample_rigs[role].synth)
+
+
+func _apply_sampler_quality(synth: JamSynth) -> void:
+	var q := quality.settings()
+	synth.set_param("voice.quality", q.sampler_quality)
+	synth.set_param("voice.count", q.sampler_voices)
+
+
+## Changes the user's quality setting (Auto, High, Light): a new sample tier
+## reloads the parts' samples (they play their synths meanwhile).
+func set_quality_mode(m: String) -> void:
+	AudioQuality.save_mode(m)
+	var old_tier := quality.tier
+	quality = AudioQuality.new(m)
+	if samples and quality.tier != old_tier:
+		samples = SampleBank.new(quality.tier)
+		for role in sample_rigs:
+			_switch(role, false)
+		_sample_live.clear()
+		_sample_want.clear()
+	_apply_quality()
+
+
+## The sampled instrument a part is playing ("" while it plays its synth).
+func sample_playing(role: String) -> String:
+	return str(_sample_live.get(role, "")) if _use_sampler.get(role, false) else ""
+
+
 # ---- sampled instruments
 
 ## The program the blend wants for a part: the loudest song's choice ("" = its synth).
@@ -273,9 +327,7 @@ func _want_sample(role: String, id: String) -> void:
 		_sample_live[role] = id
 		var prog: Dictionary = samples.index.get(id, {})
 		_sample_level[role] = linear_to_db(maxf(float(prog.get("level", 1.0)), 0.001))
-		if OS.has_feature("mobile"):
-			rig.synth.set_param("voice.quality", 0)
-			rig.synth.set_param("voice.count", 16)
+		_apply_sampler_quality(rig.synth)
 		if _sample_want.get(role, "") == id:
 			_switch(role, true))
 

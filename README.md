@@ -89,9 +89,11 @@ Each platform gets its own quality tier:
 
 | Tier | Where | What | Size |
 |---|---|---|---|
-| full | desktop and Windows VR builds (`samples/full`) | every velocity layer and round robin, stereo, long tails | 72 MB |
+| full | desktops, and phones and Quest that can carry it (`samples/full`) | every velocity layer and round robin, stereo, long tails | 72 MB |
 | web | the website (`web/samples/web`), loaded per instrument on demand | 3 layers, stereo | 41 MB |
-| phone | Android and Quest builds (`samples/phone`) | 2 layers, mono, 32 kHz | 12 MB |
+| phone | other phones (`samples/phone`) | 2 layers, mono, 32 kHz | 12 MB |
+
+The app picks the tier and synth quality per device (`scripts/beacon/audio_quality.gd`): desktops and phones with 7+ GB of memory and 8+ cores get the full pack and High quality, phones with 5+ GB and 6+ cores the phone pack at Medium, smaller ones Light. While it plays it watches the audio load: when that stays above 70% for 2 seconds (a busy blend, or a phone getting hot and slowing down) it steps the synths down a level (Prism's voice quality and voice budget, the Sampler's interpolation and voices) before the sound can crackle, and steps back up after 30 calm seconds, never above where it started. The panel shows the level and load, and its button switches between Auto, High (full pack, best quality) and Light (phone pack, saves battery), remembered between launches. Android and Quest builds carry both packs (about 84 MB).
 
 Build them from the source library (cloned to `samples_src/VSCO-2-CE`, git-ignored), then match their loudness to the synths they replace:
 
@@ -103,4 +105,4 @@ tools/.venv/Scripts/python.exe tools/build_samples.py
 node web/tools/calibrate_samples.mjs
 ```
 
-The export presets carry the right tier (desktop: full, Android and Quest: phone). The built packs are committed, so a fresh checkout builds and the website serves the web pack. `web/tools/sampler_render.mjs` renders a program offline for checking, and `tests/sampler_check.gd` checks the Sampler in the app.
+The export presets carry the right packs (desktop: full; Android and Quest: both). The built packs are committed, so a fresh checkout builds and the website serves the web pack. `web/tools/sampler_render.mjs` renders a program offline for checking, and `tests/sampler_check.gd` checks the Sampler in the app.

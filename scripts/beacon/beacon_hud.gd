@@ -22,6 +22,8 @@ var _parts := {}
 var _names := {} # role -> its label
 var _buttons := {} # role -> [mute, solo]
 var _help: Label
+var _quality: Label
+var _quality_btn: Button
 var _flash := 0.0
 var _panel: PanelContainer
 var _expand: Button
@@ -99,6 +101,20 @@ func _ready() -> void:
 		v.add_child(h)
 		_parts[role] = bar
 		_names[role] = l
+	# Sound quality: what this device plays at, and a button to choose Auto, High or Light.
+	var qrow := HBoxContainer.new()
+	_quality = _label("", 12, Color(1, 1, 1, 0.6))
+	_quality.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	qrow.add_child(_quality)
+	_quality_btn = Button.new()
+	_quality_btn.focus_mode = Control.FOCUS_NONE
+	_quality_btn.add_theme_font_size_override("font_size", 12)
+	_quality_btn.tooltip_text = "Sound quality: Auto fits this device, High plays everything, Light saves battery"
+	_quality_btn.pressed.connect(func():
+		var modes: Array = AudioQuality.MODES
+		player.set_quality_mode(modes[(modes.find(player.quality.mode) + 1) % modes.size()]))
+	qrow.add_child(_quality_btn)
+	v.add_child(qrow)
 	_help = _label("", 12, Color(1, 1, 1, 0.5))
 	_help.autowrap_mode = TextServer.AUTOWRAP_WORD
 	_help.custom_minimum_size.x = 330
@@ -220,6 +236,11 @@ func _process(delta: float) -> void:
 		var a := 1.0 if player.audible(role) else 0.3
 		_parts[role].modulate.a = a
 		_names[role].modulate.a = a
+		var sample := player.sample_playing(role)
+		_names[role].text = role.capitalize() if sample == "" else "%s · %s" % [role.capitalize(), sample.replace("_", " ")]
 		_buttons[role][0].set_pressed_no_signal(player.muted.has(role))
 		_buttons[role][1].set_pressed_no_signal(player.soloed.has(role))
+	if player.quality:
+		_quality.text = "Sound: " + player.quality.describe()
+		_quality_btn.text = AudioQuality.MODE_NAMES[player.quality.mode]
 	_help.text = ("Space stop" if Transport.running else "Space PLAY") + "  ·  " + help_text
