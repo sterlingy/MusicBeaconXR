@@ -48,6 +48,8 @@ var _list: VBoxContainer
 var _msg: Label
 var _status: Label
 var _spacing: OptionButton
+var _side: OptionButton
+var _size_hint: Label
 var _range: OptionButton
 var _mode: OptionButton
 var _offer_box: VBoxContainer
@@ -92,6 +94,8 @@ func _ready() -> void:
 	_build()
 	_render_list()
 	player.set_position(player.pos)
+	if OS.get_cmdline_user_args().has("--mine-open"): # dev: open the panel
+		set_open(true, false)
 
 
 # ---------------------------------------------------------------- the layer
@@ -179,29 +183,30 @@ func _with_fix(action: String, arg: Variant) -> void:
 		return
 	match action:
 		"generate":
-			_generate(int(arg), "")
+			_generate(int(arg[0]), "", int(arg[1]))
 		"more":
-			_generate(int(_offer.spacingM), String(_offer.center))
+			_generate(int(_offer.spacingM), String(_offer.center), int(_offer.get("half", BeaconDrafts.DEFAULT_HALF)))
 		"plant":
 			_plant()
 
 
-func _generate(spacing_m: int, center: String) -> void:
-	var g := drafts.make_grid(fix.lat, fix.lon, spacing_m, center)
+func _generate(spacing_m: int, center: String, half := BeaconDrafts.DEFAULT_HALF) -> void:
+	var g := drafts.make_grid(fix.lat, fix.lon, spacing_m, center, half)
 	if center != "" and not BeaconDrafts.in_grid(g, fix.lat, fix.lon):
 		drafts.doc.nextNumber -= 1
 		_say("You need to be inside the next grid to make it. Walk on a little and try again.", true)
 		return
 	for x in drafts.doc.grids:
-		if x.center == g.center and int(x.spacingM) == spacing_m:
+		if x.center == g.center and int(x.spacingM) == spacing_m and BeaconDrafts.half_of(x) == half:
 			drafts.doc.nextNumber -= 1
-			_say("%s is already here, with the same spacing." % x.name, true)
+			_say("%s is already here, with the same size and spacing. New grids are made where you really are (your location), not where you're looking; walk on, or pick another size or spacing." % x.name, true)
 			return
 	drafts.doc.grids.append(g)
 	_changed()
 	var c := BeaconDrafts.parse_point(g.center)
-	go_to.emit(c.lat, c.lon, (BeaconDrafts.GRID_POINTS + 3) * spacing_m / 1000.0)
-	_say("%s: 441 beacons, one every %s, %s km a side, centered where you are.%s" % [g.name, _dist(spacing_m), FieldMenu._num(20.0 * spacing_m / 1000.0), " (test location)" if fix.get("fake", false) else ""])
+	go_to.emit(c.lat, c.lon, (2 * half + 4) * spacing_m / 1000.0)
+	var n := 2 * half + 1
+	_say("%s: %d beacons, one every %s, %s km a side, centered where you are.%s" % [g.name, n * n, _dist(spacing_m), FieldMenu._num(BeaconDrafts.side_km(g)), " (test location)" if fix.get("fake", false) else ""])
 
 
 func _plant() -> void:
@@ -273,7 +278,7 @@ func _act(action: String, id: String) -> void:
 				go_to.emit(pt.lat, pt.lon, 3.0)
 			elif item.has("center"):
 				var c := BeaconDrafts.parse_point(item.center)
-				go_to.emit(c.lat, c.lon, (BeaconDrafts.GRID_POINTS + 3) * int(item.spacingM) / 1000.0)
+				go_to.emit(c.lat, c.lon, (BeaconDrafts.side_points(item) + 3) * int(item.spacingM) / 1000.0)
 			elif not item.beacons.is_empty():
 				go_to.emit(float(item.beacons[0].lat), float(item.beacons[0].lon), 3.0)
 			else:
@@ -358,6 +363,49 @@ func close_popup(except: Object) -> void:
 		set_open(false)
 
 
+## The chosen size and spacing, as [spacing m, half], or [] when they don't fit together.
+func chosen_grid() -> Array:
+	var sp: int = BeaconDrafts.SPACINGS_M[_spacing.selected]
+	var h := BeaconDrafts.half_for(BeaconDrafts.SIDES_KM[_side.selected], sp)
+	return [sp, h] if h > 0 else []
+
+
+func _generate_chosen() -> void:
+	var c := chosen_grid()
+	if c.is_empty():
+		_say("That spacing doesn't fit that size. Pick another.", true)
+		return
+	_need_fix("generate", c)
+
+
+## Spacings that don't fit the chosen size are greyed out; the choice moves to one that fits.
+func _fit_spacing() -> void:
+	var side: float = BeaconDrafts.SIDES_KM[_side.selected]
+	var fits := []
+	for i in BeaconDrafts.SPACINGS_M.size():
+		var ok := BeaconDrafts.half_for(side, BeaconDrafts.SPACINGS_M[i]) > 0
+		_spacing.set_item_disabled(i, not ok)
+		if ok:
+			fits.append(i)
+	if not fits.is_empty() and not fits.has(_spacing.selected):
+		# The nearest spacing that fits.
+		var best: int = fits[0]
+		for i in fits:
+			if absi(i - _spacing.selected) < absi(best - _spacing.selected):
+				best = i
+		_spacing.select(best)
+	_show_size()
+
+
+func _show_size() -> void:
+	var c := chosen_grid()
+	if c.is_empty():
+		_size_hint.text = "Too many beacons, or spacing too wide, for that size."
+		return
+	var n: int = 2 * c[1] + 1
+	_size_hint.text = "%d × %d = %d beacons, %s km a side" % [n, n, n * n, FieldMenu._num(2.0 * c[1] * c[0] / 1000.0)]
+
+
 static func _dist(m: float) -> String:
 	return "%d m" % roundi(m) if m < 1000.0 else "%s km" % FieldMenu._num(m / 1000.0)
 
@@ -400,18 +448,37 @@ func _build() -> void:
 	_msg = menu._small("")
 	v.add_child(_msg)
 
-	# A new grid where you are: 21 x 21 beacons; the spacing sets its size.
+	# A new grid where you are: its size and spacing chosen apart, as the local grid.
 	v.add_child(menu._heading("NEW GRID HERE"))
 	var gen := HBoxContainer.new()
+	gen.add_theme_constant_override("separation", 6)
+	_side = OptionButton.new()
+	_side.focus_mode = Control.FOCUS_NONE
+	for km in BeaconDrafts.SIDES_KM:
+		_side.add_item("%s km a side" % FieldMenu._num(km))
+	_side.select(maxi(0, BeaconDrafts.SIDES_KM.find(float(FieldPrefs.get_value("grid_side_km", 10.0)))))
 	_spacing = OptionButton.new()
 	_spacing.focus_mode = Control.FOCUS_NONE
 	for sp in BeaconDrafts.SPACINGS_M:
-		_spacing.add_item("beacon every %s · %s km grid" % [_dist(sp), FieldMenu._num(20.0 * sp / 1000.0)])
-	_spacing.select(3)
+		_spacing.add_item("every %s" % _dist(sp))
+	_spacing.select(maxi(0, BeaconDrafts.SPACINGS_M.find(int(FieldPrefs.get_value("grid_spacing_m", 500)))))
+	_side.item_selected.connect(func(i):
+		FieldPrefs.set_value("grid_side_km", BeaconDrafts.SIDES_KM[i])
+		_fit_spacing())
+	_spacing.item_selected.connect(func(i):
+		FieldPrefs.set_value("grid_spacing_m", BeaconDrafts.SPACINGS_M[i])
+		_show_size())
+	gen.add_child(_side)
 	gen.add_child(_spacing)
-	gen.add_child(menu._button("Generate here", func(): _need_fix("generate", BeaconDrafts.SPACINGS_M[_spacing.selected])))
 	v.add_child(gen)
-	v.add_child(menu._small("441 beacons centred on your location (needs location, lower 48 US for now). The grid opens on the globe when it's made."))
+	var gen2 := HBoxContainer.new()
+	_size_hint = menu._small("")
+	_size_hint.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	gen2.add_child(_size_hint)
+	gen2.add_child(menu._button("Generate here", func(): _generate_chosen()))
+	v.add_child(gen2)
+	v.add_child(menu._small("Centred on where you really are (needs location, lower 48 US for now). The grid opens on the globe when it's made."))
+	_fit_spacing()
 
 	_offer_box = VBoxContainer.new()
 	_offer_box.visible = false
@@ -672,7 +739,7 @@ func _render_list() -> void:
 	var menu := FieldMenu.new("globe")
 	var rows := 0
 	for g in drafts.doc.grids:
-		_row(menu, g.id, g.on, g.tint, g.name, "441 beacons · every %s · %s km a side%s" % [_dist(g.spacingM), FieldMenu._num(20.0 * g.spacingM / 1000.0), " · shared" if g.has("sharedId") else ""],
+		_row(menu, g.id, g.on, g.tint, g.name, "%d beacons · every %s · %s km a side%s" % [BeaconDrafts.side_points(g) * BeaconDrafts.side_points(g), _dist(g.spacingM), FieldMenu._num(BeaconDrafts.side_km(g)), " · shared" if g.has("sharedId") else ""],
 			[["Go", "go"], ["Unshare" if g.has("sharedId") else "Share", "share"], ["New songs", "regen"], ["Copy", "dup"], ["Delete", "delete"]])
 		rows += 1
 	for m in drafts.doc.maps:

@@ -116,5 +116,18 @@ func _init() -> void:
 	check(BeaconDrafts.fix_problem({"lat": 51.5, "lon": 0.0, "accuracy": 5.0}).contains("lower 48"), "London is refused")
 	check(BeaconDrafts.fix_problem({"lat": 30.27, "lon": -97.74, "accuracy": 900.0}).contains("accurate"), "a vague fix is refused")
 
+	# Grid size chosen apart from spacing (as web/src/drafts.js).
+	check(BeaconDrafts.half_for(10.0, 500) == 10 and BeaconDrafts.half_for(1.0, 100) == 5 and BeaconDrafts.half_for(1.0, 2000) == 0 and BeaconDrafts.half_for(100.0, 100) == 0, "half_for")
+	var sd := BeaconDrafts.new()
+	var big := sd.make_grid(30.2672, -97.7431, 200, "", 25)
+	check(BeaconDrafts.grid_points(big.center, 200, 25).size() == 2601 and is_equal_approx(BeaconDrafts.side_km(big), 10.0), "a 51 x 51 grid")
+	check(BeaconDrafts.in_grid(big, 30.2672 + 0.04, -97.7431) and not BeaconDrafts.in_grid(big, 30.2672 + 0.06, -97.7431), "its outline")
+	sd.doc.grids.append(big)
+	var be := sd.pool_entries().filter(func(x): return x.source.id == big.id)
+	check(be.size() == 2601 and be[0].north == 25 and be[0].east == -25 and be[2600].north == -25, "its pool entries")
+	var oldg: Dictionary = big.duplicate()
+	oldg.erase("half")
+	check(BeaconDrafts.side_points(oldg) == 21, "older grids stay 21 x 21")
+
 	print("drafts_check: %s (%d failure(s))" % ["OK" if failures == 0 else "FAILED", failures])
 	quit(0 if failures == 0 else 1)

@@ -29,6 +29,21 @@ export const M_PER_DEG = (EARTH_RADIUS_KM * 1000 * Math.PI) / 180;
 export const LATTICE_M = 100;
 /** Points along each side of a draft grid (20 spacings). */
 export const GRID_POINTS = 21;
+/** A grid's size, chosen apart from its spacing (as the local grid): beacons from its center to its edge. Grids made before sizes are 10 (21 x 21). */
+export const DEFAULT_HALF = 10;
+export const MAX_HALF = 25;
+export const MAX_HALF_M = 50000;
+/** Grid side presets, km (the local grid's). */
+export const SIDES_KM = [1, 5, 10, 50, 100];
+/** Beacons from a grid's center to its edge. */
+export const halfOf = (grid) => grid.half ?? DEFAULT_HALF;
+/** Beacons along a side. */
+export const sidePoints = (grid) => 2 * halfOf(grid) + 1;
+/** The half for a side length and spacing, or 0 when they don't fit together (spacing too wide, or too many beacons). */
+export function halfFor(sideKm, spacingM) {
+  const h = Math.round((sideKm * 1000) / (2 * spacingM));
+  return h >= 1 && h <= MAX_HALF && h * spacingM <= MAX_HALF_M ? h : 0;
+}
 /** Spacings a grid can be generated with, in meters. */
 export const SPACINGS_M = [100, 200, 500, 1000, 2000, 5000];
 /** Planted songs and map beacons: default, smallest and largest range, in meters. */
@@ -144,7 +159,7 @@ export function validateDoc(doc) {
   const errs = [];
   if (doc.version !== VERSION) errs.push(`version ${doc.version} isn't supported (expected ${VERSION})`);
   for (const g of doc.grids || []) {
-    if (!g.id || !SPACINGS_M.includes(g.spacingM) || !parsePoint(g.center || "")) errs.push(`grid ${g.name || g.id || "?"} is malformed`);
+    if (!g.id || !SPACINGS_M.includes(g.spacingM) || !parsePoint(g.center || "") || !(halfOf(g) >= 1 && halfOf(g) <= MAX_HALF)) errs.push(`grid ${g.name || g.id || "?"} is malformed`);
     for (const [pt, s] of Object.entries(g.edited || {})) if (validateSong(s).length) errs.push(`grid ${g.name || g.id}: the edited song at ${pt} is invalid`);
   }
   for (const p of doc.plants || []) {
@@ -181,13 +196,12 @@ const nextNumber = (doc) => { const n = doc.nextNumber || 1; doc.nextNumber = n 
 // ------------------------------------------------------------------ grids
 
 /**
- * The 21 x 21 lattice points of a grid centered on `centerId`: rows
+ * The (2 half + 1) squared lattice points of a grid centered on `centerId`: rows
  * `spacingM` apart in latitude, columns `spacingM` apart at the center's
  * band, each snapped to its own band's lattice (so ids are global).
  */
-export function gridPoints(centerId, spacingM) {
+export function gridPoints(centerId, spacingM, half = DEFAULT_HALF) {
   const c = parsePoint(centerId);
-  const half = (GRID_POINTS - 1) / 2;
   const out = [];
   for (let r = -half; r <= half; r++) {
     const I = c.I + r * spacingM;
@@ -205,7 +219,7 @@ export function gridCenterFor(p, spacingM) {
   return snapPoint(p, spacingM).id;
 }
 
-const halfSide = (grid) => ((GRID_POINTS - 1) / 2 + 0.5) * grid.spacingM;
+const halfSide = (grid) => (halfOf(grid) + 0.5) * grid.spacingM;
 /** Meters north (dy) and east (dx) of the grid's center. */
 function offset(grid, p) {
   const c = parsePoint(grid.center);
@@ -234,13 +248,14 @@ export function exitDirection(grid, p) {
 }
 
 /** A new grid centered on the lattice point nearest `fix` (or on `center`). Doesn't add it to the doc. */
-export function makeGrid(doc, fix, spacingM, { now = Date.now(), center = null } = {}) {
+export function makeGrid(doc, fix, spacingM, { now = Date.now(), center = null, half = DEFAULT_HALF } = {}) {
   if (!SPACINGS_M.includes(spacingM)) throw new Error(`spacing must be one of ${SPACINGS_M.join(", ")} m`);
+  if (!(half >= 1 && half <= MAX_HALF)) throw new Error(`half must be 1 to ${MAX_HALF}`);
   const n = nextNumber(doc);
   return {
     id: newId("grid-", now), name: `Grid ${n}`, number: n, tint: TINTS[(n - 1) % TINTS.length],
     spacingM, center: center || gridCenterFor(fix, spacingM), createdAt: now,
-    on: true, variant: 0, variants: {}, edited: {},
+    on: true, variant: 0, variants: {}, edited: {}, half,
   };
 }
 
@@ -251,7 +266,7 @@ export const DIRS = { N: [1, 0], S: [-1, 0], E: [0, 1], W: [0, -1], NE: [1, 1], 
 export function adjacentCenter(grid, dir) {
   const c = parsePoint(grid.center);
   const [dy, dx] = DIRS[dir];
-  const step = GRID_POINTS * grid.spacingM;
+  const step = sidePoints(grid) * grid.spacingM;
   return snapPoint({ lat: (c.I + dy * step) / M_PER_DEG, lon: (c.J + dx * step) / (cosBand(c.band) * M_PER_DEG) }, grid.spacingM).id;
 }
 
@@ -274,8 +289,8 @@ export function moreGridOffer(doc, fix) {
   if (bestOut > 2 * halfSide(best)) return null;
   const dir = exitDirection(best, fix);
   const center = adjacentCenter(best, dir);
-  if (doc.grids.some((g) => g.center === center && g.spacingM === best.spacingM)) return null;
-  return { from: best, dir, center, spacingM: best.spacingM };
+  if (doc.grids.some((g) => g.center === center && g.spacingM === best.spacingM && halfOf(g) === halfOf(best))) return null;
+  return { from: best, dir, center, spacingM: best.spacingM, half: halfOf(best) };
 }
 
 /** Seed for a generated beacon: the local grid's seed at first, a new one after each regenerate. */
@@ -381,15 +396,15 @@ export function poolEntries(doc, shared = null) {
   for (const g of doc.grids) {
     if (!g.on) continue;
     const source = { id: g.id, name: g.name, kind: "grid" };
-    const half = (GRID_POINTS - 1) / 2;
-    gridPoints(g.center, g.spacingM).forEach((pt, i) => {
+    const half = halfOf(g), n = 2 * half + 1;
+    gridPoints(g.center, g.spacingM, half).forEach((pt, i) => {
       const edited = g.edited?.[pt.id];
       const seed = edited ? null : seedFor(g, pt.id);
       out.push({
         key: `${g.id}/${pt.id}`, source, point: pt.id, pos: { lat: pt.lat, lon: pt.lon }, rangeM: g.spacingM,
         kind: edited ? "edited" : "gen", createdAt: g.createdAt, tint: g.tint, seed, own: true,
         // Spacings north and east of the grid's center, for labels.
-        north: half - Math.floor(i / GRID_POINTS), east: (i % GRID_POINTS) - half, spacingM: g.spacingM,
+        north: half - Math.floor(i / n), east: (i % n) - half, spacingM: g.spacingM,
         song: edited ? () => g.edited[pt.id] : cachedSong(seed),
       });
     });
@@ -425,16 +440,16 @@ export function poolEntries(doc, shared = null) {
 function sharedEntries({ doc, song, mine = new Set() }) {
   const out = [];
   const source = { id: "shared", name: "Shared", kind: "shared" };
-  const half = (GRID_POINTS - 1) / 2;
   for (const g of doc.grids || []) {
     if (mine.has(g.sharedId)) continue;
-    gridPoints(g.center, g.spacingM).forEach((pt, i) => {
+    const half = halfOf(g), n = 2 * half + 1;
+    gridPoints(g.center, g.spacingM, half).forEach((pt, i) => {
       const ref = g.editedRefs?.[pt.id];
       const seed = ref ? null : seedFor(g, pt.id);
       out.push({
         key: `${g.id}/${pt.id}`, source, point: pt.id, pos: { lat: pt.lat, lon: pt.lon }, rangeM: g.spacingM,
         kind: ref ? "edited" : "gen", createdAt: g.createdAt, tint: g.tint, seed, own: false, shared: true, sharedId: g.sharedId,
-        north: half - Math.floor(i / GRID_POINTS), east: (i % GRID_POINTS) - half, spacingM: g.spacingM,
+        north: half - Math.floor(i / n), east: (i % n) - half, spacingM: g.spacingM,
         songId: ref || null, song: ref ? () => song(ref) : cachedSong(seed),
       });
     });
@@ -643,5 +658,6 @@ export function statusLine(shares, exclusiveNames = []) {
 
 /** Side length and counts for a grid, for the list. */
 export function gridStats(grid) {
-  return { beacons: GRID_POINTS * GRID_POINTS, edited: Object.keys(grid.edited || {}).length, sideKm: ((GRID_POINTS - 1) * grid.spacingM) / 1000 };
+  const n = sidePoints(grid);
+  return { beacons: n * n, edited: Object.keys(grid.edited || {}).length, sideKm: ((n - 1) * grid.spacingM) / 1000 };
 }

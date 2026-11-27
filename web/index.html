@@ -403,6 +403,7 @@ details summary { cursor: pointer; color: var(--muted); font-size: 13px; }
       <section class="unit" id="draftsUnit" aria-label="My beacons" hidden>
         <h2>My beacons · <span id="dWhere">on this device</span></h2>
         <div class="dtools">
+          <label class="inline" for="dSide">New grid, each side <select id="dSide"></select></label>
           <label class="inline" for="dSpacing">Beacon every <select id="dSpacing"></select></label>
           <button class="btn primary" id="dGenerate" title="Makes a grid of beacons centered where you are (needs your location; lower 48 US for now)">Generate grid here</button>
           <span class="hint" id="dSpacingHint"></span>

@@ -100,7 +100,7 @@ func update(lat: float, lon: float) -> void:
 func _fetch_tile(k: String) -> void:
 	_loading[k] = true
 	var enc := k.uri_encode()
-	var grids = await _rest_get("grids?select=id,center,spacing_m,variant,variants,edited,created_at&status=eq.live&tiles=cs.%s" % ("{%s}" % k).uri_encode())
+	var grids = await _rest_get("grids?select=id,center,spacing_m,half,variant,variants,edited,created_at&status=eq.live&tiles=cs.%s" % ("{%s}" % k).uri_encode())
 	var plants = await _rest_get("plants?select=id,point,range_m,song_id,created_at&status=eq.live&tile=eq.%s" % enc)
 	_loading.erase(k)
 	if grids == null or plants == null:

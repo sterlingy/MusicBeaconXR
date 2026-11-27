@@ -40,7 +40,7 @@ export async function shareGrid(rest, grid) {
   const edited = {};
   for (const [pt, song] of Object.entries(grid.edited || {})) edited[pt] = await uploadSong(rest, song);
   const [row] = await rest("POST", "grids?select=id", {
-    center: grid.center, spacing_m: grid.spacingM, variant: grid.variant || 0, variants: grid.variants || {}, edited, tiles: tilesForGrid(grid),
+    center: grid.center, spacing_m: grid.spacingM, variant: grid.variant || 0, variants: grid.variants || {}, edited, tiles: tilesForGrid(grid), half: grid.half ?? 10,
   });
   grid.sharedId = row.id;
   return row.id;

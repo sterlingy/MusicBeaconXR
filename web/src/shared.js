@@ -63,7 +63,7 @@ export function rowsToDoc(tiles) {
       if (grids.has(r.id)) continue;
       grids.set(r.id, {
         id: `s-${r.id}`, sharedId: r.id, name: "Shared", shared: true, tint: "#9aa7b8",
-        spacingM: r.spacing_m, center: r.center, variant: r.variant || 0, variants: r.variants || {},
+        spacingM: r.spacing_m, half: r.half ?? 10, center: r.center, variant: r.variant || 0, variants: r.variants || {},
         editedRefs: r.edited || {}, edited: {}, createdAt: Date.parse(r.created_at) || 0, on: true,
       });
     }
@@ -89,7 +89,7 @@ export function supabaseFetcher({ url, key, fetchFn = globalThis.fetch }) {
     async tile(k) {
       const enc = encodeURIComponent;
       const [grids, plants] = await Promise.all([
-        get(`grids?select=id,center,spacing_m,variant,variants,edited,created_at&status=eq.live&tiles=cs.${enc(`{${k}}`)}`),
+        get(`grids?select=id,center,spacing_m,half,variant,variants,edited,created_at&status=eq.live&tiles=cs.${enc(`{${k}}`)}`),
         get(`plants?select=id,point,range_m,song_id,created_at&status=eq.live&tile=eq.${enc(k)}`),
       ]);
       return { grids, plants };

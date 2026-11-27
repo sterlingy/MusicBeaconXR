@@ -240,3 +240,26 @@ test("format: validate, normalize, duplicate, merge (import) without overwriting
   assert.deepEqual(D.buildPool(D.normalizeDoc(back)).playing.map((e) => e.song().title), before);
   for (const e of D.buildPool(target).playing.slice(0, 20)) assert.deepEqual(validateSong(e.song()), []);
 });
+
+test("grid size is chosen apart from spacing", () => {
+  assert.equal(D.halfFor(10, 500), 10); // 21 x 21, the old size
+  assert.equal(D.halfFor(1, 100), 5);
+  assert.equal(D.halfFor(100, 5000), 10);
+  assert.equal(D.halfFor(1, 2000), 0); // spacing wider than the grid
+  assert.equal(D.halfFor(100, 100), 0); // too many beacons
+  const doc = fresh();
+  const g = D.makeGrid(doc, AUSTIN, 200, { half: 25 });
+  assert.equal(D.gridPoints(g.center, 200, D.halfOf(g)).length, 51 * 51);
+  assert.equal(D.gridStats(g).beacons, 2601);
+  assert.equal(D.gridStats(g).sideKm, 10);
+  assert.ok(D.inGrid(g, { lat: AUSTIN.lat + 0.04, lon: AUSTIN.lon }));
+  assert.ok(!D.inGrid(g, { lat: AUSTIN.lat + 0.06, lon: AUSTIN.lon }));
+  doc.grids.push(g);
+  const e = D.poolEntries(doc).filter((x) => x.source.id === g.id);
+  assert.equal(e.length, 2601);
+  assert.deepEqual([e[0].north, e[0].east, e[2600].north, e[2600].east], [25, -25, -25, 25]);
+  // Grids from before sizes keep 21 x 21.
+  const old = { ...g };
+  delete old.half;
+  assert.equal(D.gridStats(old).beacons, 441);
+});

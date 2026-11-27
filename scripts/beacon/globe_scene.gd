@@ -484,7 +484,7 @@ func _parse_args() -> void:
 			var sp := int(a.trim_prefix("--gen="))
 			get_tree().create_timer(0.4).timeout.connect(func():
 				mine.set_open(true, false)
-				mine._need_fix("generate", sp))
+				mine._need_fix("generate", [sp, BeaconDrafts.DEFAULT_HALF]))
 		elif a == "--hud-open": # dev: the readout unfolded
 			get_tree().create_timer(0.2).timeout.connect(func(): hud.set_collapsed(false))
 		elif a == "--trail-demo": # dev: a walked stretch, a jump, another stretch

@@ -121,7 +121,7 @@ func share_grid(grid: Dictionary) -> Dictionary:
 			return {"ok": false, "error": "couldn't upload an edited song"}
 		edited[pt] = id
 	var r := await rest("POST", "grids?select=id", {"center": grid.center, "spacing_m": int(grid.spacingM), "variant": int(grid.variant),
-		"variants": grid.variants, "edited": edited, "tiles": SharedMap.tiles_for_grid(grid)})
+		"variants": grid.variants, "edited": edited, "tiles": SharedMap.tiles_for_grid(grid), "half": BeaconDrafts.half_of(grid)})
 	if r.ok:
 		grid.sharedId = r.data[0].id
 	return r

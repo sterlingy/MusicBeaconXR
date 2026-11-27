@@ -16,7 +16,15 @@ extends RefCounted
 const EARTH_RADIUS_KM := 6371.0088
 const M_PER_DEG := EARTH_RADIUS_KM * 1000.0 * PI / 180.0
 const LATTICE_M := 100
+## Beacons along a side of a grid made before sizes could be chosen (half 10).
 const GRID_POINTS := 21
+const DEFAULT_HALF := 10
+## A grid's size, chosen apart from its spacing (as the local grid): beacons
+## from its center to its edge. At most 25 (51 x 51) and 50 km.
+const MAX_HALF := 25
+const MAX_HALF_M := 50000
+## Grid side presets, km (the local grid's).
+const SIDES_KM := [1.0, 5.0, 10.0, 50.0, 100.0]
 const SPACINGS_M := [100, 200, 500, 1000, 2000, 5000]
 const PLANT_RANGE_M := 500
 const MIN_RANGE_M := 100
@@ -161,7 +169,7 @@ static func validate_doc(d) -> PackedStringArray:
 	if int(d.get("version", 0)) != VERSION:
 		errs.append("version %s isn't supported (expected %d)" % [d.get("version"), VERSION])
 	for g in d.get("grids", []):
-		if not g.has("id") or not SPACINGS_M.has(int(g.get("spacingM", 0))) or parse_point(str(g.get("center", ""))).is_empty():
+		if not g.has("id") or not SPACINGS_M.has(int(g.get("spacingM", 0))) or parse_point(str(g.get("center", ""))).is_empty() 				or half_of(g) < 1 or half_of(g) > MAX_HALF:
 			errs.append("grid %s is malformed" % g.get("name", g.get("id", "?")))
 		for pt in g.get("edited", {}):
 			if not BeaconMixer.validate(g.edited[pt]).is_empty():
@@ -261,9 +269,30 @@ static func now_ms() -> float:
 
 # ---------------------------------------------------------------- grids
 
-static func grid_points(center_id: String, spacing_m: int) -> Array:
+## Beacons from a grid's center to its edge (10 for grids made before sizes).
+static func half_of(grid: Dictionary) -> int:
+	return int(grid.get("half", DEFAULT_HALF))
+
+
+## Beacons along a side.
+static func side_points(grid: Dictionary) -> int:
+	return 2 * half_of(grid) + 1
+
+
+## The half for a side length and spacing, or 0 when that combination can't be
+## made (spacing wider than half the side, or too many beacons).
+static func half_for(side_km: float, spacing_m: int) -> int:
+	var h := roundi(side_km * 1000.0 / (2.0 * spacing_m))
+	return h if h >= 1 and h <= MAX_HALF and h * spacing_m <= MAX_HALF_M else 0
+
+
+## Its side length, km, beacon to beacon.
+static func side_km(grid: Dictionary) -> float:
+	return 2.0 * half_of(grid) * int(grid.spacingM) / 1000.0
+
+
+static func grid_points(center_id: String, spacing_m: int, half := DEFAULT_HALF) -> Array:
 	var c := parse_point(center_id)
-	var half := (GRID_POINTS - 1) / 2
 	var out := []
 	for r in range(-half, half + 1):
 		var I: int = c.I + r * spacing_m
@@ -275,7 +304,7 @@ static func grid_points(center_id: String, spacing_m: int) -> Array:
 
 
 static func _half_side(grid: Dictionary) -> float:
-	return ((GRID_POINTS - 1) / 2.0 + 0.5) * int(grid.spacingM)
+	return (half_of(grid) + 0.5) * int(grid.spacingM)
 
 
 ## Meters north (y) and east (x) of the grid's center, in 64-bit floats.
@@ -306,13 +335,14 @@ static func exit_direction(grid: Dictionary, lat: float, lon: float) -> String:
 	return dir
 
 
-func make_grid(lat: float, lon: float, spacing_m: int, center := "") -> Dictionary:
+func make_grid(lat: float, lon: float, spacing_m: int, center := "", half := DEFAULT_HALF) -> Dictionary:
 	assert(SPACINGS_M.has(spacing_m))
+	assert(half >= 1 and half <= MAX_HALF)
 	var n := _next_number()
 	return {
 		"id": _new_id("grid-"), "name": "Grid %d" % n, "number": n, "tint": TINTS[(n - 1) % TINTS.size()],
 		"spacingM": spacing_m, "center": center if center != "" else snap_point(lat, lon, spacing_m).id, "createdAt": now_ms(),
-		"on": true, "variant": 0, "variants": {}, "edited": {},
+		"on": true, "variant": 0, "variants": {}, "edited": {}, "half": half,
 	}
 
 
@@ -320,7 +350,7 @@ static func adjacent_center(grid: Dictionary, dir: String) -> String:
 	var c := parse_point(grid.center)
 	var dy: int = DIRS[dir][0]
 	var dx: int = DIRS[dir][1]
-	var step := GRID_POINTS * int(grid.spacingM)
+	var step := side_points(grid) * int(grid.spacingM)
 	return snap_point((c.I + dy * step) / M_PER_DEG, (c.J + dx * step) / (_cos_band(c.band) * M_PER_DEG), int(grid.spacingM)).id
 
 
@@ -343,9 +373,9 @@ func more_grid_offer(lat: float, lon: float) -> Dictionary:
 	var dir := exit_direction(best, lat, lon)
 	var center := adjacent_center(best, dir)
 	for g in doc.grids:
-		if g.center == center and int(g.spacingM) == int(best.spacingM):
+		if g.center == center and int(g.spacingM) == int(best.spacingM) and half_of(g) == half_of(best):
 			return {}
-	return {"from": best, "dir": dir, "center": center, "spacingM": int(best.spacingM)}
+	return {"from": best, "dir": dir, "center": center, "spacingM": int(best.spacingM), "half": half_of(best)}
 
 
 static func seed_for(grid: Dictionary, point_id: String) -> String:
@@ -449,18 +479,19 @@ func merge_doc(other: Dictionary) -> Dictionary:
 ## Every beacon that's on, as entries (see web/src/drafts.js poolEntries).
 func pool_entries() -> Array:
 	var out := []
-	var half := (GRID_POINTS - 1) / 2
 	for g in doc.grids:
 		if not g.on:
 			continue
 		var source := {"id": g.id, "name": g.name, "kind": "grid", "exclusive": false}
-		var pts := grid_points(g.center, int(g.spacingM))
+		var half := half_of(g)
+		var n := 2 * half + 1
+		var pts := grid_points(g.center, int(g.spacingM), half)
 		for i in pts.size():
 			var pt: Dictionary = pts[i]
 			var edited: bool = g.edited.has(pt.id)
 			out.append({"key": "%s/%s" % [g.id, pt.id], "source": source, "point": pt.id, "lat": pt.lat, "lon": pt.lon,
 				"rangeM": int(g.spacingM), "kind": "edited" if edited else "gen", "createdAt": float(g.createdAt), "tint": g.tint,
-				"seed": "" if edited else seed_for(g, pt.id), "north": half - i / GRID_POINTS, "east": i % GRID_POINTS - half,
+				"seed": "" if edited else seed_for(g, pt.id), "north": half - i / n, "east": i % n - half,
 				"spacingM": int(g.spacingM), "grid": g, "own": true})
 	if doc.prefs.get("plantsOn", true):
 		var source := {"id": "plants", "name": "Planted songs", "kind": "plants", "exclusive": false}
@@ -485,17 +516,18 @@ func _shared_entries() -> Array:
 	var out := []
 	var source := {"id": "shared", "name": "Shared", "kind": "shared", "exclusive": false}
 	var mine: Dictionary = shared.get("mine", {})
-	var half := (GRID_POINTS - 1) / 2
 	for g in shared.doc.grids:
 		if mine.has(g.sharedId):
 			continue
-		var pts := grid_points(g.center, int(g.spacingM))
+		var half := half_of(g)
+		var n := 2 * half + 1
+		var pts := grid_points(g.center, int(g.spacingM), half)
 		for i in pts.size():
 			var pt: Dictionary = pts[i]
 			var ref: String = g.editedRefs.get(pt.id, "")
 			out.append({"key": "%s/%s" % [g.id, pt.id], "source": source, "point": pt.id, "lat": pt.lat, "lon": pt.lon,
 				"rangeM": int(g.spacingM), "kind": "edited" if ref != "" else "gen", "createdAt": float(g.createdAt), "tint": g.tint,
-				"seed": "" if ref != "" else seed_for(g, pt.id), "north": half - i / GRID_POINTS, "east": i % GRID_POINTS - half,
+				"seed": "" if ref != "" else seed_for(g, pt.id), "north": half - i / n, "east": i % n - half,
 				"spacingM": int(g.spacingM), "own": false, "shared": true, "sharedId": g.sharedId, "song_id": ref})
 	for p in shared.doc.plants:
 		if mine.has(p.sharedId):
@@ -520,7 +552,7 @@ static func rows_to_doc(tiles: Array) -> Dictionary:
 				continue
 			gorder.append(r.id)
 			grids[r.id] = {"id": "s-" + r.id, "sharedId": r.id, "name": "Shared", "shared": true, "tint": "#9aa7b8",
-				"spacingM": int(r.spacing_m), "center": r.center, "variant": int(r.get("variant", 0)), "variants": _int_values(r.get("variants", {})),
+				"spacingM": int(r.spacing_m), "half": int(r.get("half", DEFAULT_HALF)), "center": r.center, "variant": int(r.get("variant", 0)), "variants": _int_values(r.get("variants", {})),
 				"editedRefs": r.get("edited", {}), "edited": {}, "createdAt": iso_ms(r.created_at), "on": true}
 		for r in t.get("plants", []):
 			if plants.has(r.id):

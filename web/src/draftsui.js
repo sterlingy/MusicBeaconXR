@@ -144,17 +144,17 @@ export function initDrafts(ctx) {
 
   // ---------------------------------------------------------------- actions
 
-  async function generate(spacingM, center = null) {
+  async function generate(spacingM, center = null, half = D.DEFAULT_HALF) {
     const fix = await presentFix();
     if (!fix) return;
-    const g = D.makeGrid(st.doc, fix, spacingM, { center });
+    const g = D.makeGrid(st.doc, fix, spacingM, { center, half });
     if (center && !D.inGrid(g, fix)) { st.doc.nextNumber--; return msg("You need to be inside the next grid to make it. Walk on a little and try again.", true); }
-    const same = st.doc.grids.find((x) => x.center === g.center && x.spacingM === spacingM);
-    if (same) { st.doc.nextNumber--; return msg(`${same.name} is already here, with the same spacing.`, true); }
+    const same = st.doc.grids.find((x) => x.center === g.center && x.spacingM === spacingM && D.halfOf(x) === half);
+    if (same) { st.doc.nextNumber--; return msg(`${same.name} is already here, with the same size and spacing. New grids are made where you really are (your location), not where you're looking: walk on, or pick another size or spacing.`, true); }
     st.doc.grids.push(g);
     changed();
     goTo(g);
-    msg(`${g.name}: ${D.GRID_POINTS * D.GRID_POINTS} beacons, one every ${ctx.fmtDist(spacingM)}, ${D.gridStats(g).sideKm} km a side, centered where you are.${fix.fake ? " (test location)" : ""}`);
+    msg(`${g.name}: ${D.gridStats(g).beacons} beacons, one every ${ctx.fmtDist(spacingM)}, ${D.gridStats(g).sideKm} km a side, centered where you are.${fix.fake ? " (test location)" : ""}`);
   }
 
   async function plant(song, rangeM) {
@@ -178,7 +178,7 @@ export function initDrafts(ctx) {
     ctx.stopFollow?.("Jumped to your beacons, so the map stopped following your location.");
     ctx.input.target = null;
     engine.setPosition({ lat: pos.lat, lon: pos.lon });
-    ui.closeKm = item.spacingM ? Math.max(2, (D.GRID_POINTS + 3) * item.spacingM / 1000) : 3;
+    ui.closeKm = item.spacingM ? Math.max(2, (D.sidePoints(item) + 3) * item.spacingM / 1000) : 3;
     ctx.setZoom("close");
   }
 
@@ -570,17 +570,47 @@ export function initDrafts(ctx) {
     if (b) act(b.dataset.act, b.closest(".ditem").dataset.id);
   });
 
+  // A new grid's size and spacing, chosen apart (as the local grid), remembered.
+  const pref = (k, d) => { try { return +(localStorage.getItem(k) ?? d); } catch { return d; } };
+  const keep = (k, v) => { try { localStorage.setItem(k, v); } catch { /* not kept */ } };
+  for (const km of D.SIDES_KM) {
+    const o = document.createElement("option");
+    o.value = km;
+    o.textContent = `${km} km`;
+    if (km === pref("beacon.gridSideKm", 10)) o.selected = true;
+    $("dSide").append(o);
+  }
   for (const sp of D.SPACINGS_M) {
     const o = document.createElement("option");
     o.value = sp;
     o.textContent = sp < 1000 ? `${sp} m` : `${sp / 1000} km`;
-    if (sp === 1000) o.selected = true;
+    if (sp === pref("beacon.gridSpacingM", 500)) o.selected = true;
     $("dSpacing").append(o);
   }
-  const sideFor = () => `${D.GRID_POINTS} × ${D.GRID_POINTS} beacons, ${(20 * +$("dSpacing").value) / 1000} km a side`;
-  $("dSpacingHint").textContent = sideFor();
-  $("dSpacing").addEventListener("change", () => { $("dSpacingHint").textContent = sideFor(); });
-  $("dGenerate").addEventListener("click", () => generate(+$("dSpacing").value));
+  const chosenHalf = () => D.halfFor(+$("dSide").value, +$("dSpacing").value);
+  const sizeHint = () => {
+    const h = chosenHalf(), n = 2 * h + 1;
+    $("dSpacingHint").textContent = h ? `${n} × ${n} = ${n * n} beacons, ${(2 * h * +$("dSpacing").value) / 1000} km a side` : "Too many beacons, or spacing too wide, for that size.";
+  };
+  // Spacings that don't fit the size are greyed out; the choice moves to the nearest that fits.
+  const fitSpacing = () => {
+    const opts = [...$("dSpacing").options];
+    opts.forEach((o) => { o.disabled = !D.halfFor(+$("dSide").value, +o.value); });
+    const sel = $("dSpacing").selectedIndex;
+    if (opts[sel]?.disabled) {
+      const ok = opts.map((o, i) => (o.disabled ? -1 : i)).filter((i) => i >= 0);
+      if (ok.length) $("dSpacing").selectedIndex = ok.reduce((a, b) => (Math.abs(b - sel) < Math.abs(a - sel) ? b : a));
+    }
+    sizeHint();
+  };
+  fitSpacing();
+  $("dSide").addEventListener("change", () => { keep("beacon.gridSideKm", $("dSide").value); fitSpacing(); });
+  $("dSpacing").addEventListener("change", () => { keep("beacon.gridSpacingM", $("dSpacing").value); sizeHint(); });
+  $("dGenerate").addEventListener("click", () => {
+    const h = chosenHalf();
+    if (!h) return msg("That spacing doesn't fit that size. Pick another.", true);
+    generate(+$("dSpacing").value, null, h);
+  });
   $("dNewMap").addEventListener("click", () => {
     const name = prompt("Name for the new map:", `Map ${st.doc.nextNumber || 1}`);
     if (name === null) return;
@@ -606,7 +636,7 @@ export function initDrafts(ctx) {
   $("dImport").addEventListener("click", () => $("dFile").click());
   $("dFile").addEventListener("change", (e) => { const f = e.target.files[0]; e.target.value = ""; if (f) importFile(f); });
   $("plantSong").addEventListener("click", () => { const song = ctx.inspectedSong(); if (song) plant(song, +$("dRange").value || D.PLANT_RANGE_M); });
-  $("dOfferGo").addEventListener("click", () => { if (st.offer) generate(st.offer.spacingM, st.offer.center); });
+  $("dOfferGo").addEventListener("click", () => { if (st.offer) generate(st.offer.spacingM, st.offer.center, st.offer.half ?? D.DEFAULT_HALF); });
   $("dOfferNo").addEventListener("click", () => { st.offerDismissed = st.offerKey; $("dOffer").hidden = true; });
 
   // ---------------------------------------------------------------- per frame
