@@ -133,18 +133,18 @@ export function inLower48(p) {
 
 /**
  * Whether a location fix {lat, lon, accuracy} allows making beacons there:
- * inside the lower 48 and accurate enough. Returns null when it does, else why not.
+ * anywhere, when it's accurate enough. Returns null when it does, else why not.
+ * (Sharing is still limited to the lower 48: the server checks.)
  */
 export function fixProblem(fix) {
   if (!fix) return "Making beacons needs your location (GPS): beacons can only be made where you are.";
-  if (!inLower48(fix)) return "For now, beacons can only be made in the lower 48 United States. The globe still plays everywhere.";
   if (!(fix.accuracy <= MAX_FIX_ACCURACY_M)) return `Your location is only accurate to ${Math.round(fix.accuracy)} m; making beacons needs ${MAX_FIX_ACCURACY_M} m or better. Try outdoors, or with GPS on.`;
   return null;
 }
 
-/** Map beacons are placed from anywhere, but still only in the lower 48 for now. */
-export function placeProblem(pos) {
-  return inLower48(pos) ? null : "For now, map beacons can only go in the lower 48 United States.";
+/** Map beacons can go anywhere on this device (sharing them is still lower 48 only). */
+export function placeProblem(_pos) {
+  return null;
 }
 
 // ------------------------------------------------------------------ the document

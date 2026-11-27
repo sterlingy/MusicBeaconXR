@@ -51,7 +51,7 @@ test("a grid is 21 x 21 beacons, spacing apart, centered near you", () => {
   }
 });
 
-test("lower 48 only, with a good enough fix", () => {
+test("anywhere with a good enough fix (the lower 48 outline is for sharing)", () => {
   for (const [name, p] of [["Austin", AUSTIN], ["Seattle", { lat: 47.61, lon: -122.33 }], ["Miami", { lat: 25.76, lon: -80.19 }],
     ["Bangor", { lat: 44.8, lon: -68.77 }], ["Chicago", { lat: 41.88, lon: -87.63 }], ["San Diego", { lat: 32.72, lon: -117.15 }],
     ["Denver", { lat: 39.74, lon: -104.99 }], ["Duluth", { lat: 46.79, lon: -92.1 }], ["Key West", { lat: 24.56, lon: -81.78 }]]) {
@@ -65,7 +65,7 @@ test("lower 48 only, with a good enough fix", () => {
   assert.equal(D.fixProblem(AUSTIN), null);
   assert.match(D.fixProblem(null), /location/);
   assert.match(D.fixProblem({ ...AUSTIN, accuracy: 900 }), /accurate/);
-  assert.match(D.fixProblem({ lat: 51.5, lon: -0.13, accuracy: 5 }), /lower 48/);
+  assert.equal(D.fixProblem({ lat: 51.5, lon: -0.13, accuracy: 5 }), null); // London
 });
 
 test("generate more: the next grid along, touching, same lattice", () => {
@@ -211,7 +211,7 @@ test("custom maps: free placement, blend by name, exclusive silences the rest", 
   sh = D.layerShares(L, pool.exclusive);
   assert.equal(sh.globeShare, 0);
   assert.equal(D.statusLine(sh, pool.exclusive.map((x) => x.name)), "Lakeside walk (exclusive) · outside");
-  assert.equal(D.placeProblem({ lat: 51.5, lon: 0 }) !== null, true);
+  assert.equal(D.placeProblem({ lat: 51.5, lon: 0 }), null);
 });
 
 test("format: validate, normalize, duplicate, merge (import) without overwriting", () => {

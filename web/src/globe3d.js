@@ -4,7 +4,7 @@
 // Drawn on the page's 2D canvas with an orthographic projection (no WebGL,
 // no libraries): a dark sphere lit by the real sun (the day/night line is
 // where it is right now), a soft atmosphere, a starfield, the graticule, the
-// lower 48 outline (where beacons can be made for now), the 614 global
+// continents (coastlines, land shaded a little lighter), the 614 global
 // beacons glowing in their mood colours and pulsing as they sound, your own
 // beacons (grouped by grid when far away), and arcs lifting off the surface
 // from you to the beacons you're hearing.
@@ -15,7 +15,6 @@
 // alone it spins slowly; walking, jumping or following your location brings
 // the camera back to you.
 
-import { LOWER_48 } from "./drafts.js";
 import { drawLines } from "./walkui.js";
 
 const D2R = Math.PI / 180, R2D = 180 / Math.PI;
@@ -390,9 +389,6 @@ export class Globe3D {
       g.setLineDash([]);
       for (const line of this.coasts) { g.beginPath(); this._path(g, line.map(([lon, lat]) => ({ lat, lon }))); g.stroke(); }
     }
-    // Brighter and a little heavier where it's night over the US, so it never gets lost in the dark.
-    const night = this._nightAt(39, -98);
-    this._drawOutline(g, LOWER_48, d * (1 + 0.6 * night), light ? `rgba(180,110,20,${0.6 + 0.25 * night})` : `rgba(255,181,71,${0.6 + 0.35 * night})`, night);
     // Your trail, and a replaying walk's path.
     const lines = this.h.lines?.() || [];
     if (lines.length) drawLines(g, lines, (p) => this.toScreen(p), this.h.moodColor, d);
@@ -505,25 +501,6 @@ export class Globe3D {
     for (let lon = -180; lon <= 180; lon += 2) eq.push({ lat: 0, lon });
     this._path(g, eq);
     g.stroke();
-  }
-
-  _drawOutline(g, ring, d, color, glow = 0) {
-    g.strokeStyle = color;
-    g.lineWidth = 2 * d;
-    g.setLineDash([6 * d, 4 * d]);
-    if (glow > 0) { g.shadowColor = color; g.shadowBlur = 6 * d * glow; }
-    g.beginPath();
-    this._path(g, [...ring, ring[0]].map(([lon, lat]) => ({ lat, lon })));
-    g.stroke();
-    g.setLineDash([]);
-    g.shadowBlur = 0;
-  }
-
-  /** 0 in daylight, rising to 1 a little past dusk, at a lat/lon right now. */
-  _nightAt(lat, lon) {
-    const sun = subsolar(), D = Math.PI / 180;
-    const lit = Math.sin(lat * D) * Math.sin(sun.lat * D) + Math.cos(lat * D) * Math.cos(sun.lat * D) * Math.cos((lon - sun.lon) * D);
-    return Math.max(0, Math.min(1, 0.5 - lit * 2.5));
   }
 
   _glow(g, x, y, r, color, alpha) {

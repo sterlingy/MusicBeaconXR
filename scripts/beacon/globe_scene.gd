@@ -34,10 +34,9 @@ var _status := ""
 var mine: MyBeacons
 var user_mesh: MultiMeshInstance3D
 var outlines: MeshInstance3D
-var us_outline: MeshInstance3D # the lower 48, where beacons can be made for now
 var coasts: MeshInstance3D # the continents' coastlines (Natural Earth, public domain)
 var _coast_lines: Array = []
-var _us_k := -1.0 # the altitude it was last built for
+var _coast_k := -1.0 # the altitude the coastlines were last built for
 var _drawn_pool := {} # the pool the user beacons were last drawn from
 var _drawn_at := Vector2(INF, INF)
 var _drawn_alt := -1.0 # the zoom they were sized for
@@ -363,7 +362,7 @@ func _process(delta: float) -> void:
 	camera.near = clampf(altitude * 0.01, 0.0005, 0.05)
 	input.space.walk_speed = speed.mps / 111320.0 # the speed button's m/s, for real (degrees of latitude per second)
 	_draw_user_beacons()
-	_draw_us_outline()
+	_redraw_coasts()
 	_draw_trail()
 	# Camera: above and a little south of the listener (or of the spot the globe
 	# was turned to), north at the top of the screen.
@@ -713,15 +712,6 @@ func _build_user_beacons() -> void:
 	add_child(coasts)
 	var parsed = JSON.parse_string(FileAccess.get_file_as_string("res://data/coastlines.json"))
 	_coast_lines = parsed.get("lines", []) if parsed is Dictionary else []
-	us_outline = MeshInstance3D.new()
-	us_outline.mesh = ImmediateMesh.new()
-	var um := StandardMaterial3D.new()
-	um.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	um.albedo_color = Color(1.0, 0.71, 0.28, 0.85)
-	um.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	um.cull_mode = BaseMaterial3D.CULL_DISABLED
-	us_outline.material_override = um
-	add_child(us_outline)
 	outlines = MeshInstance3D.new()
 	outlines.mesh = ImmediateMesh.new()
 	var lm := StandardMaterial3D.new()
@@ -820,41 +810,17 @@ func _build_walks() -> void:
 
 
 ## The trail (and a replaying walk's path) as lines just above the surface.
-## The lower 48 outline as a dashed ribbon on the surface, its width kept the
-## same on screen as you zoom (rebuilt when the zoom changes by a tenth).
-func _draw_us_outline() -> void:
-	var k := _k()
-	if _us_k > 0.0 and absf(altitude / _us_k - 1.0) < 0.1:
+## The coastlines keep the same width on screen as you zoom: rebuilt when the
+## zoom changes by a tenth. (The US is drawn like every other coast; beacons
+## can be made anywhere now.)
+func _redraw_coasts() -> void:
+	if _coast_k > 0.0 and absf(altitude / _coast_k - 1.0) < 0.1:
 		return
-	_us_k = altitude
-	_draw_coasts(k)
-	var im: ImmediateMesh = us_outline.mesh
-	im.clear_surfaces()
-	var w := clampf(altitude * 0.006, 0.0004, 0.6) # half-width, scene units
-	var lift := maxf(0.0003, 0.15 * k)
-	var ring: Array = BeaconDrafts.LOWER_48.duplicate()
-	ring.append(ring[0])
-	im.surface_begin(Mesh.PRIMITIVE_TRIANGLES)
-	var dash := 0
-	for i in ring.size() - 1:
-		var a := Vector2(ring[i][0], ring[i][1])
-		var b := Vector2(ring[i + 1][0], ring[i + 1][1])
-		var steps := maxi(1, int(a.distance_to(b) / 0.6))
-		for j in steps:
-			dash += 1
-			if dash % 3 == 0:
-				continue # a gap every third piece: dashed, like the website's
-			var p0 := a.lerp(b, float(j) / steps)
-			var p1 := a.lerp(b, float(j + 1) / steps)
-			var v0 := to_world(p0.y, p0.x, R + lift)
-			var v1 := to_world(p1.y, p1.x, R + lift)
-			var side := (v1 - v0).cross(v0.normalized()).normalized() * w
-			for v in [v0 - side, v0 + side, v1 + side, v0 - side, v1 + side, v1 - side]:
-				im.surface_add_vertex(v)
-	im.surface_end()
+	_coast_k = altitude
+	_draw_coasts(_k())
 
 
-## The continents as thin solid ribbons, rebuilt with the US outline as you zoom.
+## The continents as thin solid ribbons, rebuilt as you zoom (see _redraw_coasts).
 func _draw_coasts(k: float) -> void:
 	var im: ImmediateMesh = coasts.mesh
 	im.clear_surfaces()

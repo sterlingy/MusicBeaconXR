@@ -477,7 +477,7 @@ func _build() -> void:
 	gen2.add_child(_size_hint)
 	gen2.add_child(menu._button("Generate here", func(): _generate_chosen()))
 	v.add_child(gen2)
-	v.add_child(menu._small("Centred on where you really are (needs location, lower 48 US for now). The grid opens on the globe when it's made."))
+	v.add_child(menu._small("Centred on where you really are (needs your location). The grid opens on the globe when it's made."))
 	_fit_spacing()
 
 	_offer_box = VBoxContainer.new()
@@ -500,7 +500,7 @@ func _build() -> void:
 	_range.select(2)
 	pl.add_child(_range)
 	v.add_child(pl)
-	v.add_child(menu._small("Plant uses the song you hear most. Making beacons needs your location (lower 48 US for now)."))
+	v.add_child(menu._small("Plant uses the song you hear most. Making beacons needs your location. Sharing works in the lower 48 US for now."))
 
 
 	var tools := HBoxContainer.new()

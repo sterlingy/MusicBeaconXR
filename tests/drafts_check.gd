@@ -113,7 +113,8 @@ func _init() -> void:
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(tmp))
 	var fix := {"lat": 30.27, "lon": -97.74, "accuracy": 12.0}
 	check(BeaconDrafts.fix_problem(fix) == "", "Austin fix is fine")
-	check(BeaconDrafts.fix_problem({"lat": 51.5, "lon": 0.0, "accuracy": 5.0}).contains("lower 48"), "London is refused")
+	check(BeaconDrafts.fix_problem({"lat": 51.5, "lon": 0.0, "accuracy": 5.0}) == "", "beacons can be made anywhere (London)")
+	check(BeaconDrafts.place_problem(51.5, 0.0) == "", "and placed anywhere")
 	check(BeaconDrafts.fix_problem({"lat": 30.27, "lon": -97.74, "accuracy": 900.0}).contains("accurate"), "a vague fix is refused")
 
 	# Grid size chosen apart from spacing (as web/src/drafts.js).

@@ -144,15 +144,15 @@ static func in_lower_48(lat: float, lon: float) -> bool:
 static func fix_problem(fix) -> String:
 	if fix == null or typeof(fix) != TYPE_DICTIONARY or fix.is_empty():
 		return "Making beacons needs your location (GPS): beacons can only be made where you are."
-	if not in_lower_48(fix.lat, fix.lon):
-		return "For now, beacons can only be made in the lower 48 United States. The globe still plays everywhere."
 	if not (float(fix.get("accuracy", INF)) <= MAX_FIX_ACCURACY_M):
 		return "Your location is only accurate to %d m; making beacons needs %d m or better. Try outdoors, or with GPS on." % [roundi(fix.accuracy), MAX_FIX_ACCURACY_M]
 	return ""
 
 
-static func place_problem(lat: float, lon: float) -> String:
-	return "" if in_lower_48(lat, lon) else "For now, map beacons can only go in the lower 48 United States."
+## Beacons can be made and placed anywhere on this device; sharing them is
+## still limited to the lower 48 (the server checks; see BeaconAccount).
+static func place_problem(_lat: float, _lon: float) -> String:
+	return ""
 
 
 # ---------------------------------------------------------------- the document
