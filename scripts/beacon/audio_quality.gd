@@ -68,12 +68,26 @@ static func save_mode(m: String) -> void:
 
 ## What this device is: mobile or not, memory (GB) and processor cores.
 static func this_device() -> Dictionary:
-	var mem := OS.get_memory_info()
+	var bytes := float(OS.get_memory_info().get("physical", -1))
+	if bytes <= 0.0:
+		bytes = _proc_meminfo() # Android: Godot reports no physical memory there
 	return {
 		"mobile": OS.has_feature("mobile"),
-		"ram_gb": float(mem.get("physical", 0)) / 1073741824.0,
+		"ram_gb": maxf(bytes, 0.0) / 1073741824.0,
 		"cores": OS.get_processor_count(),
 	}
+
+
+## Total memory in bytes from /proc/meminfo (Linux and Android), or 0.
+static func _proc_meminfo() -> float:
+	var f := FileAccess.open("/proc/meminfo", FileAccess.READ)
+	if f == null:
+		return 0.0
+	while not f.eof_reached():
+		var line := f.get_line()
+		if line.begins_with("MemTotal:"):
+			return float(line.trim_prefix("MemTotal:").strip_edges().split(" ")[0]) * 1024.0
+	return 0.0
 
 
 ## The sample tier and starting level for a device and setting.
@@ -135,3 +149,8 @@ func _step(d: int) -> bool:
 ## One line for the readout: "Auto · Medium · audio 34% · full samples".
 func describe() -> String:
 	return "%s · %s · audio %d%% · %s samples" % [MODE_NAMES[mode], level_name(), roundi(load * 100.0), tier]
+
+
+## What the device was judged on: "11.2 GB · 9 cores".
+func device_text() -> String:
+	return "%.1f GB · %d cores" % [float(device.get("ram_gb", 0.0)), int(device.get("cores", 0))]

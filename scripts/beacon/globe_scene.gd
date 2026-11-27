@@ -303,10 +303,12 @@ func _update_active() -> void:
 		m.albedo_color = col
 		m.emission = col
 		m.emission_energy_multiplier = 0.5 + 3.0 * a.w + (1.0 if a.id == player.harmony.id else 0.0)
-		lab.visible = true
-		lab.position = to_world(a.beacon.pos.y, a.beacon.pos.x, R + 22.0 * _k())
-		lab.pixel_size = 0.06 * _k()
-		lab.text = "%s\n%s  %d%%" % [a.song.title, a.beacon.label, roundi(a.w * 100)]
+		# Neighbouring beacons' labels mustn't collide: name and share only (the
+		# panel has the coordinates), quieter ones smaller and lower.
+		lab.visible = a.w >= 0.03
+		lab.position = to_world(a.beacon.pos.y, a.beacon.pos.x, R + (14.0 + 10.0 * a.w) * _k())
+		lab.pixel_size = 0.06 * _k() * (0.7 + 0.3 * a.w)
+		lab.text = "%s\n%d%%" % [a.song.title, roundi(a.w * 100)]
 		lab.modulate = Color.WHITE.lerp(col, 0.35)
 
 

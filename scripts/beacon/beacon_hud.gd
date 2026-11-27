@@ -8,6 +8,10 @@ const ACCENT := Color("ffb547")
 const MUTE_COLOR := Color("e0565b")
 ## The expand button scales the panel up to this (less if the screen is smaller).
 const LARGE_SCALE := 1.6
+## Phones start larger (and their expand button goes larger still); either way
+## the panel shrinks to fit above the buttons along the bottom edge.
+const PHONE_SCALE := 2.0
+const PHONE_LARGE_SCALE := 2.6
 const PREFS := "user://beacon_hud.cfg"
 const ROLE_COLOR := {"drums": Color("ff8a3d"), "bass": Color("2ec4b6"), "keys": Color("f5c04a"), "lead": Color("ff4f9a"), "pluck": Color("9ccc65"), "texture": Color("8b6cf0"), "pad": Color("7ad7ff")}
 
@@ -37,7 +41,7 @@ func _init(p_player: BeaconPlayer) -> void:
 func _ready() -> void:
 	var panel := PanelContainer.new()
 	var sb := StyleBoxFlat.new()
-	sb.bg_color = Color(0.08, 0.1, 0.13, 0.88)
+	sb.bg_color = Color(0.08, 0.1, 0.13, 0.96)
 	sb.border_color = Color(0.25, 0.3, 0.38)
 	sb.set_border_width_all(1)
 	sb.set_corner_radius_all(10)
@@ -79,8 +83,11 @@ func _ready() -> void:
 	v.add_child(HSeparator.new())
 	for role in BeaconPlayer.PARTS:
 		var h := HBoxContainer.new()
+		# Fixed width (room for "Pluck · strings pizz") so every part's bar starts in line.
 		var l := _label(role.capitalize(), 13, Color.WHITE)
-		l.custom_minimum_size.x = 70
+		l.custom_minimum_size.x = 132
+		l.clip_text = true
+		l.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 		h.add_child(l)
 		var bar := ProgressBar.new()
 		bar.max_value = 1.0
@@ -192,10 +199,15 @@ func _toggle(text: String, on_color: Color, on_toggle: Callable) -> Button:
 
 
 func _fit_scale() -> void:
-	var k := 1.0
-	if large and _panel.size.y > 0.0:
-		var room := get_viewport().get_visible_rect().size - Vector2(32, 32)
-		k = maxf(1.0, minf(LARGE_SCALE, minf(room.x / _panel.size.x, room.y / _panel.size.y)))
+	var phone := BuildInfo.is_phone()
+	var want := (PHONE_LARGE_SCALE if large else PHONE_SCALE) if phone else (LARGE_SCALE if large else 1.0)
+	var k := want
+	if _panel.size.y > 0.0:
+		var view := get_viewport().get_visible_rect().size
+		# Phones keep the bottom-left My beacons button clear.
+		var bottom := FieldMenu.BAR * FieldMenu.PHONE_SCALE if phone else 0.0
+		var room := view - Vector2(32, 32 + bottom)
+		k = minf(want, minf(room.x * 0.5 / _panel.size.x, room.y / _panel.size.y)) if phone else maxf(1.0, minf(want, minf(room.x / _panel.size.x, room.y / _panel.size.y)))
 	if not is_equal_approx(_panel.scale.x, k):
 		_panel.scale = Vector2(k, k)
 
@@ -243,4 +255,6 @@ func _process(delta: float) -> void:
 	if player.quality:
 		_quality.text = "Sound: " + player.quality.describe()
 		_quality_btn.text = AudioQuality.MODE_NAMES[player.quality.mode]
+	# Keyboard hints mean nothing on a phone, and the room is better spent on the parts.
+	_help.visible = not BuildInfo.is_phone()
 	_help.text = ("Space stop" if Transport.running else "Space PLAY") + "  ·  " + help_text

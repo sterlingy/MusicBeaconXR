@@ -76,6 +76,7 @@ var quality: AudioQuality = null
 
 
 func _ready() -> void:
+	add_to_group("beacon_player")
 	if quality == null:
 		quality = AudioQuality.new()
 	for role in PARTS:

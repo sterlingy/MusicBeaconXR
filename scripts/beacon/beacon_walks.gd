@@ -38,6 +38,7 @@ var _audio_on := false
 var _audio_started := 0.0
 var _toggle: Button
 var _panel: PanelContainer
+var _scroll: ScrollContainer
 var _list: VBoxContainer
 var _msg: Label
 var _rec_btn: Button
@@ -443,8 +444,11 @@ func _fit() -> void:
 	var ts := minf(ui_scale, (view.x - 24.0) / maxf(1.0, _toggle.size.x))
 	_toggle.scale = Vector2(ts, ts)
 	_toggle.position = Vector2(view.x - 12.0 - _toggle.size.x * ts, view.y - 12.0 - _toggle.size.y * ts)
-	var room := _toggle.position.y - 20.0
-	var s := maxf(0.4, minf(ui_scale, minf(room / maxf(1.0, _panel.size.y), (view.x - 24.0) / maxf(1.0, _panel.size.x))))
+	# Full size above the toggle, below the top buttons; what doesn't fit scrolls.
+	var room := _toggle.position.y - 8.0 - FieldMenu.BAR * ts
+	var s := minf(ui_scale, (view.x - 24.0) / maxf(1.0, _panel.size.x))
+	FieldMenu.fit_scroll(_scroll, room / s - 26.0)
+	_panel.reset_size()
 	_panel.scale = Vector2(s, s)
 	_panel.position = Vector2(view.x - 12.0 - _panel.size.x * s, _toggle.position.y - 8.0 - _panel.size.y * s)
 
@@ -463,8 +467,8 @@ func _build() -> void:
 	_panel.mouse_filter = Control.MOUSE_FILTER_STOP
 	_panel.visible = false
 	var sb := StyleBoxFlat.new()
-	sb.bg_color = Color(0.06, 0.08, 0.11, 0.94)
-	sb.border_color = Color("2a3644")
+	sb.bg_color = FieldMenu.POP_BG
+	sb.border_color = FieldMenu.POP_BORDER
 	sb.set_border_width_all(1)
 	sb.set_corner_radius_all(12)
 	sb.set_content_margin_all(12)
@@ -473,7 +477,8 @@ func _build() -> void:
 	var v := VBoxContainer.new()
 	v.custom_minimum_size = Vector2(340, 0)
 	v.add_theme_constant_override("separation", 8)
-	_panel.add_child(v)
+	_scroll = FieldMenu.scroller(v)
+	_panel.add_child(_scroll)
 	v.add_child(menu._heading("WALKS · TRAIL, RECORDINGS, SOUND"))
 	var r1 := HBoxContainer.new()
 	_rec_btn = menu._button("● Record walk", func(): stop_recording() if not recording.is_empty() else start_recording())
@@ -495,8 +500,8 @@ func _build() -> void:
 	_replay_box.visible = false
 	v.add_child(_replay_box)
 	var scroll := ScrollContainer.new()
-	scroll.custom_minimum_size = Vector2(0, 200)
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED # grows; the panel scrolls
 	_list = VBoxContainer.new()
 	_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.add_child(_list)

@@ -26,8 +26,18 @@ var _click: Button
 var _fields_btn: Button
 var _field_btns := {}
 var _row: HBoxContainer
+var _scroll: ScrollContainer
+var _sound_btns := {} # quality mode -> button
+var _sound_now: Label
 ## 1 on desktops, PHONE_SCALE on phones (dev: --ui-scale=N).
 var ui_scale := 1.0
+## Unscaled height kept free for a bar of buttons (this menu's row at the top,
+## the Walks and My beacons buttons at the bottom), margins included.
+const BAR := 60.0
+## Pop-out panels (Fields, Walks, My beacons) sit a shade lighter than the
+## world and the readout, so they read as a layer on top.
+const POP_BG := Color(0.14, 0.175, 0.23, 0.97)
+const POP_BORDER := Color("44566d")
 
 
 func _init(p_kind: String) -> void:
@@ -66,6 +76,8 @@ func _ready() -> void:
 func _process(_delta: float) -> void:
 	_fit()
 	_play.text = "■ Stop" if Transport.running else "▶ Play"
+	if panel.visible:
+		_show_quality()
 	if _click.button_pressed != Transport.metronome_on:
 		_click.set_pressed_no_signal(Transport.metronome_on)
 
@@ -77,7 +89,12 @@ func _fit() -> void:
 	var s := minf(ui_scale, (view.x - 24.0) / maxf(1.0, _row.size.x))
 	_row.pivot_offset = Vector2(_row.size.x, 0)
 	_row.scale = Vector2(s, s)
-	var ps := minf(s, minf((view.x - 24.0) / maxf(1.0, panel.size.x), (view.y - _row.size.y * s - 32.0) / maxf(1.0, panel.size.y)))
+	# Full size, between this row and the buttons along the bottom edge; what
+	# doesn't fit scrolls.
+	var room := view.y - 12.0 - _row.size.y * s - 8.0 - BAR * s
+	var ps := minf(s, (view.x - 24.0) / maxf(1.0, panel.size.x))
+	fit_scroll(_scroll, room / ps - 30.0)
+	panel.reset_size()
 	panel.offset_top = 12.0 + _row.size.y * s + 8.0
 	panel.pivot_offset = Vector2(panel.size.x, 0)
 	panel.scale = Vector2(ps, ps)
@@ -139,8 +156,8 @@ func _build_panel() -> void:
 	panel.grow_horizontal = Control.GROW_DIRECTION_BEGIN # wider content grows leftward, never off screen
 	panel.mouse_filter = Control.MOUSE_FILTER_STOP # taps on the panel never walk the listener
 	var sb := StyleBoxFlat.new()
-	sb.bg_color = Color(0.06, 0.085, 0.115, 0.96)
-	sb.border_color = Color("2a3644")
+	sb.bg_color = POP_BG
+	sb.border_color = POP_BORDER
 	sb.set_border_width_all(1)
 	sb.set_corner_radius_all(10)
 	sb.set_content_margin_all(14)
@@ -148,7 +165,8 @@ func _build_panel() -> void:
 	add_child(panel)
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 10)
-	panel.add_child(v)
+	_scroll = scroller(v)
+	panel.add_child(_scroll)
 
 	v.add_child(_heading("FIELD"))
 	var fields := HBoxContainer.new()
@@ -201,6 +219,21 @@ func _build_panel() -> void:
 	status.visible = false
 	v.add_child(status)
 
+	# Sound quality (AudioQuality): Auto fits the device, High plays the full
+	# samples at full quality, Light saves battery. Only where a beacon player runs.
+	v.add_child(_heading("SOUND QUALITY"))
+	var modes := HBoxContainer.new()
+	modes.add_theme_constant_override("separation", 6)
+	v.add_child(modes)
+	for m in AudioQuality.MODES:
+		var mode: String = m
+		var b := _button(AudioQuality.MODE_NAMES[mode], func(): _pick_quality(mode), true)
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		_sound_btns[mode] = b
+		modes.add_child(b)
+	_sound_now = _small("")
+	v.add_child(_sound_now)
+
 	v.add_child(_heading("OPEN"))
 	var links := HBoxContainer.new()
 	links.add_theme_constant_override("separation", 6)
@@ -214,6 +247,52 @@ func _build_panel() -> void:
 	var build := _small("Build %s · %s · UI ×%s" % [BuildInfo.BUILD, OS.get_name(), _num(ui_scale)])
 	build.add_theme_font_size_override("font_size", 11)
 	v.add_child(build)
+
+
+## Wraps a panel's content so it scrolls when the screen is too short for it
+## (a drag scrolls; a tap still presses buttons). fit_scroll() sizes it.
+static func scroller(content: Control) -> ScrollContainer:
+	var sc := ScrollContainer.new()
+	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	sc.scroll_deadzone = 10
+	sc.add_child(content)
+	return sc
+
+
+## A scroller's height: all of its content when that fits in `avail`
+## (unscaled pixels), else `avail`, with room for the scroll bar.
+static func fit_scroll(sc: ScrollContainer, avail: float) -> void:
+	var content: Control = sc.get_child(0)
+	var want := content.get_combined_minimum_size()
+	var h := minf(want.y, maxf(120.0, avail))
+	var w := want.x + (14.0 if h < want.y else 0.0)
+	if not sc.custom_minimum_size.is_equal_approx(Vector2(w, h)):
+		sc.custom_minimum_size = Vector2(w, h)
+
+
+func _player() -> BeaconPlayer:
+	return get_tree().get_first_node_in_group("beacon_player") as BeaconPlayer
+
+
+func _pick_quality(mode: String) -> void:
+	var p := _player()
+	if p:
+		p.set_quality_mode(mode)
+	else:
+		AudioQuality.save_mode(mode)
+
+
+## The sound section: which setting is lit, and what it's playing at right now.
+func _show_quality() -> void:
+	var p := _player()
+	var mode := p.quality.mode if p and p.quality else AudioQuality.saved_mode()
+	for m in _sound_btns:
+		_sound_btns[m].set_pressed_no_signal(m == mode)
+	if p and p.quality:
+		var q := p.quality
+		_sound_now.text = "Playing at %s with the %s samples · audio load %d%% · this device: %s" % [q.level_name(), q.tier, roundi(q.load * 100.0), q.device_text()]
+	else:
+		_sound_now.text = "Applies when music plays."
 
 
 func _pick_field(k: String) -> void:
