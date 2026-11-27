@@ -104,7 +104,7 @@ func _build_input() -> void:
 	flight_card.stop_requested.connect(func(): menu.stop_flight())
 	input = ListenerInput.new()
 	input.name = "ListenerInput"
-	input.add_to_group("listener_input") # the Fields panel's Auto-walk switch finds it
+	input.add_to_group("listener_input") # the Options panel's Auto-walk switch finds it
 	input.space = ListenerSpace.geo(WALK_DEG)
 	input.add_child(KeyboardSource.new())
 	var ptr := PointerSource.new()
@@ -541,7 +541,7 @@ func _parse_args() -> void:
 			_follow_flight_dev(a.trim_prefix("--flight="))
 		elif a == "--wander":
 			input.wander = true
-		elif a == "--menu": # dev: the Fields panel
+		elif a == "--menu": # dev: the Options panel
 			get_tree().create_timer(0.3).timeout.connect(func(): menu.set_open(true, false))
 		elif a == "--speed-open": # dev: the Wander pop-up
 			get_tree().create_timer(0.3).timeout.connect(func(): speed.set_open(true, false))
@@ -698,7 +698,7 @@ func _stop_following(why: String) -> void:
 var _followed := false # had a fix since following started
 
 
-## "Follow my location" (Fields) on the globe: the listener stands where the
+## "Follow my location" (Options) on the globe: the listener stands where the
 ## device is and moves with it; the first fix zooms in close. Paused while
 ## following a flight. Same setting as the local grid's.
 func _start_follow() -> void:

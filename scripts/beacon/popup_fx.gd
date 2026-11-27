@@ -1,6 +1,6 @@
 class_name PopupFx
 extends RefCounted
-## How pop-out windows (Fields, Walks, My beacons, the Jump / Move card, the
+## How pop-out windows (Options, Walks, My beacons, the Jump / Move card, the
 ## flight card) come and go: one open at a time, each popping open from its
 ## own corner with a little overshoot and fading in, shrinking and fading out
 ## on close, with a swoosh each way. Panels are frosted glass: the world shows

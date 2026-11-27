@@ -40,7 +40,7 @@ func _ready() -> void:
 	await get_tree().create_timer(0.1).timeout
 	g.menu.set_open(true)
 	await get_tree().create_timer(0.1).timeout
-	check(not PopupFx.is_open(g.speed._panel), "opening Fields closes the speed pop-up")
+	check(not PopupFx.is_open(g.speed._panel), "opening Options closes the speed pop-up")
 	g.queue_free()
 	await get_tree().process_frame
 	# The globe: real metres per second too.

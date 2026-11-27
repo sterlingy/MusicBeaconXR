@@ -67,7 +67,7 @@ func _init() -> void:
 
 
 func _ready() -> void:
-	add_to_group("my_beacons") # the Fields panel's flight section finds it
+	add_to_group("my_beacons") # the Options panel's flight section finds it
 	drafts = BeaconDrafts.load_file()
 	ui_scale = FieldMenu.PHONE_SCALE if BuildInfo.is_phone() else 1.0
 	for a in OS.get_cmdline_user_args():
@@ -598,7 +598,7 @@ func _build() -> void:
 
 ## Starts following a flight (number as on a ticket, DL934, or tail number,
 ## N733YX) and flies the globe to it. Returns "" or why it couldn't.
-## The Fields panel's "Follow a flight" calls this.
+## The Options panel's "Follow a flight" calls this.
 func start_flight(q: String) -> String:
 	var why := await flight.start(q)
 	if why == "":

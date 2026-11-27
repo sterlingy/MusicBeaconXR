@@ -3,14 +3,14 @@ extends Node3D
 ## pillars on a plane, a listener you walk around, and the blend playing on
 ## SynthKit. The starting point for the XR version (scenes/xr_field.tscn).
 ##
-## Which one it shows comes from FieldPrefs (the ☰ Fields panel). The local
+## Which one it shows comes from FieldPrefs (the ☰ Options panel). The local
 ## grid follows the device's location (GeoLocation), makes each beacon's song
 ## as it comes near (SongGen, the same songs as the website), and re-centers
 ## as you travel. Its beacons can be a kilometer apart, so the view is scaled
 ## to the spacing (`view_scale`): the scene always looks like the test grid.
 ##
 ## Controls: WASD / arrows walk, click the ground to walk there, Space play/stop,
-## T auto-walk, mouse wheel zoom, F the Fields panel.
+## T auto-walk, mouse wheel zoom, F the Options panel.
 ## Dev: `-- --shot=<path> [--frames=N] [--pos=x,y] [--play] [--field=grid|local] [--at=lat,lon] [--menu]`
 ## saves a screenshot and quits.
 
@@ -111,7 +111,7 @@ func _build_input() -> void:
 	add_child(_marker)
 	input = ListenerInput.new()
 	input.name = "ListenerInput"
-	input.add_to_group("listener_input") # the Fields panel's Auto-walk switch finds it
+	input.add_to_group("listener_input") # the Options panel's Auto-walk switch finds it
 	_set_space()
 	input.add_child(KeyboardSource.new())
 	var ptr := PointerSource.new()
@@ -518,7 +518,7 @@ func _update_world(delta: float) -> void:
 
 
 func help_text() -> String:
-	return "WASD walk · drag to pan · tap a beacon or long-press to go · T auto-walk%s · wheel zoom · F fields · I instruments · M click" % (" (on)" if input.wander else "")
+	return "WASD walk · drag to pan · tap a beacon or long-press to go · T auto-walk%s · wheel zoom · F options · I instruments · M click" % (" (on)" if input.wander else "")
 
 
 func _check_shot() -> void:

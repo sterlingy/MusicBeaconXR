@@ -1,6 +1,6 @@
 class_name FieldMenu
 extends CanvasLayer
-## The buttons at the top right of a field (Play, Click, ☰ Fields) and the
+## The buttons at the top right of a field (Play, ☰ Options) and the
 ## pop-out panel behind ☰: pick the field (test grid, globe, local grid), set
 ## up the local grid (size, spacing, follow my location), and open the
 ## Instrument Table, the Synths or the manual. Used by the grid / local field
@@ -37,7 +37,7 @@ var ui_scale := 1.0
 ## Unscaled height kept free for a bar of buttons (this menu's row at the top,
 ## the Walks and My beacons buttons at the bottom), margins included.
 const BAR := 60.0
-## Pop-out panels (Fields, Walks, My beacons) sit a shade lighter than the
+## Pop-out panels (Options, Walks, My beacons) sit a shade lighter than the
 ## world and the readout, so they read as a layer on top.
 const POP_BG := Color(0.14, 0.175, 0.23, 0.97)
 const POP_BORDER := Color("44566d")
@@ -76,7 +76,7 @@ func _ready() -> void:
 			ui_scale = float(a.trim_prefix("--ui-scale="))
 	_play = _button("▶ Play", func(): Transport.toggle())
 	row.add_child(_play)
-	_fields_btn = _button("☰ Fields", func(): set_open(not PopupFx.is_open(panel)), true)
+	_fields_btn = _button("☰ Options", func(): set_open(not PopupFx.is_open(panel)), true)
 	row.add_child(_fields_btn)
 	_build_panel()
 	PopupFx.glass(panel)
@@ -92,7 +92,7 @@ func _process(_delta: float) -> void:
 
 ## Scales the button row and the panel from their top-right corners; the
 ## panel shrinks if it wouldn't fit on the screen at full scale.
-## The scale for the screen-corner buttons (Play, Fields, My beacons, Wander,
+## The scale for the screen-corner buttons (Play, Options, My beacons, Wander,
 ## Walks): a little under the panels' scale on phones, so they leave the view room.
 static func button_scale(ui: float) -> float:
 	return ui * (0.8 if ui > 1.5 else 1.0)
