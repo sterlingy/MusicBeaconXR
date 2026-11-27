@@ -37,3 +37,5 @@ samples_src/
 # Sample pack build log (the packs themselves, samples/ and web/samples/, are committed)
 tools/build_samples.log
 tests_scene.log
+# Android build template (Project > Install Android Build Template); used by gradle builds (Android XR)
+/android/
