@@ -32,6 +32,7 @@ var _collapse: Button
 ## Collapsed: only the key, chord and tempo show (phones start this way, out of the map's way).
 var collapsed := false
 var _body: Array[Control] = []
+var _links: Array[Control] = [] # Instruments and Synths, in the top row while open
 
 
 func _init(p_player: BeaconPlayer) -> void:
@@ -65,9 +66,28 @@ func _ready() -> void:
 	v.add_theme_constant_override("separation", 8)
 	panel.add_child(v)
 	var head := HBoxContainer.new()
+	head.add_theme_constant_override("separation", 8)
 	var title := _label(title_text, 13, ACCENT)
-	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	head.add_child(title)
+	# Instruments and Synths sit in the open panel's top row, between the title
+	# and the fold button (they fold away with the parts).
+	var gap_l := Control.new()
+	gap_l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	head.add_child(gap_l)
+	var menu := FieldMenu.new("grid")
+	for l in [["Instruments", "res://scenes/instrument_table.tscn", "3D instruments to play with your hands (I)"],
+			["Synths", "res://scenes/studio.tscn", "Play and shape each instrument"]]:
+		var path: String = l[1]
+		var b := menu._button(l[0], func(): _open_scene(path))
+		b.tooltip_text = l[2]
+		b.custom_minimum_size = Vector2(0, 32)
+		b.add_theme_font_size_override("font_size", 14)
+		head.add_child(b)
+		_links.append(b)
+	menu.free()
+	var gap_r := Control.new()
+	gap_r.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	head.add_child(gap_r)
 	_collapse = _collapse_button()
 	head.add_child(_collapse)
 	v.add_child(head)
@@ -181,11 +201,16 @@ func set_collapsed(on: bool, sound := true) -> void:
 	if not on and sound and is_inside_tree():
 		PopupFx.claim(self) # one window at a time
 	collapsed = on
-	for c in _body:
+	for c in _body + _links:
 		c.visible = not on
 	_collapse.tooltip_text = "Show the parts" if on else "Fold the panel away"
 	_collapse.queue_redraw()
 	_panel.reset_size()
+
+
+func _open_scene(path: String) -> void:
+	get_tree().quit_on_go_back = true
+	get_tree().change_scene_to_file(path)
 
 
 ## A finger-sized button with a chevron: down to unfold the panel, up to fold it.

@@ -298,9 +298,8 @@ func _build_panel() -> void:
 	var links := HBoxContainer.new()
 	links.add_theme_constant_override("separation", 6)
 	v.add_child(links)
-	for l in [["Instruments", func(): open_scene("res://scenes/instrument_table.tscn")],
-			["Synths", func(): open_scene("res://scenes/studio.tscn")],
-			["Manual ↗", func(): OS.shell_open(MANUAL_URL)]]:
+	# Instruments and Synths are in the song panel's top row.
+	for l in [["Manual ↗", func(): OS.shell_open(MANUAL_URL)]]:
 		var b := _button(l[0], l[1])
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		links.add_child(b)
