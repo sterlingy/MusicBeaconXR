@@ -34,9 +34,6 @@ analysis/
 # Sample libraries (sources for a curated pack); never in git or app exports
 samples_src/
 
-# Built sample packs (tools/build_samples.py rebuilds them from samples_src/).
-# Kept out of git until we settle where ~125 MB of audio should live.
-samples/
-web/samples/
+# Sample pack build log (the packs themselves, samples/ and web/samples/, are committed)
 tools/build_samples.log
 tests_scene.log

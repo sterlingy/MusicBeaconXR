@@ -103,4 +103,4 @@ tools/.venv/Scripts/python.exe tools/build_samples.py
 node web/tools/calibrate_samples.mjs
 ```
 
-The export presets carry the right tier (desktop: full, Android and Quest: phone). The built packs are git-ignored for now, so the website plays only synths until the web pack is published. `web/tools/sampler_render.mjs` renders a program offline for checking, and `tests/sampler_check.gd` checks the Sampler in the app.
+The export presets carry the right tier (desktop: full, Android and Quest: phone). The built packs are committed, so a fresh checkout builds and the website serves the web pack. `web/tools/sampler_render.mjs` renders a program offline for checking, and `tests/sampler_check.gd` checks the Sampler in the app.

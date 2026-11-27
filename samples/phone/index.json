@@ -1,0 +1,168 @@
+{
+ "tier": "phone",
+ "license": "CC0 1.0 - VSCO 2 Community Edition (Versilian Studios), https://github.com/sgossner/VSCO-2-CE",
+ "programs": [
+  {
+   "id": "piano",
+   "name": "Upright Piano",
+   "role": "keys",
+   "zones": 46,
+   "bytes": 1729219,
+   "memory": 13596924,
+   "level": 0.274
+  },
+  {
+   "id": "strings",
+   "name": "String Section",
+   "role": "pad",
+   "zones": 33,
+   "bytes": 994987,
+   "memory": 6330944,
+   "level": 0.213
+  },
+  {
+   "id": "strings_pizz",
+   "name": "Pizzicato Strings",
+   "role": "pluck",
+   "zones": 64,
+   "bytes": 1044426,
+   "memory": 7591790,
+   "level": 0.209
+  },
+  {
+   "id": "harp",
+   "name": "Harp",
+   "role": "pluck",
+   "zones": 23,
+   "bytes": 880778,
+   "memory": 6467510,
+   "level": 0.209
+  },
+  {
+   "id": "horn",
+   "name": "French Horn",
+   "role": "lead",
+   "zones": 19,
+   "bytes": 422687,
+   "memory": 3643942,
+   "level": 0.282
+  },
+  {
+   "id": "trumpet",
+   "name": "Trumpet",
+   "role": "lead",
+   "zones": 20,
+   "bytes": 593800,
+   "memory": 3837936,
+   "level": 0.4
+  },
+  {
+   "id": "trombone",
+   "name": "Trombone",
+   "role": "pad",
+   "zones": 22,
+   "bytes": 646529,
+   "memory": 4216618,
+   "level": 0.244
+  },
+  {
+   "id": "tuba",
+   "name": "Tuba Staccato",
+   "role": "bass",
+   "zones": 32,
+   "bytes": 316399,
+   "memory": 1703886,
+   "level": 1.442
+  },
+  {
+   "id": "flute",
+   "name": "Flute",
+   "role": "lead",
+   "zones": 13,
+   "bytes": 388847,
+   "memory": 2495338,
+   "level": 0.824
+  },
+  {
+   "id": "clarinet",
+   "name": "Clarinet",
+   "role": "lead",
+   "zones": 22,
+   "bytes": 644046,
+   "memory": 4221710,
+   "level": 0.428
+  },
+  {
+   "id": "oboe",
+   "name": "Oboe",
+   "role": "lead",
+   "zones": 18,
+   "bytes": 543687,
+   "memory": 3455070,
+   "level": 0.32
+  },
+  {
+   "id": "bassoon",
+   "name": "Bassoon",
+   "role": "bass",
+   "zones": 25,
+   "bytes": 642559,
+   "memory": 4793310,
+   "level": 1.257
+  },
+  {
+   "id": "contrabass",
+   "name": "Contrabass",
+   "role": "bass",
+   "zones": 26,
+   "bytes": 751491,
+   "memory": 4982640,
+   "level": 1.63
+  },
+  {
+   "id": "contrabass_pizz",
+   "name": "Contrabass Pizzicato",
+   "role": "bass",
+   "zones": 40,
+   "bytes": 1009750,
+   "memory": 7396346,
+   "level": 1.199
+  },
+  {
+   "id": "marimba",
+   "name": "Marimba",
+   "role": "pluck",
+   "zones": 10,
+   "bytes": 106469,
+   "memory": 2369904,
+   "level": 0.165
+  },
+  {
+   "id": "glock",
+   "name": "Glockenspiel",
+   "role": "pluck",
+   "zones": 6,
+   "bytes": 211278,
+   "memory": 1764518,
+   "level": 0.159
+  },
+  {
+   "id": "xylo",
+   "name": "Xylophone",
+   "role": "pluck",
+   "zones": 8,
+   "bytes": 76419,
+   "memory": 1088050,
+   "level": 0.254
+  },
+  {
+   "id": "orch_kit",
+   "name": "Orchestral Percussion",
+   "role": "drums",
+   "zones": 57,
+   "bytes": 957266,
+   "memory": 7136974,
+   "level": 2.428
+  }
+ ]
+}
