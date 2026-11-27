@@ -79,6 +79,13 @@ var quality: AudioQuality = null
 ## Orchestral samples on (the songs' sampled instruments) or off (every part
 ## plays its own synth). Remembered (FieldPrefs "samples").
 var samples_on := true
+## Remix (scripts/beacon/remix.gd): the listener's own settings over whatever
+## plays. Off, everything plays as written. Remembered (FieldPrefs "remix").
+var remix := Remix.defaults()
+var _remix_cache := {} # beacon id -> {src (the song), sig, song (remixed)}
+var _held: Array = [] # Hold: the blend frozen (its own, unremixed songs)
+## Sent when the Remix settings change (the song panel and the Remix window listen).
+signal remix_changed
 
 
 func _ready() -> void:
@@ -109,6 +116,8 @@ func _ready() -> void:
 	if ClassDB.class_has_method("JamSynth", "sampler_begin"):
 		samples = SampleBank.new(quality.tier)
 	samples_on = bool(FieldPrefs.get_value("samples", true))
+	remix = Remix.normalize(FieldPrefs.get_value("remix", {}))
+	remix.hold = false # Hold is for the moment, not between launches
 	_apply_quality()
 	Transport.register(self)
 	_refresh()
@@ -176,21 +185,32 @@ func _refresh() -> void:
 	if songs.is_empty() and not song_source.is_valid() and not layer.is_valid():
 		return
 	active = []
-	for n in field.weigh(pos, active_count, sharpness):
-		if not song_for(n.id).is_empty():
-			active.append({"id": n.id, "w": n.w, "d": n.d, "beacon": n.beacon, "song": songs[n.id]})
-	layer_info = layer.call(pos) if layer.is_valid() else {}
-	if not layer_info.is_empty():
-		var share := float(layer_info.globe_share)
-		var both := []
-		if share > 0.0:
-			for a in active:
-				a.w *= share
-				both.append(a)
-		both.append_array(layer_info.entries)
-		# Loudest first, so readouts that show three show the ones you hear.
-		both.sort_custom(func(x, y): return x.w > y.w)
-		active = both
+	if not _held.is_empty():
+		# Hold: the blend stays as it was when Hold went on, wherever you walk.
+		for a in _held:
+			active.append(a.duplicate())
+	else:
+		for n in field.weigh(pos, active_count, sharpness):
+			if not song_for(n.id).is_empty():
+				active.append({"id": n.id, "w": n.w, "d": n.d, "beacon": n.beacon, "song": songs[n.id]})
+		layer_info = layer.call(pos) if layer.is_valid() else {}
+		if not layer_info.is_empty():
+			var share := float(layer_info.globe_share)
+			var both := []
+			if share > 0.0:
+				for a in active:
+					a.w *= share
+					both.append(a)
+			both.append_array(layer_info.entries)
+			# Loudest first, so readouts that show three show the ones you hear.
+			both.sort_custom(func(x, y): return x.w > y.w)
+			active = both
+	# Remix on: every song you hear goes through your settings (cached per song and settings).
+	if remix.on and not Remix.is_neutral(remix):
+		var sig := Remix.signature(remix)
+		for a in active:
+			a["original"] = a.song
+			a.song = _remixed(String(a.id), a.song, sig)
 	mix = BeaconMixer.blend(active)
 	var pad := 0.0
 	for a in active:
@@ -198,6 +218,49 @@ func _refresh() -> void:
 	mix["pad"] = {"gain": pad, "params": {}, "sources": []}
 	if harmony.id == null and not active.is_empty():
 		harmony.update(active, 0)
+
+
+# ---- Remix
+
+## New Remix settings (remembered); Hold freezes or frees the blend.
+func set_remix(settings: Dictionary) -> void:
+	var s := Remix.normalize(settings)
+	if s.hold and _held.is_empty():
+		for a in active:
+			var h: Dictionary = a.duplicate()
+			h.song = a.get("original", a.song)
+			h.erase("original")
+			_held.append(h)
+	if not s.hold:
+		_held = []
+	remix = s
+	var keep := s.duplicate(true)
+	keep.hold = false
+	FieldPrefs.set_value("remix", keep)
+	_refresh()
+	remix_changed.emit()
+
+
+func _remixed(id: String, song: Dictionary, sig: String) -> Dictionary:
+	var c: Dictionary = _remix_cache.get(id, {})
+	if not c.is_empty() and c.sig == sig and is_same(c.src, song):
+		return c.song
+	var out := Remix.remix_song(song, remix)
+	if _remix_cache.size() > 400:
+		_remix_cache.clear()
+	_remix_cache[id] = {"src": song, "sig": sig, "song": out}
+	return out
+
+
+## "Place my version": the song you hear most, with your settings baked in ({} when nothing plays).
+func remixed_top() -> Dictionary:
+	var top: Dictionary = {}
+	for a in active:
+		if top.is_empty() or a.w > top.w:
+			top = a
+	if top.is_empty():
+		return {}
+	return Remix.bake(top.get("original", top.song), remix)
 
 
 ## Mute and solo, like a mixing desk: solo wins over mute.
@@ -455,7 +518,8 @@ func transport_stopped() -> void:
 static func pad_level(song: Dictionary) -> float:
 	var energy := float(song.get("energy", 0.5))
 	var mood_k := 1.0 if song.get("mood", "") in PAD_MOODS else 0.6
-	return clampf(0.75 - energy * 0.6, 0.12, 0.7) * mood_k * PAD_MIX
+	# A remixed song may carry its own pad level (Remix's pad slider).
+	return clampf(0.75 - energy * 0.6, 0.12, 0.7) * mood_k * PAD_MIX * float(song.get("padLevel", 1.0))
 
 
 ## The pad holds the harmony's chord (root, third, fifth, seventh), tied across

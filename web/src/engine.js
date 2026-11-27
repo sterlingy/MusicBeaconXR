@@ -10,6 +10,7 @@ import { blend, Harmony, stepEvents, targetTempo } from "./mixer.js";
 import { Bus, makeInstruments } from "./synths.js";
 import { songPosition } from "./form.js";
 import { makeKitInstruments, padGain } from "./kit/kitplayer.js";
+import * as Remix from "./remix.js";
 
 /** "kit": SynthKit's instruments, as in the app (default). "web": the old browser synths (synths.js). */
 export const SYNTH_MODES = ["web", "kit"];
@@ -39,6 +40,10 @@ export class BeaconEngine {
     this.beatAt = (t) => this.anchor.beat + ((t - this.anchor.t) * this.anchor.bpm) / 60;
     this.synthMode = "kit";
     this.samplesOn = true; // orchestral samples, or every part on its own synth
+    // Remix (src/remix.js): the listener's own settings over whatever plays. Off: untouched.
+    this.remix = Remix.defaults();
+    this._remixCache = new Map(); // song -> {sig, song}
+    this._held = null; // Hold: the blend frozen (its own, unremixed songs)
     // Optional extra layer on the globe (the user's own beacons, src/drafts.js):
     // layer(pos, opts) -> {globeShare, entries: [{id, w, d, beacon, song}]},
     // and layerSong(id) -> the song for one of its ids (null if not its own).
@@ -83,6 +88,31 @@ export class BeaconEngine {
     return s;
   }
 
+  /** Remix settings (src/remix.js): applied from the next refresh; Hold freezes or frees the blend. */
+  setRemix(settings) {
+    const s = Remix.normalize(settings);
+    if (s.hold && !this._held) this._held = this.active.map((a) => ({ ...a, song: a.original || a.song }));
+    if (!s.hold) this._held = null;
+    this.remix = s;
+    this.refresh();
+  }
+
+  _remixed(song, sig) {
+    const c = this._remixCache.get(song);
+    if (c && c.sig === sig) return c.song;
+    const out = Remix.remixSong(song, this.remix);
+    if (this._remixCache.size > 400) this._remixCache.clear();
+    this._remixCache.set(song, { sig, song: out });
+    return out;
+  }
+
+  /** "Place my version": the song you hear most, with your settings baked in (null when nothing plays). */
+  remixedTop() {
+    const top = [...this.active].sort((a, b) => b.w - a.w)[0];
+    if (!top) return null;
+    return Remix.bake(top.original || top.song, this.remix);
+  }
+
   setSong(id, song) {
     this.overrides.set(id, song);
     this.refresh();
@@ -114,14 +144,24 @@ export class BeaconEngine {
       if (this.running) this._applyMix();
       return;
     }
-    this.weights = weigh(this.field, this.pos, this.opts);
-    this.active = this.weights.map((n) => ({ id: n.id, w: n.w, d: n.d, beacon: n.beacon, song: this.songFor(n.beacon) }));
-    // The globe layer and the user's beacons, crossfaded (weights still sum
-    // to 1, or less where an exclusive map leaves silence).
-    this.layerInfo = this.layer && this.field.kind === "globe" ? this.layer(this.pos, this.opts) : null;
-    if (this.layerInfo) {
-      const L = this.layerInfo;
-      this.active = [...this.active.filter(() => L.globeShare > 0).map((a) => ({ ...a, w: a.w * L.globeShare })), ...L.entries];
+    if (this._held) {
+      // Hold: the blend stays as it was when Hold went on, wherever you walk.
+      this.active = this._held.map((a) => ({ ...a }));
+    } else {
+      this.weights = weigh(this.field, this.pos, this.opts);
+      this.active = this.weights.map((n) => ({ id: n.id, w: n.w, d: n.d, beacon: n.beacon, song: this.songFor(n.beacon) }));
+      // The globe layer and the user's beacons, crossfaded (weights still sum
+      // to 1, or less where an exclusive map leaves silence).
+      this.layerInfo = this.layer && this.field.kind === "globe" ? this.layer(this.pos, this.opts) : null;
+      if (this.layerInfo) {
+        const L = this.layerInfo;
+        this.active = [...this.active.filter(() => L.globeShare > 0).map((a) => ({ ...a, w: a.w * L.globeShare })), ...L.entries];
+      }
+    }
+    // Remix on: every song you hear goes through your settings (cached per song and settings).
+    if (this.remix.on && !Remix.isNeutral(this.remix)) {
+      const sig = Remix.signature(this.remix);
+      this.active = this.active.map((a) => ({ ...a, original: a.song, song: this._remixed(a.song, sig) }));
     }
     this._position();
     this.mix = blend(this.active);

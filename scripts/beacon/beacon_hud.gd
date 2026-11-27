@@ -26,6 +26,9 @@ var _quality: Label
 var _quality_btn: Button
 var _samples: CheckButton
 var _click: CheckButton # the metronome (M too)
+var _remix: CheckButton # Remix on or off
+## The Remix window (scripts/beacon/remix_ui.gd), opened from the song panel.
+var remix_ui: RemixUi
 var _flash := 0.0
 var _panel: PanelContainer
 var _collapse: Button
@@ -66,6 +69,9 @@ func _ready() -> void:
 	panel.position = Vector2(16, 16)
 	panel.custom_minimum_size = Vector2(300, 0)
 	add_child(panel)
+	remix_ui = RemixUi.new()
+	remix_ui.player = player
+	add_child.call_deferred(remix_ui) # after the field's other windows (it finds My beacons)
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 8)
 	panel.add_child(v)
@@ -110,7 +116,7 @@ func _ready() -> void:
 	# Two columns under the key line, so the open panel is short: the beacons
 	# you hear and the sound on the left, the parts on the right.
 	var cols := HBoxContainer.new()
-	cols.add_theme_constant_override("separation", 14)
+	cols.add_theme_constant_override("separation", 10) # narrow enough to sit beside the top-right buttons on phones
 	v.add_child(cols)
 	var left := VBoxContainer.new()
 	_left = left
@@ -193,7 +199,37 @@ func _ready() -> void:
 	_click.focus_mode = Control.FOCUS_NONE
 	_click.add_theme_font_size_override("font_size", 13)
 	_click.toggled.connect(func(t): Transport.metronome_on = t)
-	left.add_child(_click)
+	# The metronome and Remix share a row (the open panel stays as short as the folded one is wide).
+	var rrow := HBoxContainer.new()
+	rrow.add_theme_constant_override("separation", 4)
+	_click.text = "Click"
+	_click.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	rrow.add_child(_click)
+	# Remix: your own settings over whatever plays (off: as written), and its window.
+	_remix = CheckButton.new()
+	_remix.text = "Remix"
+	_remix.tooltip_text = "Your own settings over whatever is playing. Off: everything plays as written."
+	_remix.focus_mode = Control.FOCUS_NONE
+	_remix.add_theme_font_size_override("font_size", 13)
+	_remix.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_remix.toggled.connect(func(on):
+		var r: Dictionary = player.remix.duplicate(true)
+		r.on = on
+		player.set_remix(r))
+	rrow.add_child(_remix)
+	var edit := Button.new()
+	edit.text = "Edit"
+	edit.focus_mode = Control.FOCUS_NONE
+	edit.add_theme_font_size_override("font_size", 12)
+	FieldMenu.style_button(edit, 6, 8)
+	for st in ["normal", "hover", "pressed", "hover_pressed", "disabled"]:
+		var box: StyleBoxFlat = edit.get_theme_stylebox(st)
+		box.content_margin_top = 1
+		box.content_margin_bottom = 1
+	edit.tooltip_text = "Dials, parts, flavours and Place my version"
+	edit.pressed.connect(func(): remix_ui.set_open(not remix_ui.is_open()))
+	rrow.add_child(edit)
+	left.add_child(rrow)
 	left.add_child(qrow)
 	_help = _label("", 12, Color(1, 1, 1, 0.5))
 	_help.autowrap_mode = TextServer.AUTOWRAP_WORD
@@ -300,7 +336,7 @@ func _process(delta: float) -> void:
 	# The title takes the left column's width (and the gap to the parts), so the
 	# buttons beside it centre over the parts column.
 	if _left:
-		var want := 0.0 if collapsed else _left.size.x + 14.0 + _sep.size.x + 14.0 - 8.0 + _collapse.size.x + 8.0
+		var want := 0.0 if collapsed else _left.size.x + 10.0 + _sep.size.x + 10.0 - 8.0 + _collapse.size.x + 8.0
 		if not is_equal_approx(_title.custom_minimum_size.x, want):
 			_title.custom_minimum_size.x = want
 			_panel.reset_size()
@@ -338,6 +374,8 @@ func _process(delta: float) -> void:
 		_buttons[role][1].set_pressed_no_signal(player.soloed.has(role))
 	if _samples.button_pressed != player.samples_on:
 		_samples.set_pressed_no_signal(player.samples_on)
+	if _remix.button_pressed != bool(player.remix.on):
+		_remix.set_pressed_no_signal(bool(player.remix.on))
 	if _click.button_pressed != Transport.metronome_on:
 		_click.set_pressed_no_signal(Transport.metronome_on)
 	if player.quality:

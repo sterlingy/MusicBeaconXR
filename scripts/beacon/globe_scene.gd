@@ -561,6 +561,8 @@ func _parse_args() -> void:
 			_follow_flight_dev(a.trim_prefix("--flight="))
 		elif a == "--wander":
 			input.wander = true
+		elif a == "--remix-open": # dev: the Remix window
+			get_tree().create_timer(0.6).timeout.connect(func(): hud.remix_ui.set_open(true, false))
 		elif a == "--menu": # dev: the Options panel
 			get_tree().create_timer(0.3).timeout.connect(func(): menu.set_open(true, false))
 		elif a == "--speed-open": # dev: the Wander pop-up

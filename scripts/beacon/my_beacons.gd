@@ -217,13 +217,21 @@ func _plant() -> void:
 	for a in player.active:
 		if a.w > top.w:
 			top = a
-	var p := drafts.plant_song(fix.lat, fix.lon, top.song, RANGES_M[_range.selected])
+	# With Remix on, what you plant is what you hear: your version, baked in.
+	var mine_on: bool = player.remix.on and not Remix.is_neutral(player.remix)
+	var song: Dictionary = player.remixed_top() if mine_on else top.get("original", top.song)
+	var p := drafts.plant_song(fix.lat, fix.lon, song, RANGES_M[_range.selected])
 	if p.has("error"):
 		_say("Couldn't plant it: " + p.error, true)
 		return
 	drafts.doc.prefs.plantsOn = true
 	_changed()
-	_say("Planted \"%s\" where you are, heard within %s." % [p.song.title, _dist(p.rangeM)])
+	_say("%s \"%s\" where you are, heard within %s." % ["Placed your version," if mine_on else "Planted", p.song.title, _dist(p.rangeM)])
+
+
+## The Remix window's "Place my version here": plants what you hear (needs your location).
+func place_my_version() -> void:
+	_need_fix("plant")
 
 
 ## While placing: a tap on the globe at lon/lat puts a beacon on the map. Returns true when it did.
@@ -411,7 +419,12 @@ static func _dist(m: float) -> String:
 	return "%d m" % roundi(m) if m < 1000.0 else "%s km" % FieldMenu._num(m / 1000.0)
 
 
+## Every message the panel shows (the Remix window shows them too).
+signal said(text: String, err: bool)
+
+
 func _say(text: String, err := false) -> void:
+	said.emit(text, err)
 	_msg.text = text
 	_msg.add_theme_color_override("font_color", Color("ff6b6b") if err else Color("8d9aab"))
 

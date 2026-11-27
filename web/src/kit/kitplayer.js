@@ -30,7 +30,8 @@ const AWAKE = 0.0005;
 export function padLevel(song) {
   const energy = Number(song.energy ?? 0.5);
   const moodK = PAD_MOODS.includes(song.mood) ? 1 : 0.6;
-  return Math.max(0.12, Math.min(0.7, 0.75 - energy * 0.6)) * moodK * PAD_MIX;
+  // A remixed song may carry its own pad level (Remix's pad slider, src/remix.js).
+  return Math.max(0.12, Math.min(0.7, 0.75 - energy * 0.6)) * moodK * PAD_MIX * Number(song.padLevel ?? 1);
 }
 
 /** The pad's share of a blend: each active song's pad level by its weight. */
