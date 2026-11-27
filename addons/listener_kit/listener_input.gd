@@ -111,8 +111,11 @@ func stop_travel() -> void:
 
 ## How long a Move should take: a few seconds for a short hop, longer across
 ## the world (globe, kilometers) or across the floor (planar, `span` units wide).
-static func travel_seconds(p_space: ListenerSpace, a: Vector2, b: Vector2, span := 500.0) -> float:
+## On a floor with `mps` (meters per second) given, a Move goes at that speed.
+static func travel_seconds(p_space: ListenerSpace, a: Vector2, b: Vector2, span := 500.0, mps := 0.0) -> float:
 	var d := p_space.distance(a, b)
+	if p_space.kind == ListenerSpace.Kind.PLANAR and mps > 0.0:
+		return maxf(0.3, d / mps)
 	if p_space.kind == ListenerSpace.Kind.GEO:
 		return 3.0 + 9.0 * clampf((log(1.0 + d) / log(10.0) - 1.0) / 3.3, 0.0, 1.0) # 10 km: 3 s, 1,000 km: 8.5 s, the far side: 12 s
 	return 1.5 + 4.5 * clampf(d / maxf(1.0, span), 0.0, 1.0)

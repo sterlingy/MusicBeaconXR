@@ -30,6 +30,9 @@ func _ready() -> void:
 	for i in 10:
 		g.input.tick(0.1)
 	check(absf(g.input.position.x - start.x - 5.0) < 0.5, "one second walks 5 m (%.2f)" % (g.input.position.x - start.x))
+	# Move on a grid goes at the walking speed: 50 m at 5 m/s takes 10 s.
+	check(is_equal_approx(ListenerInput.travel_seconds(g.input.space, Vector2.ZERO, Vector2(50, 0), 500.0, 5.0), 10.0), "a Move on a grid goes at the walking speed")
+	check(TravelUi.duration(40.0) == "40 s" and TravelUi.duration(720.0) == "12 min" and TravelUi.duration(7500.0) == "2 h 5 min", "travel times read well")
 	g.speed.set_open(true)
 	await get_tree().create_timer(0.1).timeout
 	g.menu.set_open(true)

@@ -121,3 +121,7 @@ On the globe and the grids, one finger (or the mouse) turns the globe or pans th
 Pop-out windows (Fields, Walks, My beacons, the Jump / Move card, the flight card) are one at a time: opening one closes the others. Each pops open from its own corner with a slight overshoot and fades in, shrinks away on close, and is frosted glass (the world shows through, blurred). A swoosh plays each way, and when the readout folds. Code: `scripts/beacon/popup_fx.gd`; on the website `web/src/popup.js` and the `.pop-in` / `.pop-out` styles in `web/index.html`.
 
 The swooshes (`sfx/ui_open.ogg`, `sfx/ui_close.ogg`, and MP3 copies in `web/sfx/`) are trimmed, faded, mono, level-matched derivatives of two clips from SoundMorph's Motion Graphics library ("Whoosh 1" and "Whoosh 2", Buttons), used under SoundMorph's single-user licence, which allows its sounds inside games and websites. The library's original recordings are not in this repository and must not be added: the licence forbids sharing them on a public server.
+
+## Map outlines
+
+The globes show the continents' coastlines (Natural Earth 1:110m, public domain, simplified to about 2,400 points: `data/coastlines.json` for the app, `web/data/coastlines.json` for the website) as thin solid lines, and the lower 48 US, where beacons can be made for now, as the amber dashed outline.

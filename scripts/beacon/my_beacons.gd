@@ -396,16 +396,22 @@ func _build() -> void:
 	_status = menu._small("Global 100%")
 	_status.add_theme_color_override("font_color", Color.WHITE)
 	v.add_child(_status)
+	# Messages near the top, where they're seen (they used to sit at the foot of the scrolling panel).
+	_msg = menu._small("")
+	v.add_child(_msg)
 
+	# A new grid where you are: 21 x 21 beacons; the spacing sets its size.
+	v.add_child(menu._heading("NEW GRID HERE"))
 	var gen := HBoxContainer.new()
 	_spacing = OptionButton.new()
 	_spacing.focus_mode = Control.FOCUS_NONE
 	for sp in BeaconDrafts.SPACINGS_M:
-		_spacing.add_item("every " + _dist(sp))
+		_spacing.add_item("beacon every %s · %s km grid" % [_dist(sp), FieldMenu._num(20.0 * sp / 1000.0)])
 	_spacing.select(3)
 	gen.add_child(_spacing)
-	gen.add_child(menu._button("Generate grid here", func(): _need_fix("generate", BeaconDrafts.SPACINGS_M[_spacing.selected])))
+	gen.add_child(menu._button("Generate here", func(): _need_fix("generate", BeaconDrafts.SPACINGS_M[_spacing.selected])))
 	v.add_child(gen)
+	v.add_child(menu._small("441 beacons centred on your location (needs location, lower 48 US for now). The grid opens on the globe when it's made."))
 
 	_offer_box = VBoxContainer.new()
 	_offer_box.visible = false
@@ -469,8 +475,6 @@ func _build() -> void:
 	_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.add_child(_list)
 	v.add_child(scroll)
-	_msg = menu._small("")
-	v.add_child(_msg)
 
 	# Reporting a shared beacon you hear.
 	var rep_row := HBoxContainer.new()

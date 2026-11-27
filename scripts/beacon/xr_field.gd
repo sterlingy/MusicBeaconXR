@@ -142,9 +142,9 @@ func _offer(pos: Vector2, snap: float, beacon_only: bool, screen := Vector2(-1, 
 	var at: Vector3 = loco.from_pos.call(d.pos)
 	_marker.position = at + Vector3(0, 0.02, 0)
 	_marker.visible = true
-	var secs := ListenerInput.travel_seconds(input.space, player.pos, d.pos, input.space.bounds.size.x)
+	var secs := ListenerInput.travel_seconds(input.space, player.pos, d.pos, input.space.bounds.size.x, speed.mps)
 	card.world_scale = loco.world_scale()
-	card.open(at, xr_camera.global_position, d.title, "%s · Move takes %d s" % [d.detail, roundi(secs)])
+	card.open(at, xr_camera.global_position, d.title, "%s · Move takes %s" % [d.detail, TravelUi.duration(secs)])
 
 
 func _go(kind_: String, pos: Vector2) -> void:
@@ -156,7 +156,7 @@ func _go(kind_: String, pos: Vector2) -> void:
 		input.stop_travel()
 		loco.teleport(pos)
 	else:
-		input.travel_to(pos, ListenerInput.travel_seconds(input.space, player.pos, pos, input.space.bounds.size.x))
+		input.travel_to(pos, ListenerInput.travel_seconds(input.space, player.pos, pos, input.space.bounds.size.x, speed.mps))
 
 
 func _on_action(name: String, arg: Variant) -> void:

@@ -143,6 +143,14 @@ static func song_info(song: Dictionary) -> String:
 " + ", ".join(parts)
 
 
+## A travel time in words: "40 s", "12 min", "2 h 5 min".
+static func duration(s: float) -> String:
+	if s < 90.0:
+		return "%d s" % maxi(1, roundi(s))
+	var m := roundi(s / 60.0)
+	return "%d min" % m if m < 90 else "%d h %d min" % [m / 60, m % 60]
+
+
 static func _thousands(n: int) -> String:
 	var s := str(n)
 	var out := ""

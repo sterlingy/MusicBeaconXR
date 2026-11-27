@@ -35,6 +35,8 @@ var mine: MyBeacons
 var user_mesh: MultiMeshInstance3D
 var outlines: MeshInstance3D
 var us_outline: MeshInstance3D # the lower 48, where beacons can be made for now
+var coasts: MeshInstance3D # the continents' coastlines (Natural Earth, public domain)
+var _coast_lines: Array = []
 var _us_k := -1.0 # the altitude it was last built for
 var _drawn_pool := {} # the pool the user beacons were last drawn from
 var _drawn_at := Vector2(INF, INF)
@@ -428,6 +430,11 @@ func _parse_args() -> void:
 		elif a == "--random-flight": # dev: ride along with a random flight, then show its card
 			menu.follow_random_flight()
 			get_tree().create_timer(7.0).timeout.connect(func(): flight_card.open())
+		elif a.begins_with("--gen="): # dev: generate a grid (spacing m) at --fakegps, as the button does
+			var sp := int(a.trim_prefix("--gen="))
+			get_tree().create_timer(0.4).timeout.connect(func():
+				mine.set_open(true, false)
+				mine._need_fix("generate", sp))
 		elif a == "--hud-open": # dev: the readout unfolded
 			get_tree().create_timer(0.2).timeout.connect(func(): hud.set_collapsed(false))
 		elif a == "--trail-demo": # dev: a walked stretch, a jump, another stretch
@@ -540,7 +547,7 @@ func _offer(pos: Vector2, snap_km: float, beacon_only: bool, screen := Vector2(-
 	_marker.scale = Vector3.ONE * 1.6 * _k()
 	_marker.visible = true
 	var secs := ListenerInput.travel_seconds(input.space, player.pos, d.pos)
-	travel.open(screen, d.pos, d.title, "%s · Move takes %d s" % [d.detail, roundi(secs)], d.song)
+	travel.open(screen, d.pos, d.title, "%s · Move takes %s" % [d.detail, TravelUi.duration(secs)], d.song)
 
 
 func _go(kind: String, pos: Vector2) -> void:
@@ -634,6 +641,17 @@ func _build_user_beacons() -> void:
 	user_mesh = MultiMeshInstance3D.new()
 	user_mesh.multimesh = mm
 	add_child(user_mesh)
+	coasts = MeshInstance3D.new()
+	coasts.mesh = ImmediateMesh.new()
+	var cm := StandardMaterial3D.new()
+	cm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	cm.albedo_color = Color(0.64, 0.74, 0.88, 0.62)
+	cm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	cm.cull_mode = BaseMaterial3D.CULL_DISABLED
+	coasts.material_override = cm
+	add_child(coasts)
+	var parsed = JSON.parse_string(FileAccess.get_file_as_string("res://data/coastlines.json"))
+	_coast_lines = parsed.get("lines", []) if parsed is Dictionary else []
 	us_outline = MeshInstance3D.new()
 	us_outline.mesh = ImmediateMesh.new()
 	var um := StandardMaterial3D.new()
@@ -745,6 +763,7 @@ func _draw_us_outline() -> void:
 	if _us_k > 0.0 and absf(altitude / _us_k - 1.0) < 0.1:
 		return
 	_us_k = altitude
+	_draw_coasts(k)
 	var im: ImmediateMesh = us_outline.mesh
 	im.clear_surfaces()
 	var w := clampf(altitude * 0.006, 0.0004, 0.6) # half-width, scene units
@@ -768,6 +787,29 @@ func _draw_us_outline() -> void:
 			var side := (v1 - v0).cross(v0.normalized()).normalized() * w
 			for v in [v0 - side, v0 + side, v1 + side, v0 - side, v1 + side, v1 - side]:
 				im.surface_add_vertex(v)
+	im.surface_end()
+
+
+## The continents as thin solid ribbons, rebuilt with the US outline as you zoom.
+func _draw_coasts(k: float) -> void:
+	var im: ImmediateMesh = coasts.mesh
+	im.clear_surfaces()
+	if _coast_lines.is_empty():
+		return
+	var w := clampf(altitude * 0.004, 0.0003, 0.5)
+	var lift := maxf(0.00025, 0.12 * k)
+	im.surface_begin(Mesh.PRIMITIVE_TRIANGLES)
+	for line in _coast_lines:
+		var prev := Vector3.ZERO
+		var first := true
+		for pt in line:
+			var v := to_world(float(pt[1]), float(pt[0]), R + lift)
+			if not first:
+				var side := (v - prev).cross(v.normalized()).normalized() * w
+				for q in [prev - side, prev + side, v + side, prev - side, v + side, v - side]:
+					im.surface_add_vertex(q)
+			prev = v
+			first = false
 	im.surface_end()
 
 

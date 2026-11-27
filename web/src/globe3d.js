@@ -51,6 +51,9 @@ export class Globe3D {
    */
   constructor(hooks) {
     this.h = hooks;
+    // The continents' coastlines (Natural Earth, public domain), loaded once.
+    this.coasts = [];
+    globalThis.fetch?.(new URL("../data/coastlines.json", import.meta.url)).then((r) => (r.ok ? r.json() : null)).then((d) => { if (d?.lines) this.coasts = d.lines; }).catch(() => {});
     this.lat0 = 30;
     this.lon0 = -40;
     this.zoom = 1;
@@ -364,6 +367,13 @@ export class Globe3D {
     g.save();
     g.beginPath(); g.arc(cx, cy, Math.max(0, R - 0.5), 0, Math.PI * 2); g.clip();
     this._drawGraticule(g, d, light);
+    // The continents: thin, soft and solid, under the US outline.
+    if (this.coasts.length) {
+      g.strokeStyle = light ? "rgba(70,95,125,0.45)" : "rgba(160,184,215,0.5)";
+      g.lineWidth = 1.1 * d;
+      g.setLineDash([]);
+      for (const line of this.coasts) { g.beginPath(); this._path(g, line.map(([lon, lat]) => ({ lat, lon }))); g.stroke(); }
+    }
     // Brighter and a little heavier where it's night over the US, so it never gets lost in the dark.
     const night = this._nightAt(39, -98);
     this._drawOutline(g, LOWER_48, d * (1 + 0.6 * night), light ? `rgba(180,110,20,${0.6 + 0.25 * night})` : `rgba(255,181,71,${0.6 + 0.35 * night})`, night);

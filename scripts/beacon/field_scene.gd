@@ -457,8 +457,8 @@ func _offer(pos: Vector2, snap: float, beacon_only: bool, screen := Vector2(-1, 
 		screen = camera.unproject_position(world)
 	_marker.position = world
 	_marker.visible = true
-	var secs := ListenerInput.travel_seconds(input.space, player.pos, d.pos, input.space.bounds.size.x)
-	travel.open(screen, d.pos, d.title, "%s · Move takes %d s" % [d.detail, roundi(secs)], d.song)
+	var secs := ListenerInput.travel_seconds(input.space, player.pos, d.pos, input.space.bounds.size.x, speed.mps)
+	travel.open(screen, d.pos, d.title, "%s · Move takes %s at %s" % [d.detail, TravelUi.duration(secs), SpeedUi.label_of(speed.mps)], d.song)
 
 
 func _go(kind_: String, pos: Vector2) -> void:
@@ -476,7 +476,7 @@ func _go(kind_: String, pos: Vector2) -> void:
 	if kind_ == "jump":
 		input.jump_to(pos)
 	else:
-		input.travel_to(pos, ListenerInput.travel_seconds(input.space, player.pos, pos, input.space.bounds.size.x))
+		input.travel_to(pos, ListenerInput.travel_seconds(input.space, player.pos, pos, input.space.bounds.size.x, speed.mps)) # at the walking speed
 
 
 func _update_camera(delta: float) -> void:
