@@ -86,10 +86,16 @@ func _process(_delta: float) -> void:
 
 ## Scales the button row and the panel from their top-right corners; the
 ## panel shrinks if it wouldn't fit on the screen at full scale.
+## The scale for the screen-corner buttons (Play, Fields, My beacons, Wander,
+## Walks): a little under the panels' scale on phones, so they leave the view room.
+static func button_scale(ui: float) -> float:
+	return ui * (0.8 if ui > 1.5 else 1.0)
+
+
 func _fit() -> void:
 	var view := get_viewport().get_visible_rect().size
 	# The top buttons a little smaller than the panels on phones, leaving the readout room beside them.
-	var s := minf(ui_scale * (0.8 if ui_scale > 1.5 else 1.0), (view.x - 24.0) / maxf(1.0, _row.size.x))
+	var s := minf(button_scale(ui_scale), (view.x - 24.0) / maxf(1.0, _row.size.x))
 	_row.pivot_offset = Vector2(_row.size.x, 0)
 	_row.scale = Vector2(s, s)
 	# Full size, between this row and the buttons along the bottom edge; what

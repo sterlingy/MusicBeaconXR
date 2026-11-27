@@ -457,7 +457,7 @@ func _exit_tree() -> void:
 
 func _fit() -> void:
 	var view := get_viewport().get_visible_rect().size
-	var ts := minf(ui_scale, (view.x - 24.0) / maxf(1.0, _toggle.size.x))
+	var ts := minf(FieldMenu.button_scale(ui_scale), (view.x - 24.0) / maxf(1.0, _toggle.size.x)) # as the top row
 	_toggle.scale = Vector2(ts, ts)
 	_toggle.position = Vector2(view.x - 12.0 - _toggle.size.x * ts, view.y - 12.0 - _toggle.size.y * ts)
 	# Full size above the toggle, below the top buttons; what doesn't fit scrolls.

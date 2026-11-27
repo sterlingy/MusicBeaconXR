@@ -111,7 +111,7 @@ func _ready() -> void:
 		l.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		lines.add_child(l)
 	_toggle.add_child(lines)
-	_toggle.custom_minimum_size = Vector2(0, 46)
+	_toggle.custom_minimum_size = Vector2(0, 40) # as tall as the buttons beside it
 	add_child(_toggle)
 	_panel = PanelContainer.new()
 	_panel.mouse_filter = Control.MOUSE_FILTER_STOP
@@ -246,7 +246,7 @@ func _process(_delta: float) -> void:
 		_toggle.custom_minimum_size.x = want
 		_toggle.reset_size()
 	var view := get_viewport().get_visible_rect().size
-	var ts := minf(ui_scale, (view.x * 0.25) / maxf(1.0, _toggle.size.x))
+	var ts := minf(FieldMenu.button_scale(ui_scale), (view.x * 0.25) / maxf(1.0, _toggle.size.x)) # as the top row
 	_toggle.scale = Vector2(ts, ts)
 	var walks := get_tree().get_first_node_in_group("beacon_walks")
 	var right := view.x - 12.0
