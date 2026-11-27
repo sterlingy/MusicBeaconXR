@@ -115,3 +115,9 @@ On the globe and the grids, one finger (or the mouse) turns the globe or pans th
 - **Move:** glide there along the great circle (a straight line on a grid), hearing the music change through every beacon on the way. About 3 seconds for a short hop, up to 12 across the world. Tap the map to stop.
 
 **Back to me** (bottom middle) returns the view after you've turned it away. Going somewhere stops following your location. Pinch or the wheel zooms; keys still walk. In a headset, tap the right trigger on a beacon or hold it on any spot, and the card floats there: point at Jump or Move and pull the trigger. The website's flat maps and 3D globe work the same way. Code: ListenerKit (`PointerSource` mode `explore`, `ListenerInput.travel_to`), `scripts/beacon/travel_ui.gd`, `xr_travel_card.gd`; on the web `src/input/listener.js` and `src/travelcard.js`.
+
+## Windows and sounds
+
+Pop-out windows (Fields, Walks, My beacons, the Jump / Move card, the flight card) are one at a time: opening one closes the others. Each pops open from its own corner with a slight overshoot and fades in, shrinks away on close, and is frosted glass (the world shows through, blurred). A swoosh plays each way, and when the readout folds. Code: `scripts/beacon/popup_fx.gd`; on the website `web/src/popup.js` and the `.pop-in` / `.pop-out` styles in `web/index.html`.
+
+The swooshes (`sfx/ui_open.ogg`, `sfx/ui_close.ogg`, and MP3 copies in `web/sfx/`) are trimmed, faded, mono, level-matched derivatives of two clips from SoundMorph's Motion Graphics library ("Whoosh 1" and "Whoosh 2", Buttons), used under SoundMorph's single-user licence, which allows its sounds inside games and websites. The library's original recordings are not in this repository and must not be added: the licence forbids sharing them on a public server.

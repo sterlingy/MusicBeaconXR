@@ -41,6 +41,7 @@ func _init(p_flight: FlightFollow) -> void:
 	flight = p_flight
 	name = "FlightCard"
 	layer = 8
+	add_to_group(PopupFx.GROUP)
 
 
 func _ready() -> void:
@@ -67,8 +68,10 @@ func _ready() -> void:
 	sb.shadow_size = 14
 	_card.add_theme_stylebox_override("panel", sb)
 	add_child(_card)
+	PopupFx.glass(_card)
 	_build()
-	close()
+	_card.visible = false
+	_blocker.visible = false
 
 
 func _label(size: int, color := Color.WHITE, bold := false) -> Label:
@@ -221,15 +224,21 @@ func _draw_track() -> void:
 
 
 func is_open() -> bool:
-	return _card.visible
+	return PopupFx.is_open(_card)
+
+
+func close_popup(except: Object) -> void:
+	if except != self and is_open():
+		close()
 
 
 ## Opens the card for the flight being followed (details load in the background).
 func open() -> void:
 	if not flight.active():
 		return
-	_card.visible = true
+	PopupFx.claim(self)
 	_blocker.visible = true
+	PopupFx.animate(_card, true)
 	_details = {}
 	_show()
 	var f := flight.fix.duplicate()
@@ -239,7 +248,8 @@ func open() -> void:
 
 
 func close() -> void:
-	_card.visible = false
+	if is_open():
+		PopupFx.animate(_card, false)
 	_blocker.visible = false
 
 
@@ -296,15 +306,15 @@ func _set_stat(k: String, value: Variant, sub: Variant) -> void:
 
 
 func _process(delta: float) -> void:
-	if not is_open():
-		return
+	if not _card.visible:
+		return # (still visible while it animates closed)
 	_t += delta
-	if _t >= REFRESH_S:
+	if _t >= REFRESH_S and is_open():
 		_t = 0.0
 		_show()
 	var view := get_viewport().get_visible_rect().size
 	var s := minf(ui_scale, minf((view.x - 24.0) / maxf(1.0, _card.size.x), (view.y - 24.0) / maxf(1.0, _card.size.y)))
-	_card.scale = Vector2(s, s)
+	PopupFx.apply(_card, s, _card.size * 0.5) # pops open from its middle
 	_card.position = (view - _card.size * s) * 0.5
 
 

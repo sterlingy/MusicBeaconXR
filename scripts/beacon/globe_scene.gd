@@ -287,14 +287,16 @@ func _k() -> float:
 
 
 func _process(delta: float) -> void:
-	# Following a flight: the plane drives the listener (walking is paused meanwhile).
+	# Following a flight: the plane drives the listener. Walking pauses, but the
+	# view stays yours: drag to turn, pinch to zoom, tap the plane for its card.
 	if mine.flight.active():
 		var fp := mine.flight.position()
-		input.process_mode = Node.PROCESS_MODE_DISABLED
+		input.enabled = false
+		input.position = player.pos
 		if not fp.is_empty():
 			player.set_position(Vector2(fp.lon, fp.lat))
-	elif input.process_mode == Node.PROCESS_MODE_DISABLED and walks.replay.is_empty():
-		input.process_mode = Node.PROCESS_MODE_INHERIT
+	elif not input.enabled and walks.replay.is_empty():
+		input.enabled = true
 		input.jump_to(player.pos)
 	var p := player.pos # (lon, lat)
 	var up := to_world(p.y, p.x, 1.0)
@@ -528,6 +530,11 @@ func _offer(pos: Vector2, snap_km: float, beacon_only: bool, screen := Vector2(-
 
 func _go(kind: String, pos: Vector2) -> void:
 	_marker.visible = false
+	if mine.flight.active():
+		menu.stop_flight() # you chose to go somewhere else
+	if not walks.replay.is_empty():
+		walks.stop_replay(true)
+	input.enabled = true
 	_stop_following("Went somewhere else, so the globe stopped following your location.")
 	_free = false
 	if kind == "jump":

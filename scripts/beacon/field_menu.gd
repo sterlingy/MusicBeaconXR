@@ -48,6 +48,8 @@ func _init(p_kind: String) -> void:
 	kind = p_kind
 	name = "FieldMenu"
 	layer = 5
+	add_to_group("field_menu")
+	add_to_group(PopupFx.GROUP)
 
 
 func _ready() -> void:
@@ -71,16 +73,17 @@ func _ready() -> void:
 	_click = _button("Click", func(): pass, true)
 	_click.toggled.connect(func(t): Transport.metronome_on = t)
 	row.add_child(_click)
-	_fields_btn = _button("☰ Fields", func(): set_open(not panel.visible), true)
+	_fields_btn = _button("☰ Fields", func(): set_open(not PopupFx.is_open(panel)), true)
 	row.add_child(_fields_btn)
 	_build_panel()
-	set_open(false)
+	PopupFx.glass(panel)
+	set_open(false, false)
 
 
 func _process(_delta: float) -> void:
 	_fit()
 	_play.text = "■ Stop" if Transport.running else "▶ Play"
-	if panel.visible:
+	if PopupFx.is_open(panel):
 		_show_quality()
 	if _click.button_pressed != Transport.metronome_on:
 		_click.set_pressed_no_signal(Transport.metronome_on)
@@ -90,7 +93,8 @@ func _process(_delta: float) -> void:
 ## panel shrinks if it wouldn't fit on the screen at full scale.
 func _fit() -> void:
 	var view := get_viewport().get_visible_rect().size
-	var s := minf(ui_scale, (view.x - 24.0) / maxf(1.0, _row.size.x))
+	# The top buttons a little smaller than the panels on phones, leaving the readout room beside them.
+	var s := minf(ui_scale * (0.8 if ui_scale > 1.5 else 1.0), (view.x - 24.0) / maxf(1.0, _row.size.x))
 	_row.pivot_offset = Vector2(_row.size.x, 0)
 	_row.scale = Vector2(s, s)
 	# Full size, between this row and the buttons along the bottom edge; what
@@ -100,19 +104,33 @@ func _fit() -> void:
 	fit_scroll(_scroll, room / ps - 30.0)
 	panel.reset_size()
 	panel.offset_top = 12.0 + _row.size.y * s + 8.0
-	panel.pivot_offset = Vector2(panel.size.x, 0)
-	panel.scale = Vector2(ps, ps)
+	PopupFx.apply(panel, ps, Vector2(panel.size.x, 0)) # pops open from its top-right corner, under the button
 
 
-func set_open(open: bool) -> void:
-	panel.visible = open
+## Where the top-right button row starts on screen (x): panels on the left stop short of it.
+func row_left() -> float:
+	if _row == null:
+		return INF
+	return _row.get_global_transform_with_canvas().origin.x
+
+
+## Another window is opening: this one closes.
+func close_popup(except: Object) -> void:
+	if except != self and PopupFx.is_open(panel):
+		set_open(false)
+
+
+func set_open(open: bool, sound := true) -> void:
+	if open:
+		PopupFx.claim(self)
+	PopupFx.animate(panel, open, sound)
 	_fields_btn.set_pressed_no_signal(open)
 	# While the panel is open, Android's back gesture closes it instead of the app.
 	get_tree().quit_on_go_back = not open
 
 
 func _notification(what: int) -> void:
-	if what == NOTIFICATION_WM_GO_BACK_REQUEST and panel and panel.visible:
+	if what == NOTIFICATION_WM_GO_BACK_REQUEST and panel and PopupFx.is_open(panel):
 		set_open(false)
 
 
@@ -123,11 +141,11 @@ func _unhandled_key_input(event: InputEvent) -> void:
 		KEY_M:
 			Transport.metronome_on = not Transport.metronome_on
 		KEY_F:
-			set_open(not panel.visible)
+			set_open(not PopupFx.is_open(panel))
 		KEY_I:
 			open_scene("res://scenes/instrument_table.tscn")
 		KEY_ESCAPE:
-			if panel.visible:
+			if PopupFx.is_open(panel):
 				set_open(false)
 
 

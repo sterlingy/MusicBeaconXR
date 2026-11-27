@@ -29,6 +29,7 @@ var _back: Button
 func _init() -> void:
 	name = "TravelUi"
 	layer = 7
+	add_to_group(PopupFx.GROUP)
 
 
 func _ready() -> void:
@@ -59,6 +60,7 @@ func _ready() -> void:
 	sb.shadow_size = 10
 	_card.add_theme_stylebox_override("panel", sb)
 	add_child(_card)
+	PopupFx.glass(_card)
 	var v := VBoxContainer.new()
 	v.custom_minimum_size = Vector2(250, 0)
 	v.add_theme_constant_override("separation", 8)
@@ -124,7 +126,12 @@ static func _thousands(n: int) -> String:
 
 
 func is_open() -> bool:
-	return _card.visible
+	return PopupFx.is_open(_card)
+
+
+func close_popup(except: Object) -> void:
+	if except != self and is_open():
+		close()
 
 
 ## Opens the card next to `screen` (where the finger was) about `p_pos`.
@@ -133,16 +140,17 @@ func open(screen: Vector2, p_pos: Vector2, title: String, detail: String) -> voi
 	_at = screen
 	_title.text = title
 	_detail.text = detail
+	PopupFx.claim(self)
 	_blocker.visible = true
-	_card.visible = true
+	PopupFx.animate(_card, true)
 	_card.reset_size()
 	get_tree().quit_on_go_back = false
 
 
 func close() -> void:
-	if not _card.visible:
+	if not is_open():
 		return
-	_card.visible = false
+	PopupFx.animate(_card, false)
 	_blocker.visible = false
 	get_tree().quit_on_go_back = true
 	closed.emit()
@@ -154,7 +162,7 @@ func set_back_visible(on: bool) -> void:
 
 
 func _choose(kind: String) -> void:
-	_card.visible = false
+	PopupFx.animate(_card, false)
 	_blocker.visible = false
 	get_tree().quit_on_go_back = true
 	chosen.emit(kind, pos)
@@ -177,7 +185,7 @@ func _process(_delta: float) -> void:
 		_card.reset_size()
 		# Beside the finger (above it, so the finger doesn't hide it), kept on screen.
 		var s := minf(ui_scale, (view.x - 24.0) / maxf(1.0, _card.size.x))
-		_card.scale = Vector2(s, s)
+		PopupFx.apply(_card, s, Vector2(_card.size.x * 0.5, _card.size.y)) # pops up out of the finger
 		var sz := _card.size * s
 		var p := _at + Vector2(-sz.x * 0.5, -sz.y - 28.0 * s)
 		if p.y < 12.0:

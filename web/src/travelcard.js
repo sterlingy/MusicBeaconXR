@@ -2,6 +2,8 @@
 // the map (flat and 3D), and the "Back to me" button. The website's twin of the
 // app's TravelUi (scripts/beacon/travel_ui.gd).
 
+import { openPopup, closePopup, isOpen } from "./popup.js";
+
 /**
  * `wrap` is the element the card is positioned in (the map's container).
  * Returns {open(clientX, clientY, {title, detail}, onChoose(kind)), close(),
@@ -10,25 +12,25 @@
 export function initTravelCard({ wrap, card, title, detail, back, onBack = () => {} }) {
   let choose = null;
   const close = () => {
-    if (card.hidden) return;
-    card.hidden = true;
+    if (!isOpen(card)) return;
     choose = null;
+    closePopup(card);
   };
   for (const b of card.querySelectorAll("[data-go]")) {
     b.addEventListener("click", () => { const f = choose; close(); f?.(b.dataset.go); });
   }
   // A press anywhere else closes it (after the press that opened it).
-  document.addEventListener("pointerdown", (e) => { if (!card.hidden && !card.contains(e.target)) close(); }, true);
+  document.addEventListener("pointerdown", (e) => { if (isOpen(card) && !card.contains(e.target)) close(); }, true);
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") close(); });
   back.addEventListener("click", () => onBack());
   return {
-    get isOpen() { return !card.hidden; },
+    get isOpen() { return isOpen(card); },
     close,
     open(clientX, clientY, info, onChoose) {
       title.textContent = info.title;
       detail.textContent = info.detail;
       choose = onChoose;
-      card.hidden = false;
+      openPopup(card, () => { choose = null; });
       // Above the finger (so it doesn't hide the card), kept inside the map.
       const r = wrap.getBoundingClientRect(), w = card.offsetWidth, h = card.offsetHeight;
       let x = clientX - r.left - w / 2, y = clientY - r.top - h - 22;

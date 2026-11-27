@@ -66,7 +66,7 @@ func _ready() -> void:
 	_load_walks()
 	# Dev: --walks-open shows the panel, --walk-demo draws a sample trail.
 	var args := OS.get_cmdline_user_args()
-	_panel.visible = args.has("--walks-open")
+	set_open(args.has("--walks-open"), false)
 	if args.has("--walk-demo"):
 		var t := []
 		for i in 80:
@@ -265,7 +265,7 @@ func start_replay(rec: Dictionary, export_wav := false) -> void:
 	player.harmony = BeaconMixer.Harmony.new()
 	replay = {"rec": rec, "start": Time.get_ticks_msec() / 1000.0, "export": export_wav}
 	if input:
-		input.process_mode = Node.PROCESS_MODE_DISABLED
+		input.enabled = false # walking pauses; looking around (drag, pinch) still works
 	if export_wav:
 		_record_audio(true)
 	_render()
@@ -282,7 +282,7 @@ func stop_replay(quiet := false) -> Dictionary:
 	replay = {}
 	player.replay = []
 	if input:
-		input.process_mode = Node.PROCESS_MODE_INHERIT
+		input.enabled = true
 	player.set_position(player.pos)
 	_render()
 	if not quiet and not r.export:
@@ -462,8 +462,21 @@ func _fit() -> void:
 	var s := minf(ui_scale, (view.x - 24.0) / maxf(1.0, _panel.size.x))
 	FieldMenu.fit_scroll(_scroll, room / s - 26.0)
 	_panel.reset_size()
-	_panel.scale = Vector2(s, s)
+	PopupFx.apply(_panel, s, _panel.size) # pops open from its bottom-right corner, above the button
 	_panel.position = Vector2(view.x - 12.0 - _panel.size.x * s, _toggle.position.y - 8.0 - _panel.size.y * s)
+
+
+func set_open(open: bool, sound := true) -> void:
+	if open:
+		PopupFx.claim(self)
+	PopupFx.animate(_panel, open, sound)
+	if _toggle:
+		_toggle.set_pressed_no_signal(open)
+
+
+func close_popup(except: Object) -> void:
+	if except != self and PopupFx.is_open(_panel):
+		set_open(false)
 
 
 func _say(text: String, err := false) -> void:
@@ -474,11 +487,12 @@ func _say(text: String, err := false) -> void:
 
 func _build() -> void:
 	var menu := FieldMenu.new("grid") # for its button and label styles
-	_toggle = menu._button("● Walks", func(): _panel.visible = not _panel.visible, true)
+	_toggle = menu._button("● Walks", func(): set_open(not PopupFx.is_open(_panel)), true)
 	add_child(_toggle)
 	_panel = PanelContainer.new()
 	_panel.mouse_filter = Control.MOUSE_FILTER_STOP
 	_panel.visible = false
+	add_to_group(PopupFx.GROUP)
 	var sb := StyleBoxFlat.new()
 	sb.bg_color = FieldMenu.POP_BG
 	sb.border_color = FieldMenu.POP_BORDER
@@ -487,6 +501,7 @@ func _build() -> void:
 	sb.set_content_margin_all(12)
 	_panel.add_theme_stylebox_override("panel", sb)
 	add_child(_panel)
+	PopupFx.glass(_panel)
 	var v := VBoxContainer.new()
 	v.custom_minimum_size = Vector2(340, 0)
 	v.add_theme_constant_override("separation", 8)

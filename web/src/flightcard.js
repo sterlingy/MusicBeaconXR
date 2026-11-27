@@ -5,6 +5,7 @@
 // aircraft, and Stop. Live numbers refresh while it's open.
 
 import { flightDetails, flightSummary } from "./flight.js";
+import { openPopup, closePopup, isOpen } from "./popup.js";
 
 const esc = (t) => String(t ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 
@@ -33,26 +34,26 @@ export function initFlightCard({ el, flight, onStop }) {
       ${s.aircraft ? `<div class="fc-plane">${esc(s.aircraft)}</div>` : ""}${s.owner ? `<div class="fc-owner">${esc(s.owner)}</div>` : ""}
       <div class="fc-foot"><span>Live: adsb.lol (ODbL) · route and aircraft: adsbdb.com<br>Times are estimates from distance and speed</span><button class="btn" data-stop>■ Stop following</button></div>`;
   }
-  function close() { el.hidden = true; clearInterval(timer); }
+  function close() { clearInterval(timer); closePopup(el); }
   el.addEventListener("click", (e) => {
     if (e.target.closest("[data-x]")) close();
     else if (e.target.closest("[data-stop]")) { close(); onStop(); }
   });
-  document.addEventListener("pointerdown", (e) => { if (!el.hidden && !el.contains(e.target)) close(); }, true);
+  document.addEventListener("pointerdown", (e) => { if (isOpen(el) && !el.contains(e.target)) close(); }, true);
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") close(); });
   return {
-    get isOpen() { return !el.hidden; },
+    get isOpen() { return isOpen(el); },
     close,
     async open() {
       if (!flight.active) return;
       details = null;
-      el.hidden = false;
+      openPopup(el, () => clearInterval(timer));
       render();
       clearInterval(timer);
       timer = setInterval(render, 4000);
       const f = flight.fix;
       details = await flightDetails(f);
-      if (!el.hidden && flight.fix === f || (!el.hidden && flight.active)) render();
+      if (isOpen(el) && flight.active) render();
     },
   };
 }

@@ -32,5 +32,18 @@ func _ready() -> void:
 	await get_tree().process_frame
 	check(scene.input.position.distance_to(Vector2(2.36, 48.86)) < 0.01, "not following: fixes are ignored")
 	FieldPrefs.set_value("follow", was_following)
+	# Following a flight: the plane moves you, but the globe still turns and zooms.
+	scene.mine.flight.fix = {"found": true, "lat": 40.0, "lon": -100.0, "gs_kt": 450.0, "track": 90.0, "at": FlightFollow.now_s(), "seen_pos": 0.0, "alt_ft": 35000.0, "flight": "TST1"}
+	await get_tree().process_frame
+	await get_tree().process_frame
+	check(scene.plane.visible and not scene.listener.visible, "following a flight shows the plane")
+	var alt0: float = scene.altitude
+	scene.input.send_action("orbit", Vector2(-120, 40))
+	scene.input.send_action("zoom", 0.5)
+	await get_tree().process_frame
+	check(scene._free and scene.altitude < alt0, "while following, the globe still turns and zooms")
+	var ptr: PointerSource = scene.input.get_node("PointerSource")
+	check(ptr.enabled and ptr.can_process(), "the pointer keeps working while the plane drives")
+	scene.mine.flight.stop()
 	print("globe_follow_check: %s (%d failure(s))" % ["OK" if failures == 0 else "FAILED", failures])
 	get_tree().quit(0 if failures == 0 else 1)

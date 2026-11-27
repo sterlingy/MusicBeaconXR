@@ -457,6 +457,9 @@ func _offer(pos: Vector2, snap: float, beacon_only: bool, screen := Vector2(-1, 
 func _go(kind_: String, pos: Vector2) -> void:
 	_marker.visible = false
 	_free = false
+	if not walks.replay.is_empty():
+		walks.stop_replay(true) # you chose to go somewhere else
+	input.enabled = true
 	if geo and FieldPrefs.follow():
 		FieldPrefs.set_value("follow", false)
 		menu.set_follow(false)

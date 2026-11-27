@@ -148,10 +148,12 @@ func _ready() -> void:
 			_body.append(c)
 		if c == _sub:
 			past_sub = true
-	set_collapsed(BuildInfo.is_phone())
+	set_collapsed(BuildInfo.is_phone(), false)
 
 
-func set_collapsed(on: bool) -> void:
+func set_collapsed(on: bool, sound := true) -> void:
+	if sound and on != collapsed and is_inside_tree():
+		PopupFx.swoosh(get_tree(), not on)
 	collapsed = on
 	for c in _body:
 		c.visible = not on
@@ -214,7 +216,11 @@ func _fit_scale() -> void:
 		# Phones keep the bottom-left My beacons button clear.
 		var bottom := FieldMenu.BAR * FieldMenu.PHONE_SCALE if phone else 0.0
 		var room := view - Vector2(32, 32 + bottom)
-		k = minf(want, minf(room.x * 0.62 / _panel.size.x, room.y / _panel.size.y))
+		# Never under the top-right buttons (they'd take the taps meant for this panel).
+		var menu := get_tree().get_first_node_in_group("field_menu")
+		var right: float = menu.row_left() - 16.0 if menu else view.x
+		var wide := minf(room.x * 0.62, right - 16.0 - 12.0)
+		k = minf(want, minf(wide / _panel.size.x, room.y / _panel.size.y))
 	if not is_equal_approx(_panel.scale.x, k):
 		_panel.scale = Vector2(k, k)
 

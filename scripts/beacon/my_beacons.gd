@@ -318,7 +318,7 @@ func _process(_delta: float) -> void:
 	var names: Array = drafts.pool.exclusive.map(func(x): return x.name)
 	var line := BeaconDrafts.status_line(shares, names) if not shares.is_empty() else "Global 100%"
 	_status.text = line
-	_toggle.text = ("★ My beacons  ·  " + line) if not _panel.visible else "★ My beacons"
+	_toggle.text = ("★ My beacons  ·  " + line) if not PopupFx.is_open(_panel) else "★ My beacons"
 	var offer := drafts.more_grid_offer(player.pos.y, player.pos.x)
 	var key: String = "%s:%s" % [offer.from.id, offer.dir] if not offer.is_empty() else ""
 	if key != _offer_key:
@@ -341,8 +341,21 @@ func _fit() -> void:
 	var s := minf(ui_scale, (view.x - 24.0) / maxf(1.0, _panel.size.x))
 	FieldMenu.fit_scroll(_scroll, room / s - 26.0)
 	_panel.reset_size()
-	_panel.scale = Vector2(s, s)
+	PopupFx.apply(_panel, s, Vector2(0, _panel.size.y)) # pops open from its bottom-left corner, above the button
 	_panel.position = Vector2(12, _toggle.position.y - 8.0 - _panel.size.y * s)
+
+
+func set_open(open: bool, sound := true) -> void:
+	if open:
+		PopupFx.claim(self)
+	PopupFx.animate(_panel, open, sound)
+	if _toggle:
+		_toggle.set_pressed_no_signal(open)
+
+
+func close_popup(except: Object) -> void:
+	if except != self and PopupFx.is_open(_panel):
+		set_open(false)
 
 
 static func _dist(m: float) -> String:
@@ -358,12 +371,13 @@ func _say(text: String, err := false) -> void:
 
 func _build() -> void:
 	var menu := FieldMenu.new("globe") # only for its button and label styles
-	_toggle = menu._button("★ My beacons", func(): _panel.visible = not _panel.visible, true)
+	_toggle = menu._button("★ My beacons", func(): set_open(not PopupFx.is_open(_panel)), true)
 
 	add_child(_toggle)
 	_panel = PanelContainer.new()
 	_panel.mouse_filter = Control.MOUSE_FILTER_STOP
 	_panel.visible = false
+	add_to_group(PopupFx.GROUP)
 	var sb := StyleBoxFlat.new()
 	sb.bg_color = FieldMenu.POP_BG
 	sb.border_color = FieldMenu.POP_BORDER
@@ -372,6 +386,7 @@ func _build() -> void:
 	sb.set_content_margin_all(12)
 	_panel.add_theme_stylebox_override("panel", sb)
 	add_child(_panel)
+	PopupFx.glass(_panel)
 	var v := VBoxContainer.new()
 	v.custom_minimum_size = Vector2(360, 0)
 	v.add_theme_constant_override("separation", 8)
