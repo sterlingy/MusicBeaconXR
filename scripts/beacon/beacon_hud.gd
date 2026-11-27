@@ -87,11 +87,14 @@ func _ready() -> void:
 	head.add_child(pad)
 	_links.append(pad)
 	var menu := FieldMenu.new("grid")
-	for l in [["Instruments", "res://scenes/instrument_table.tscn", "3D instruments to play with your hands (I)"],
-			["Synths", "res://scenes/studio.tscn", "Play and shape each instrument"]]:
+	for l in [["Instruments", "res://scenes/instrument_table.tscn", "3D instruments to play with your hands (I)", "piano"],
+			["Synths", "res://scenes/studio.tscn", "Play and shape each instrument", "sliders"]]:
 		var path: String = l[1]
 		var b := menu._button(l[0], func(): _open_scene(path))
 		b.tooltip_text = l[2]
+		b.icon = FieldMenu.icon(l[3])
+		b.add_theme_constant_override("icon_max_width", 16)
+		b.add_theme_constant_override("h_separation", 6)
 		b.custom_minimum_size = Vector2(0, 32)
 		b.add_theme_font_size_override("font_size", 14)
 		links.add_child(b)
@@ -167,6 +170,7 @@ func _ready() -> void:
 	_quality_btn = Button.new()
 	_quality_btn.focus_mode = Control.FOCUS_NONE
 	_quality_btn.add_theme_font_size_override("font_size", 12)
+	FieldMenu.style_button(_quality_btn, 6, 6)
 	_quality_btn.tooltip_text = "Sound quality: Auto fits this device, High plays everything, Light saves battery"
 	_quality_btn.pressed.connect(func():
 		var modes: Array = AudioQuality.MODES
@@ -229,13 +233,8 @@ func _collapse_button() -> Button:
 	var b := Button.new()
 	b.focus_mode = Control.FOCUS_NONE
 	b.custom_minimum_size = Vector2(40, 32)
-	for state in ["normal", "hover", "pressed"]:
-		var sb := StyleBoxFlat.new()
-		sb.bg_color = Color(0.13, 0.16, 0.2) if state != "pressed" else Color(0.2, 0.24, 0.3)
-		sb.border_color = ACCENT if state == "hover" else Color(0.25, 0.3, 0.38)
-		sb.set_border_width_all(1)
-		sb.set_corner_radius_all(6)
-		b.add_theme_stylebox_override(state, sb)
+	FieldMenu.style_button(b, 6, 0)
+	b.add_theme_stylebox_override("pressed", b.get_theme_stylebox("hover"))
 	b.draw.connect(func():
 		var c := b.size / 2.0
 		var w := 8.0
@@ -257,8 +256,8 @@ func _toggle(text: String, on_color: Color, on_toggle: Callable) -> Button:
 	for state in ["normal", "hover", "pressed", "hover_pressed"]:
 		var sb := StyleBoxFlat.new()
 		var on: bool = state.contains("pressed")
-		sb.bg_color = on_color if on else Color(0.13, 0.16, 0.2)
-		sb.border_color = on_color if on or state == "hover" else Color(0.25, 0.3, 0.38)
+		sb.bg_color = on_color if on else (FieldMenu.BTN_BG_HOVER if state == "hover" else FieldMenu.BTN_BG)
+		sb.border_color = on_color if on or state == "hover" else FieldMenu.BTN_BORDER
 		sb.set_border_width_all(1)
 		sb.set_corner_radius_all(5)
 		b.add_theme_stylebox_override(state, sb)

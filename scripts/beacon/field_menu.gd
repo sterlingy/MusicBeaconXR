@@ -41,6 +41,12 @@ const BAR := 60.0
 ## world and the readout, so they read as a layer on top.
 const POP_BG := Color(0.14, 0.175, 0.23, 0.97)
 const POP_BORDER := Color("44566d")
+## Buttons: a lighter slate than the panels behind them, a brighter border and
+## white text, so they read as buttons on the globe and on the panels.
+const BTN_BG := Color("303c4b")
+const BTN_BG_HOVER := Color("3a4859")
+const BTN_BORDER := Color("66758a")
+const BTN_ON_BG := Color("3a2a10")
 
 
 func _init(p_kind: String) -> void:
@@ -462,15 +468,46 @@ func _button(text: String, on_press: Callable, toggle := false) -> Button:
 	b.focus_mode = Control.FOCUS_NONE
 	b.custom_minimum_size = Vector2(0, 40)
 	b.add_theme_font_size_override("font_size", 15)
+	style_button(b)
+	b.pressed.connect(on_press)
+	return b
+
+
+## The app's button look (see BTN_BG): slate, lit amber when pressed or on.
+static func style_button(b: Button, radius := 8, margin := 12) -> void:
 	for state in ["normal", "hover", "pressed", "hover_pressed", "disabled"]:
 		var sb := StyleBoxFlat.new()
 		var on: bool = state.contains("pressed")
-		sb.bg_color = Color("3a2a10") if on else Color(0.08, 0.11, 0.15, 0.88)
-		sb.border_color = ACCENT if on or state == "hover" else Color("2a3644")
+		sb.bg_color = BTN_ON_BG if on else (BTN_BG_HOVER if state == "hover" else BTN_BG)
+		sb.border_color = ACCENT if on or state == "hover" else BTN_BORDER
 		sb.set_border_width_all(1)
-		sb.set_corner_radius_all(8)
-		sb.content_margin_left = 12
-		sb.content_margin_right = 12
+		sb.set_corner_radius_all(radius)
+		sb.content_margin_left = margin
+		sb.content_margin_right = margin
 		b.add_theme_stylebox_override(state, sb)
-	b.pressed.connect(on_press)
-	return b
+	for c in ["font_color", "font_hover_color", "font_pressed_color", "font_hover_pressed_color"]:
+		b.add_theme_color_override(c, Color.WHITE)
+
+
+## A small amber icon for a button: "piano" (keys) or "sliders" (a synth's controls).
+static func icon(kind: String) -> Texture2D:
+	var n := 40
+	var img := Image.create(n, n, false, Image.FORMAT_RGBA8)
+	img.fill(Color(0, 0, 0, 0))
+	var c := ACCENT
+	if kind == "piano":
+		# An outline of three white keys with two black keys between them.
+		img.fill_rect(Rect2i(3, 6, 34, 3), c)
+		img.fill_rect(Rect2i(3, 31, 34, 3), c)
+		for x in [3, 14, 25, 34]:
+			img.fill_rect(Rect2i(x, 6, 3, 28), c)
+		for x in [10, 21]:
+			img.fill_rect(Rect2i(x, 6, 8, 16), c)
+	else:
+		# Three sliders: a track each with a knob at a different height.
+		for i in 3:
+			var x := 7 + i * 12
+			img.fill_rect(Rect2i(x, 4, 3, 32), c)
+			var ky: int = [24, 10, 18][i]
+			img.fill_rect(Rect2i(x - 4, ky, 11, 7), c)
+	return ImageTexture.create_from_image(img)
