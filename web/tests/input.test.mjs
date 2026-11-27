@@ -154,3 +154,77 @@ test("AR placement: the viewer stands on the listener, facing the field's north"
   const w = worldOf(s, { x: -38, y: 27 }, 0.5);
   assert.ok(Math.abs(w[0] - 2) < 1e-9 && w[1] === 0.5 && Math.abs(w[2] - 3) < 1e-9);
 });
+
+// ---------------------------------------------------------------- explore and travel
+
+import { travelSeconds as _travelSeconds, pointerSource } from "../src/input/listener.js";
+
+test("great circles and Move times match the app", () => {
+  const g = geoSpace();
+  const lon = { lat: 51.51, lon: -0.13 }, ny = { lat: 40.71, lon: -74 };
+  assert.ok(Math.abs(g.distance(lon, ny) - 5570) < 30);
+  const mid = g.interp(lon, ny, 0.5);
+  assert.ok(mid.lat > 51.5 && mid.lon < -30 && mid.lon > -45, "bows north over the Atlantic");
+  const hop = _travelSeconds(g, lon, { lat: 51.6, lon: 0 }), far = _travelSeconds(g, lon, { lat: -30, lon: 150 });
+  assert.ok(hop >= 3 && hop < 4 && far > 10 && far <= 12);
+  const flat = planarSpace();
+  assert.deepEqual(flat.interp({ x: 0, y: 0 }, { x: 10, y: 20 }, 0.5), { x: 5, y: 10 });
+});
+
+test("Move glides there, eases, arrives; walking or a jump cancels it", () => {
+  const li = new ListenerInput({ space: planarSpace(), position: { x: 0, y: 0 } });
+  let arrived = null;
+  li.on("arrived", (p) => { arrived = p; });
+  li.travelTo({ x: 100, y: 0 }, 2);
+  li.tick(0.2);
+  assert.ok(li.position.x < 10, "eases in");
+  li.tick(0.8);
+  assert.ok(Math.abs(li.position.x - 50) < 2, "halfway at half time");
+  li.tick(1.1);
+  assert.deepEqual(arrived, { x: 100, y: 0 });
+  assert.equal(li.traveling, false);
+  li.travelTo({ x: 0, y: 0 }, 2);
+  li.jumpTo({ x: 7, y: 7 });
+  li.tick(0.5);
+  assert.deepEqual(li.position, { x: 7, y: 7 });
+});
+
+function fakeCanvas() {
+  const h = {};
+  return {
+    width: 100, height: 100,
+    getBoundingClientRect: () => ({ left: 0, top: 0, width: 100, height: 100 }),
+    addEventListener: (t, f) => { h[t] = f; }, removeEventListener: (t) => { delete h[t]; },
+    fire: (t, e) => h[t]?.({ pointerId: 1, button: 0, preventDefault() {}, ...e }),
+  };
+}
+
+test("explore pointer: drag pans without moving, tap selects, long press and right-click ask where to go", async () => {
+  const el = fakeCanvas();
+  const pans = [], acts = [];
+  let end = null;
+  const li = new ListenerInput({ space: planarSpace(), position: { x: 0, y: 0 } });
+  li.add(pointerSource(el, (x, y) => ({ x, y }), { mode: "explore", longPressMs: 30, onOrbit: (dx, dy) => pans.push([dx, dy]), onOrbitEnd: (vx, vy) => { end = [vx, vy]; } }));
+  li.on("action", (n, a) => acts.push([n, a]));
+  el.fire("pointerdown", { clientX: 10, clientY: 10 });
+  el.fire("pointermove", { clientX: 30, clientY: 10 });
+  el.fire("pointermove", { clientX: 40, clientY: 15 });
+  el.fire("pointerup", { clientX: 40, clientY: 15 });
+  assert.equal(pans.length, 2);
+  assert.ok(end, "a drag ends with a flick speed");
+  assert.equal(li.target, null);
+  assert.equal(acts.length, 0, "a drag isn't a tap");
+  el.fire("pointerdown", { clientX: 50, clientY: 50 });
+  el.fire("pointerup", { clientX: 51, clientY: 50 });
+  assert.equal(acts[0][0], "select");
+  assert.equal(li.target, null, "a tap doesn't walk");
+  acts.length = 0;
+  el.fire("pointerdown", { clientX: 60, clientY: 60 });
+  await new Promise((r) => setTimeout(r, 60));
+  el.fire("pointerup", { clientX: 60, clientY: 60 });
+  assert.deepEqual(acts.map((a) => a[0]), ["point"], "a long press asks where to go, and isn't also a tap");
+  assert.deepEqual(acts[0][1].pos, { x: 60, y: 60 });
+  acts.length = 0;
+  el.fire("contextmenu", { clientX: 20, clientY: 30 });
+  assert.deepEqual(acts.map((a) => a[0]), ["point"], "right-click asks too");
+});

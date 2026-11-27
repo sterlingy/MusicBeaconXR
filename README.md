@@ -9,7 +9,7 @@ Generative music driven by where you are. Beacons are placed in a space: a 100 m
 | `web/` | **Music Beacon XR**, the browser playfield: test grid, globe, and a local grid (1 to 100 km a side, any beacon spacing) that follows your location; Web Audio synths with 20 presets each and parameter automation (the Synths page, `web/synths.html`); song editor with form and arrangement; shared songs. See [web/README.md](web/README.md). | `python web/serve.py`, then http://127.0.0.1:8765 (`--https` for phones) · `node --test web/tests` |
 | `addons/synthkit/` | **SynthKit**, the AudioSyncMaster instruments as a Godot addon (engine, panels, presets, sequencer, clock). See [addons/synthkit/README.md](addons/synthkit/README.md). | `godot --headless --path . res://tests/synthkit_check.tscn` |
 | `scripts/beacon/` | The Godot beacon player: the same fields, weights and blending as the browser, playing on SynthKit's engine. Keys, lead and a pad part (which holds the blended harmony's chords) play on SynthKit's **Prism** engine. | `godot --headless --path . res://tests/beacon_check.tscn` |
-| `scenes/beacon_field.tscn` | **3D test grid** (main scene): pillars per beacon, a listener to walk, blend lines, HUD. WASD walk, click to go, T auto-walk, Space play, G globe. | F5 in Godot |
+| `scenes/beacon_field.tscn` | **3D test grid** (main scene): pillars per beacon, a listener to walk, blend lines, HUD. WASD walk, drag to pan, tap a beacon or long-press (right-click) to Jump or Move there, T auto-walk, Space play, G globe. | F5 in Godot |
 | `scenes/globe_field.tscn` | **3D globe**: 614 beacons on a sphere, great-circle blend arcs. WASD walk, 1–9 jump to cities, G back to grid. | open the scene, F6 |
 | `scenes/studio.tscn` | SynthKit studio page, to try the instruments by hand. | open the scene, F6 |
 | `addons/listener_kit/` | **ListenerKit**, where the listener is and every way to move them: keyboard / gamepad, click / tap / pinch, wander, OpenXR locomotion. No SynthKit, no scene code, so other apps can use it. See [addons/listener_kit/README.md](addons/listener_kit/README.md). The browser twin is `web/src/input/listener.js`. | `godot --headless --path . res://tests/listener_check.tscn` |
@@ -106,3 +106,12 @@ node web/tools/calibrate_samples.mjs
 ```
 
 The export presets carry the right packs (desktop: full; Android and Quest: both). The built packs are committed, so a fresh checkout builds and the website serves the web pack. `web/tools/sampler_render.mjs` renders a program offline for checking, and `tests/sampler_check.gd` checks the Sampler in the app.
+
+## Getting around: Jump and Move
+
+On the globe and the grids, one finger (or the mouse) turns the globe or pans the map without moving you; a flick keeps it going. Tap a beacon, or long-press (right-click on a desktop) anywhere, and a card offers two ways to go:
+
+- **Jump:** there at once.
+- **Move:** glide there along the great circle (a straight line on a grid), hearing the music change through every beacon on the way. About 3 seconds for a short hop, up to 12 across the world. Tap the map to stop.
+
+**Back to me** (bottom middle) returns the view after you've turned it away. Going somewhere stops following your location. Pinch or the wheel zooms; keys still walk. In a headset, tap the right trigger on a beacon or hold it on any spot, and the card floats there: point at Jump or Move and pull the trigger. The website's flat maps and 3D globe work the same way. Code: ListenerKit (`PointerSource` mode `explore`, `ListenerInput.travel_to`), `scripts/beacon/travel_ui.gd`, `xr_travel_card.gd`; on the web `src/input/listener.js` and `src/travelcard.js`.

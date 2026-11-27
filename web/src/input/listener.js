@@ -24,6 +24,8 @@ export function planarSpace({ half = 250, margin = half * 0.08 } = {}) {
     step: (p, [dx, dy], dist) => clamp({ x: p.x + dx * dist, y: p.y - dy * dist }),
     toward: (a, b) => { const [x, y, l] = norm(b.x - a.x, -(b.y - a.y)); return { dir: [x, y], dist: l }; },
     bounce: (p, h) => bounceXY(p.x, -p.y, h, half - margin),
+    interp: (a, b, t) => clamp({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t }),
+    distance: (a, b) => Math.hypot(b.x - a.x, b.y - a.y),
   };
 }
 
@@ -41,6 +43,8 @@ export function localSpace(field, { half = () => (field.steps / 2 + 0.5) * field
     step: (p, [dx, dy], dist) => { const q = field.toXY(p); return clamp(field.fromXY({ x: q.x + dx * dist, y: q.y + dy * dist })); },
     toward: (a, b) => { const p = field.toXY(a), q = field.toXY(b); const [x, y, l] = norm(q.x - p.x, q.y - p.y); return { dir: [x, y], dist: l }; },
     bounce: (p, hd) => { const q = field.toXY(p); return bounceXY(q.x, q.y, hd, h() - m()); },
+    interp: (a, b, t) => { const p = field.toXY(a), q = field.toXY(b); return clamp(field.fromXY({ x: p.x + (q.x - p.x) * t, y: p.y + (q.y - p.y) * t })); },
+    distance: (a, b) => { const p = field.toXY(a), q = field.toXY(b); return Math.hypot(q.x - p.x, q.y - p.y); },
   };
 }
 
@@ -54,7 +58,34 @@ export function geoSpace({ maxLat = 84 } = {}) {
     step: (p, [dx, dy], dist) => clamp({ lat: p.lat + dy * dist, lon: p.lon + dx * dist * k(p.lat) }),
     toward: (a, b) => { const [x, y, l] = norm(wrapLon(b.lon - a.lon) / k(a.lat), b.lat - a.lat); return { dir: [x, y], dist: l }; },
     bounce: (p, h) => (Math.abs(p.lat) > maxLat && Math.sign(Math.sin(h)) === Math.sign(p.lat) ? -h : h),
+    // Along the great circle (the way a plane flies); distance in km.
+    interp: (a, b, t) => {
+      const va = unit(a), vb = unit(b);
+      const ang = Math.acos(Math.max(-1, Math.min(1, va[0] * vb[0] + va[1] * vb[1] + va[2] * vb[2])));
+      if (ang < 1e-9) return clamp(b);
+      const ka = Math.sin((1 - t) * ang) / Math.sin(ang), kb = Math.sin(t * ang) / Math.sin(ang);
+      const v = [va[0] * ka + vb[0] * kb, va[1] * ka + vb[1] * kb, va[2] * ka + vb[2] * kb];
+      const l = Math.hypot(...v);
+      return clamp({ lat: Math.asin(Math.max(-1, Math.min(1, v[1] / l))) / D2R, lon: Math.atan2(v[0], v[2]) / D2R });
+    },
+    distance: (a, b) => { const va = unit(a), vb = unit(b); return Math.acos(Math.max(-1, Math.min(1, va[0] * vb[0] + va[1] * vb[1] + va[2] * vb[2]))) * 6371.0; },
   };
+}
+
+function unit(p) {
+  const lat = p.lat * D2R, lon = p.lon * D2R;
+  return [Math.cos(lat) * Math.sin(lon), Math.sin(lat), Math.cos(lat) * Math.cos(lon)];
+}
+
+/**
+ * How long a Move should take: about 3 s for a short hop and up to 12 s across
+ * the world (geo spaces, km), or 1.5 to 6 s across a floor `span` units wide.
+ * Same as ListenerInput.travel_seconds in the Godot ListenerKit.
+ */
+export function travelSeconds(space, a, b, span = 500) {
+  const d = space.distance(a, b);
+  if (space.kind === "geo") return 3 + 9 * Math.max(0, Math.min(1, (Math.log10(1 + d) - 1) / 3.3));
+  return 1.5 + 4.5 * Math.max(0, Math.min(1, d / Math.max(1, span)));
 }
 
 // Heading h is radians in (right, forward); x, y are right and forward coordinates.
@@ -92,7 +123,8 @@ export class ListenerInput {
     this.heading = Math.random() * Math.PI * 2;
     this.enabled = true;
     this.sources = [];
-    this._handlers = { moved: [], action: [], wander: [], manual: [] };
+    this.travel = null;
+    this._handlers = { moved: [], action: [], wander: [], manual: [], arrived: [] };
   }
 
   on(ev, fn) { this._handlers[ev].push(fn); return () => { this._handlers[ev] = this._handlers[ev].filter((f) => f !== fn); }; }
@@ -109,8 +141,15 @@ export class ListenerInput {
     this.position = this.space.clamp(p);
     if (emit) this.emit("moved", this.position);
   }
-  jumpTo(p) { this.target = null; this.setPosition(p); }
-  setTarget(p) { this.target = p ? this.space.clamp(p) : null; }
+  jumpTo(p) { this.target = null; this.travel = null; this.setPosition(p); }
+  setTarget(p) { this.travel = null; this.target = p ? this.space.clamp(p) : null; }
+  /**
+   * Glides to `p` over `seconds`, easing in and out, along the space's own path
+   * (great circles on the globe). Walking or a jump cancels it.
+   */
+  travelTo(p, seconds) { this.target = null; this.travel = { from: this.position, to: this.space.clamp(p), t: 0, dur: Math.max(0.05, seconds) }; }
+  get traveling() { return !!this.travel; }
+  stopTravel() { this.travel = null; }
   /** Sends a command; "toggle_wander" also flips `wander`. */
   action(name, arg) { if (name === "toggle_wander") this.wander = !this.wander; this.emit("action", name, arg); }
   /** Sources call this when the person moves by hand (so e.g. GPS follow can stop). */
@@ -129,10 +168,19 @@ export class ListenerInput {
       if (d && (d[0] || d[1])) {
         const [x, y, l] = norm(d[0], d[1]);
         this.target = null;
+        this.travel = null;
         this.manual("walk");
         this.setPosition(this.space.step(this.position, [x, y], dist * Math.min(1, l)));
         return;
       }
+    }
+    if (this.travel) {
+      const tr = this.travel;
+      tr.t += dt;
+      const u = Math.min(1, tr.t / tr.dur);
+      this.setPosition(this.space.interp(tr.from, tr.to, u * u * (3 - 2 * u)));
+      if (u >= 1) { this.travel = null; this.emit("arrived", tr.to); }
+      return;
     }
     if (this.target) {
       const t = this.space.toward(this.position, this.target);
@@ -203,38 +251,77 @@ export function keyboardSource(target = globalThis.window, { jumpKeys = false, w
  * Pointer (mouse, touch, pen) on an element: press to walk there, drag to
  * steer, a tap sends "select" with the screen point and world position.
  * `toWorld(x, y)` maps element pixels (scaled to the canvas size) to a position.
+ *
+ * `mode: "explore"` leaves the listener alone instead: dragging calls
+ * `onOrbit(dx, dy)` (element pixels, so the host pans or turns the view) and
+ * `onOrbitEnd(vx, vy)` (px/s, for a flick); a tap sends "select"; a long press
+ * (`longPressMs`) or a right-click sends "point" ({x, y, clientX, clientY, pos})
+ * so the host can offer to Jump or Move there. Same as PointerSource in Godot.
  */
-export function pointerSource(el, toWorld, { tapPx = 8 } = {}) {
-  let li = null, downAt = null;
+export function pointerSource(el, toWorld, { tapPx = 8, mode = "walk", onOrbit = null, onOrbitEnd = null, longPressMs = 500 } = {}) {
+  let li = null, downAt = null, moved = false, pointed = false, timer = 0, last = null, vel = [0, 0];
   const pt = (e) => {
     const r = el.getBoundingClientRect();
     const sx = (el.width || r.width) / r.width, sy = (el.height || r.height) / r.height;
     return [(e.clientX - r.left) * sx, (e.clientY - r.top) * sy];
   };
+  const scale = () => (el.width || 1) / (el.getBoundingClientRect().width || 1);
+  const point = (e, [x, y]) => li.action("point", { x, y, clientX: e.clientX, clientY: e.clientY, pos: toWorld(x, y) });
   const down = (e) => {
-    el.setPointerCapture?.(e.pointerId);
-    const [x, y] = pt(e);
-    downAt = [x, y];
+    if (src.mode === "explore" && e.button === 2) return; // right-click: contextmenu handles it
+    try { el.setPointerCapture?.(e.pointerId); } catch { /* not a live pointer (synthetic events) */ }
+    const p = pt(e);
+    downAt = p;
+    if (src.mode === "explore") {
+      moved = false; pointed = false; vel = [0, 0]; last = { p, t: performance.now() };
+      clearTimeout(timer);
+      timer = setTimeout(() => { if (downAt && !moved) { pointed = true; point(e, downAt); } }, longPressMs);
+      return;
+    }
     li.holdTarget = true;
     li.manual("pointer");
-    li.setTarget(toWorld(x, y));
+    li.setTarget(toWorld(p[0], p[1]));
   };
-  const move = (e) => { if (!downAt) return; const [x, y] = pt(e); li.setTarget(toWorld(x, y)); };
+  const move = (e) => {
+    if (!downAt) return;
+    const p = pt(e);
+    if (src.mode === "explore") {
+      if (!moved && !pointed && Math.hypot(p[0] - downAt[0], p[1] - downAt[1]) >= tapPx * scale()) { moved = true; clearTimeout(timer); }
+      if (moved) {
+        const now = performance.now(), dt = Math.max(0.008, (now - last.t) / 1000);
+        const dx = p[0] - last.p[0], dy = p[1] - last.p[1];
+        vel = [vel[0] * 0.5 + (dx / dt) * 0.5, vel[1] * 0.5 + (dy / dt) * 0.5];
+        last = { p, t: now };
+        onOrbit?.(dx, dy);
+      }
+      return;
+    }
+    li.setTarget(toWorld(p[0], p[1]));
+  };
   const up = (e) => {
     if (!downAt) return;
     const [x, y] = pt(e);
+    clearTimeout(timer);
+    if (src.mode === "explore") {
+      if (moved) onOrbitEnd?.(performance.now() - last.t > 120 ? 0 : vel[0], performance.now() - last.t > 120 ? 0 : vel[1]);
+      else if (!pointed) li.action("select", { x, y, pos: toWorld(x, y) });
+      downAt = null;
+      return;
+    }
     li.holdTarget = false;
-    const scale = (el.width || 1) / (el.getBoundingClientRect().width || 1);
-    if (Math.hypot(x - downAt[0], y - downAt[1]) < tapPx * scale) li.action("select", { x, y, pos: toWorld(x, y) });
+    if (Math.hypot(x - downAt[0], y - downAt[1]) < tapPx * scale()) li.action("select", { x, y, pos: toWorld(x, y) });
     downAt = null;
   };
-  const cancel = () => { downAt = null; if (li) li.holdTarget = false; };
-  return {
+  const cancel = () => { clearTimeout(timer); downAt = null; if (li) li.holdTarget = false; };
+  const context = (e) => { if (src.mode !== "explore") return; e.preventDefault(); point(e, pt(e)); };
+  const src = {
     name: "pointer",
+    mode,
     get dragging() { return !!downAt; },
-    attach(l) { li = l; el.addEventListener("pointerdown", down); el.addEventListener("pointermove", move); el.addEventListener("pointerup", up); el.addEventListener("pointercancel", cancel); },
-    detach() { el.removeEventListener("pointerdown", down); el.removeEventListener("pointermove", move); el.removeEventListener("pointerup", up); el.removeEventListener("pointercancel", cancel); },
+    attach(l) { li = l; el.addEventListener("pointerdown", down); el.addEventListener("pointermove", move); el.addEventListener("pointerup", up); el.addEventListener("pointercancel", cancel); el.addEventListener("contextmenu", context); },
+    detach() { el.removeEventListener("pointerdown", down); el.removeEventListener("pointermove", move); el.removeEventListener("pointerup", up); el.removeEventListener("pointercancel", cancel); el.removeEventListener("contextmenu", context); },
   };
+  return src;
 }
 
 /**

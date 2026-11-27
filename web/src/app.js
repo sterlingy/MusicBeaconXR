@@ -1,11 +1,12 @@
 // Music Beacon XR UI: the map, the listener, and the readouts.
 
 import { makeGridField, makeGlobeField, makeLocalGridField, localGridShape, MAX_LOCAL_STEPS, KM_M, weigh, normalizeLatLon } from "./beacons.js";
+import { initTravelCard, describePlace } from "./travelcard.js";
 import { generateSong, validateSong, chordName, keyName, ROLES, ROLE_INSTRUMENT } from "./song.js";
 import { songPosition, sectionName, clock, hasForm, totalBars, lengthSeconds, SECTION_LABEL, SECTION_COLOR, sectionSpec } from "./form.js";
 import { BeaconEngine } from "./engine.js";
 import { SongEditor } from "./editor.js";
-import { ListenerInput, planarSpace, geoSpace, localSpace, keyboardSource, pointerSource } from "./input/listener.js";
+import { ListenerInput, planarSpace, geoSpace, localSpace, keyboardSource, pointerSource, travelSeconds } from "./input/listener.js";
 import { initDrafts } from "./draftsui.js";
 import { Globe3D } from "./globe3d.js";
 import { initWalks, drawLines } from "./walkui.js";
@@ -112,7 +113,18 @@ new ResizeObserver(resize).observe(canvas);
 
 // ------------------------------------------------------------------ view transform
 
+/**
+ * The map's view. Dragging pans it away from the listener (ui.pan, canvas
+ * pixels); any move of the listener brings it back.
+ */
 function view() {
+  const v = baseView();
+  const o = ui.pan;
+  if (!o) return v;
+  return { ...v, toScreen: (p) => { const [x, y] = v.toScreen(p); return [x + o.x, y + o.y]; }, toWorld: (x, y) => v.toWorld(x - o.x, y - o.y) };
+}
+
+function baseView() {
   const W = canvas.width, H = canvas.height;
   if (ui.mode === "grid") {
     const f = engine.field, m = ((f.n - 1) / 2) * f.spacing + f.spacing * 0.5;
@@ -172,6 +184,7 @@ function zoneImage(v) {
   const big = Math.max(canvas.width, canvas.height) || 1;
   const res = ui.mode === "globe" ? [140, 70] : ui.mode === "local" ? [Math.round(120 * canvas.width / big), Math.round(120 * canvas.height / big)] : [110, 110];
   const key = [ui.mode, ui.zoom, engine.opts.sharpness, canvas.width, canvas.height, engine.overrides.size, engine.songRev || 0,
+    ui.pan ? `${Math.round(ui.pan.x / 3)},${Math.round(ui.pan.y / 3)}` : "",
     ui.mode === "globe" && ui.zoom === "local" ? `${Math.round(v.center.lat / 3)},${Math.round(v.center.lon / 3)}` : "",
     ui.mode === "local" ? `${engine.field.center.lat},${engine.field.center.lon},${Math.round(v.center.x / (v.spanM / 80))},${Math.round(v.center.y / (v.spanM / 80))}` : ""].join("|");
   if (key === ui.zoneKey && ui.zoneImg) return ui.zoneImg;
@@ -446,12 +459,23 @@ const spaces = {
   grid: planarSpace({ half: 250, margin: 20 }),
   globe: geoSpace({ maxLat: 84 }),
   // The local grid is rebuilt as you travel, so always ask the current one.
-  local: { kind: "local", clamp: (p) => localNow().clamp(p), step: (...a) => localNow().step(...a), toward: (...a) => localNow().toward(...a), bounce: (...a) => localNow().bounce(...a) },
+  local: { kind: "local", clamp: (p) => localNow().clamp(p), step: (...a) => localNow().step(...a), toward: (...a) => localNow().toward(...a), bounce: (...a) => localNow().bounce(...a),
+    interp: (...a) => localNow().interp(...a), distance: (...a) => localNow().distance(...a) },
 };
 const input = new ListenerInput({ space: spaces.grid, position: { x: -38, y: 27 }, speed: speedPerSec });
 input.add(keyboardSource(window));
-const pointer = input.add(pointerSource(canvas, (x, y) => view().toWorld(x, y)));
-input.on("moved", (p) => engine.setPosition(p));
+const travel = initTravelCard({
+  wrap: $("fieldwrap"), card: $("travelcard"), title: $("tcTitle"), detail: $("tcDetail"), back: $("backtome"),
+  onBack: () => { ui.pan = null; ui.panVel = null; if (is3d() && globe3d) globe3d.follow(); },
+});
+// One finger (or the mouse) pans the map; a tap on a beacon or a long press
+// (right-click) offers to Jump or Move there.
+const pointer = input.add(pointerSource(canvas, (x, y) => view().toWorld(x, y), {
+  mode: "explore",
+  onOrbit: (dx, dy) => { ui.pan = { x: (ui.pan?.x || 0) + dx, y: (ui.pan?.y || 0) + dy }; ui.panVel = null; travel.close(); },
+  onOrbitEnd: (vx, vy) => { ui.panVel = Math.hypot(vx, vy) > 60 ? { x: vx, y: vy } : null; },
+}));
+input.on("moved", (p) => { engine.setPosition(p); ui.pan = null; ui.panVel = null; });
 input.on("manual", () => stopFlight("Walking by hand, so you stopped following the flight."));
 input.on("manual", (kind) => stopFollow(kind === "pointer" ? "Moved by hand, so the map stopped following your location." : "Walking by hand, so the map stopped following your location."));
 input.on("wander", (on) => { $("wander").checked = on; if (on) stopFollow("Auto-walk is on, so the map stopped following your location."); });
@@ -459,10 +483,46 @@ input.on("action", (name, arg) => {
   if (name === "toggle_play") togglePlay();
   else if (name === "select") {
     if (drafts.placing && drafts.placeAt(view().toWorld(arg.x, arg.y))) return;
+    if (input.traveling) { input.stopTravel(); setMsg("fieldMsg", "Stopped here."); return; } // a tap while moving stops there
     const b = beaconAt(arg.x, arg.y);
-    if (b) { select(b.id); input.setTarget({ ...b.pos }); }
+    if (b) { select(b.id); offerPlace(b.pos, b, arg); }
+  } else if (name === "point") {
+    const b = beaconAt(arg.x, arg.y);
+    offerPlace(b ? b.pos : arg.pos, b, arg);
   }
 });
+
+/** The Jump / Move card for a place (and the beacon there, if any), next to where it was asked for. */
+function offerPlace(pos, beacon, at, songOverride = null) {
+  if (!pos) return;
+  const sp = spaces[ui.mode]; // this view's own space (step() only switches the listener's on the next frame)
+  input.space = sp;
+  const span = ui.mode === "local" ? engine.field.sideM : 500;
+  const d = sp.distance(engine.pos, pos);
+  const meters = sp.kind === "geo" ? d * 1000 : d;
+  let clientX = at.clientX, clientY = at.clientY;
+  if (clientX == null) {
+    const r = canvas.getBoundingClientRect();
+    clientX = r.left + (at.x * r.width) / canvas.width;
+    clientY = r.top + (at.y * r.height) / canvas.height;
+  }
+  let song = songOverride;
+  try { if (!song && beacon?.id) song = engine.songFor(beacon); } catch { /* a beacon without a song yet */ }
+  travel.open(clientX, clientY, describePlace({ beacon, song, pos, kind: ui.mode, meters, seconds: travelSeconds(sp, engine.pos, pos, span) }),
+    (kind) => goTo(kind, pos, span));
+}
+
+/** Jump there at once, or Move: glide there, hearing the music change on the way. */
+function goTo(kind, pos, span) {
+  stopFollow("Went somewhere else, so the map stopped following your location.");
+  stopFlight("Went somewhere else, so you stopped following the flight.");
+  ui.pan = null;
+  input.space = spaces[ui.mode];
+  input.setPosition(engine.pos, false);
+  if (kind === "jump") input.jumpTo(pos);
+  else { input.travelTo(pos, travelSeconds(input.space, engine.pos, pos, span)); setMsg("fieldMsg", "Moving… tap the map to stop."); }
+  globe3d?.follow?.();
+}
 
 function step(dt) {
   input.space = spaces[ui.mode];
@@ -1090,6 +1150,13 @@ function frame(now) {
     walk.frame();
   }
   for (const ev of engine.takeSounding()) ui.flashes.set(ev.id, now);
+  // A flicked map keeps gliding a moment.
+  if (ui.panVel && ui.pan) {
+    ui.pan = { x: ui.pan.x + ui.panVel.x * dt, y: ui.pan.y + ui.panVel.y * dt };
+    const k = Math.exp(-3 * dt);
+    ui.panVel = Math.hypot(ui.panVel.x, ui.panVel.y) > 20 ? { x: ui.panVel.x * k, y: ui.panVel.y * k } : null;
+  }
+  travel.setBack(is3d() && globe3d ? globe3d.mode === "free" : !!ui.pan);
   draw(now);
   if (now - ui.lastPanel > 120) { ui.lastPanel = now; renderPanels(); }
   requestAnimationFrame(frame);
@@ -1176,7 +1243,8 @@ globe3d = new Globe3D({
   place: (lat, lon) => !!drafts.placing && drafts.placeAt({ lat, lon }),
   lines: () => walk.lines(),
   flight: () => (flight.active ? { track: flight.fix.track, label: flight.fix.reg || flight.fix.flight } : null),
-  travel: (lat, lon) => { stopFollow("Flew somewhere else, so the map stopped following your location."); input.target = null; engine.setPosition({ lat, lon }); },
+  offer: ({ pos, label, song }, clientX, clientY) => offerPlace(pos, label ? { label } : null, { clientX, clientY }, song),
+  stopTravel: () => { if (!input.traveling) return false; input.stopTravel(); setMsg("fieldMsg", "Stopped here."); return true; },
 });
 walk = initWalks({
   engine, ui, $, esc, setMsg, setMode, centerLocal, select, stopFollow, togglePlay,
@@ -1191,7 +1259,7 @@ requestAnimationFrame(frame);
 connectShared();
 
 // For debugging and automated checks.
-window.beaconField = { flight, engine, ui, setMode, select, centerLocal, setZoom, setView3d, get walk() { return walk; }, get drafts() { return drafts; }, get globe3d() { return globe3d; } };
+window.beaconField = { flight, engine, ui, input, setMode, select, centerLocal, setZoom, setView3d, get walk() { return walk; }, get drafts() { return drafts; }, get globe3d() { return globe3d; } };
 
 // ------------------------------------------------------------------ synths page
 

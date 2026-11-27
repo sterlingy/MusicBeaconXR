@@ -9,7 +9,8 @@
 // beacons (grouped by grid when far away), and arcs lifting off the surface
 // from you to the beacons you're hearing.
 //
-// Drag to turn (it keeps turning a little when you let go), wheel or pinch
+// Drag to turn (it keeps turning a little when you let go); tap a beacon, or
+// long-press / right-click anywhere, to Jump or Move there; wheel or pinch
 // to zoom, tap a beacon to inspect it, double-tap anywhere to fly there. Left
 // alone it spins slowly; walking, jumping or following your location brings
 // the camera back to you.
@@ -45,7 +46,8 @@ export class Globe3D {
   /**
    * `hooks`: {canvas, engine, ui, drafts() (the My beacons state or null),
    * moodColor(mood), label(text, x, y, size, color, halo, alpha, align),
-   * select(id), travel(lat, lon), active() -> bool}
+   * select(id), offer({pos, label, song}, clientX, clientY) (the Jump / Move
+   * card), stopTravel() -> bool (a tap while moving stops), active() -> bool}
    */
   constructor(hooks) {
     this.h = hooks;
@@ -70,6 +72,7 @@ export class Globe3D {
     this._onMove = (e) => this.move(e);
     this._onUp = (e) => this.up(e);
     this._onWheel = (e) => this.wheel(e);
+    this._onContext = (e) => this.context(e);
     this._onLeave = () => { this.hover = null; };
   }
 
@@ -177,6 +180,7 @@ export class Globe3D {
     c.addEventListener("pointercancel", this._onUp);
     c.addEventListener("pointerleave", this._onLeave);
     c.addEventListener("wheel", this._onWheel, { passive: false });
+    c.addEventListener("contextmenu", this._onContext);
     this._lastPos = null;
   }
 
@@ -188,6 +192,7 @@ export class Globe3D {
     c.removeEventListener("pointercancel", this._onUp);
     c.removeEventListener("pointerleave", this._onLeave);
     c.removeEventListener("wheel", this._onWheel);
+    c.removeEventListener("contextmenu", this._onContext);
     this.pointers.clear();
     this.drag = null;
   }
@@ -198,7 +203,7 @@ export class Globe3D {
   }
 
   down(e) {
-    this.h.canvas.setPointerCapture?.(e.pointerId);
+    try { this.h.canvas.setPointerCapture?.(e.pointerId); } catch { /* not a live pointer */ }
     const p = this._pt(e);
     this.pointers.set(e.pointerId, p);
     this.fly = null;
@@ -208,7 +213,21 @@ export class Globe3D {
       this.drag = { pinch: Math.hypot(a[0] - b[0], a[1] - b[1]), zoom: this.zoom, moved: true };
     } else {
       this.drag = { start: p, last: p, t: performance.now(), moved: false };
+      // Holding still: the Jump / Move card for that spot.
+      clearTimeout(this._hold);
+      const cx = e.clientX, cy = e.clientY;
+      this._hold = setTimeout(() => {
+        const d = this.drag;
+        if (d && !d.moved && this.pointers.size === 1) { d.pointed = true; this._offerAt(d.start, cx, cy); }
+      }, 500);
     }
+  }
+
+  /** Asks the page to offer Jump / Move for the spot (or beacon) at canvas point p. */
+  _offerAt(p, clientX, clientY) {
+    const hit = this.pick(p[0], p[1]);
+    const w = this.toWorld(hit ? hit.x : p[0], hit ? hit.y : p[1]);
+    if (w) this.h.offer?.({ pos: { lat: w.lat, lon: w.lon }, label: hit?.label || null, song: hit?.song || null }, clientX, clientY);
   }
 
   move(e) {
@@ -223,7 +242,7 @@ export class Globe3D {
       return;
     }
     const dx = p[0] - d.last[0], dy = p[1] - d.last[1];
-    if (Math.hypot(p[0] - d.start[0], p[1] - d.start[1]) > 6 * (this.h.ui.dpr || 1)) d.moved = true;
+    if (Math.hypot(p[0] - d.start[0], p[1] - d.start[1]) > 6 * (this.h.ui.dpr || 1)) { d.moved = true; clearTimeout(this._hold); }
     if (!d.moved) return;
     this.mode = "free";
     const k = R2D / this.R;
@@ -246,21 +265,31 @@ export class Globe3D {
       if (d && performance.now() - d.t > 120) this.vel = { lat: 0, lon: 0 }; // held still before letting go
       return;
     }
+    clearTimeout(this._hold);
+    if (d.pointed) return; // the long press already opened the card
     const [x, y] = d.start;
     const now = performance.now();
     if (now - this.lastTap < 320) {
-      // Double tap: fly there, closer, and take the listener along.
+      // Double tap: zoom in toward that spot.
       this.lastTap = 0;
       const w = this.toWorld(x, y);
-      if (w) { this.h.travel(w.lat, w.lon); this.flyTo(w.lat, w.lon, clamp(this.zoom * 2.5, MIN_ZOOM, MAX_ZOOM)); this.mode = "follow"; }
+      if (w) { this.flyTo(w.lat, w.lon, clamp(this.zoom * 2.5, MIN_ZOOM, MAX_ZOOM)); this.mode = "free"; }
       return;
     }
     this.lastTap = now;
     // Placing beacons on a custom map: a tap puts one there.
     const at = this.toWorld(x, y);
     if (at && this.h.place?.(at.lat, at.lon)) return;
+    // A tap while moving stops there; a tap on a beacon offers to go there.
+    if (this.h.stopTravel?.()) return;
     const hit = this.pick(x, y);
-    if (hit) this.h.select(hit.id);
+    if (hit) { this.h.select(hit.id); this._offerAt([x, y], e.clientX, e.clientY); }
+  }
+
+  /** Right-click: the Jump / Move card at once. */
+  context(e) {
+    e.preventDefault();
+    this._offerAt(this._pt(e), e.clientX, e.clientY);
   }
 
   wheel(e) {
@@ -617,6 +646,6 @@ export class Globe3D {
     const km = this.H * this.kmPerPx();
     const view = km > 3000 ? `${Math.round(km / 100) * 100} km across` : km > 30 ? `${Math.round(km)} km across` : `${km.toFixed(km < 3 ? 1 : 0)} km across`;
     const mode = this.mode === "spin" ? "spinning" : this.mode === "follow" ? "following you" : "turned by hand";
-    this.h.label(`${view} · ${mode} · drag to turn, wheel or pinch to zoom, double-tap to fly there`, 14 * d, this.H - 14 * d, 10.5 * d, light ? "#3b4a5c" : "#8d9aab", null, 1, "left");
+    this.h.label(`${view} · ${mode} · drag to turn, wheel or pinch to zoom, tap a beacon or long-press to go there`, 14 * d, this.H - 14 * d, 10.5 * d, light ? "#3b4a5c" : "#8d9aab", null, 1, "left");
   }
 }
