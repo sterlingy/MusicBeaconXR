@@ -642,9 +642,14 @@ func _start_follow() -> void:
 	mine.geo.unavailable.connect(func(reason: String):
 		if FieldPrefs.follow():
 			menu.set_status("Can't follow your location: %s" % reason))
+	# Following your location, following a flight and wandering each drive the
+	# listener, so turning one on turns the other two off.
 	menu.follow_changed.connect(func(on: bool):
 		_followed = false
 		if on:
+			input.wander = false
+			if mine.flight.active():
+				menu.stop_flight()
 			menu.set_status("Finding you… (allow location if Android asks)")
 			mine.geo.start()
 		else:
@@ -654,6 +659,12 @@ func _start_follow() -> void:
 		_centering = true
 		menu.set_status("Finding you…")
 		mine.geo.start())
+	input.wander_changed.connect(func(on: bool):
+		if not on:
+			return
+		_stop_following("Wandering, so the globe stopped following your location.")
+		if mine.flight.active():
+			menu.stop_flight())
 	if FieldPrefs.follow():
 		mine.geo.start()
 

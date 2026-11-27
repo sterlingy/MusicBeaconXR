@@ -170,8 +170,16 @@ func _start_local() -> void:
 		_fixed = false
 		menu.set_status("Finding you…")
 		geo.start())
+	# Following your location and wandering each drive the listener: one on turns the other off.
+	input.wander_changed.connect(func(on: bool):
+		if on and geo and FieldPrefs.follow():
+			FieldPrefs.set_value("follow", false)
+			menu.set_follow(false)
+			geo.stop()
+			menu.set_status("Wandering, so the grid stopped following your location."))
 	menu.follow_changed.connect(func(on: bool):
 		if on:
+			input.wander = false
 			_fixed = false
 			geo.start()
 		else:

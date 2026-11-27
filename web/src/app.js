@@ -480,7 +480,15 @@ input.on("moved", (p) => { engine.setPosition(p); ui.pan = null; ui.panVel = nul
 input.on("jumped", () => walk.markJump?.());
 input.on("manual", () => stopFlight("Walking by hand, so you stopped following the flight."));
 input.on("manual", (kind) => stopFollow(kind === "pointer" ? "Moved by hand, so the map stopped following your location." : "Walking by hand, so the map stopped following your location."));
-input.on("wander", (on) => { $("wander").checked = on; if (on) stopFollow("Auto-walk is on, so the map stopped following your location."); });
+// Following your location, following a flight and wandering each drive the listener:
+// one on turns the other two off. Wandering starts from wherever you are (the plane's spot, say).
+input.on("wander", (on) => {
+  $("wander").checked = on;
+  if (on) {
+    stopFollow("Auto-walk is on, so the map stopped following your location.");
+    stopFlight("Auto-walk is on, so you stopped following the flight. Wandering from here.");
+  }
+});
 input.on("action", (name, arg) => {
   if (name === "toggle_play") togglePlay();
   else if (name === "select") {
@@ -832,7 +840,7 @@ function stopFollow(why) {
   if (why) setMsg("fieldMsg", why);
 }
 $("follow").addEventListener("change", (e) => {
-  if (e.target.checked) { input.wander = false; startFollow(); }
+  if (e.target.checked) { input.wander = false; stopFlight("Following your location, so you stopped following the flight."); startFollow(); }
   else stopFollow("Stopped following your location.");
 });
 $("city").addEventListener("change", (e) => {

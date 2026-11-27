@@ -68,6 +68,37 @@ func _ready() -> void:
 	for i in 60:
 		await get_tree().process_frame
 	check(scene._plane_mat.albedo_color.r > 0.8 and scene._plane_mat.albedo_color.g < 0.5, "an untracked plane turns red (%s)" % scene._plane_mat.albedo_color)
+	# Only one thing drives at a time: wander, a flight, or your location.
+	for i in 3:
+		await get_tree().process_frame
+	var at_plane: Vector2 = scene.player.pos
+	scene.input.wander = true
+	await get_tree().process_frame
+	check(not scene.mine.flight.active(), "wandering stops following the flight")
+	for i in 20:
+		await get_tree().process_frame
+	check(scene.input.wander and scene.input.enabled, "and wanders")
+	check(scene.player.pos.distance_to(at_plane) < 0.05 and scene.input.position.distance_to(at_plane) < 0.05,
+		"from where the plane was (%s, now %s)" % [at_plane, scene.input.position])
+	scene.mine.flight._last_poll = FlightFollow.now_s()
+	scene.mine.flight.fix = {"found": true, "lat": 40.0, "lon": -100.0, "gs_kt": 450.0, "track": 90.0, "at": FlightFollow.now_s(), "seen_pos": 0.0, "alt_ft": 35000.0, "flight": "TST1"}
+	scene.input.wander = true
+	scene.mine._plane_drives()
+	check(not scene.input.wander, "a flight stops wandering")
+	FieldPrefs.set_value("follow", false)
+	scene.menu.set_follow(false)
+	scene.menu._follow.button_pressed = true # Follow my location
+	await get_tree().process_frame
+	check(not scene.mine.flight.active() and not scene.input.wander, "following your location stops the flight and wandering")
+	scene.input.wander = true
+	await get_tree().process_frame
+	check(not FieldPrefs.follow() and not scene.menu._follow.button_pressed, "wandering stops following your location")
+	scene.input.wander = false
+	scene.menu._follow.button_pressed = true
+	check(FieldPrefs.follow(), "following your location again")
+	scene.mine._plane_drives()
+	check(not FieldPrefs.follow() and not scene.menu._follow.button_pressed, "a flight stops following your location")
+	FieldPrefs.set_value("follow", was_following)
 	scene.mine.flight.stop()
 	print("globe_follow_check: %s (%d failure(s))" % ["OK" if failures == 0 else "FAILED", failures])
 	get_tree().quit(0 if failures == 0 else 1)

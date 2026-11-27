@@ -602,7 +602,7 @@ func _build() -> void:
 func start_flight(q: String) -> String:
 	var why := await flight.start(q)
 	if why == "":
-		player.get_tree().call_group("listener_input", "set", "wander", false) # the plane drives now
+		_plane_drives()
 	if why == "":
 		go_to.emit(flight.fix.lat, flight.fix.lon, 1500.0)
 	return why
@@ -612,10 +612,18 @@ func start_flight(q: String) -> String:
 func start_random_flight() -> String:
 	var why := await flight.start_random()
 	if why == "":
-		player.get_tree().call_group("listener_input", "set", "wander", false) # the plane drives now
+		_plane_drives()
 	if why == "":
 		go_to.emit(flight.fix.lat, flight.fix.lon, 1500.0)
 	return why
+
+
+## The plane drives now: wandering and following your location stop.
+func _plane_drives() -> void:
+	player.get_tree().call_group("listener_input", "set", "wander", false)
+	if FieldPrefs.follow():
+		FieldPrefs.set_value("follow", false)
+		player.get_tree().call_group("field_menu", "set_follow", false)
 
 
 ## Stops following; returns what it was following ("" if nothing).
