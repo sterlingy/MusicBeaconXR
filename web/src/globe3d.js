@@ -54,6 +54,22 @@ export class Globe3D {
     // The continents' coastlines (Natural Earth, public domain), loaded once.
     this.coasts = [];
     globalThis.fetch?.(new URL("../data/coastlines.json", import.meta.url)).then((r) => (r.ok ? r.json() : null)).then((d) => { if (d?.lines) this.coasts = d.lines; }).catch(() => {});
+    // Where the land is (Natural Earth, public domain; equirectangular, white =
+    // land), to shade the continents a little lighter than the sea.
+    this.land = null;
+    if (globalThis.Image && globalThis.document) {
+      const im = new Image();
+      im.onload = () => {
+        try {
+          const c = document.createElement("canvas");
+          c.width = im.width; c.height = im.height;
+          const cx = c.getContext("2d");
+          cx.drawImage(im, 0, 0);
+          this.land = { w: im.width, h: im.height, px: cx.getImageData(0, 0, im.width, im.height).data };
+        } catch { /* no mask: plain sea */ }
+      };
+      im.src = new URL("../data/land_mask.png", import.meta.url).href;
+    }
     this.lat0 = 30;
     this.lon0 = -40;
     this.zoom = 1;
@@ -393,7 +409,7 @@ export class Globe3D {
   _drawShade(g, light) {
     const { W, H, cx, cy, R } = this;
     const sun = subsolar();
-    const key = [W, H, this.lat0.toFixed(2), this.lon0.toFixed(2), this.zoom.toFixed(3), sun.lat.toFixed(1), sun.lon.toFixed(1), light].join("|");
+    const key = [W, H, this.lat0.toFixed(2), this.lon0.toFixed(2), this.zoom.toFixed(3), sun.lat.toFixed(1), sun.lon.toFixed(1), light, !!this.land].join("|");
     if (key !== this.shade.key) {
       // The part of the screen the disc covers, at about 220 pixels a side.
       const x0 = Math.max(0, Math.floor(cx - R)), y0 = Math.max(0, Math.floor(cy - R));
@@ -407,6 +423,8 @@ export class Globe3D {
       const img = ctx.createImageData(w, h);
       const s = this.toView(sun.lat, sun.lon);
       const day = light ? [205, 222, 240] : [30, 56, 84], night = light ? [150, 166, 190] : [7, 13, 26];
+      const land = this.land, tint = light ? [-22, -14, -10] : [16, 22, 24]; // land: a little darker by day in the light theme, lighter in the dark
+      const sl0 = Math.sin(this.lat0 * D2R), cl0 = Math.cos(this.lat0 * D2R);
       for (let j = 0; j < h; j++) {
         const py = (cy - (y0 + ((j + 0.5) / h) * bh)) / R;
         for (let i = 0; i < w; i++) {
@@ -419,9 +437,19 @@ export class Globe3D {
           const t = clamp((lit + 0.08) / 0.3, 0, 1);
           const dusk = Math.exp(-((lit + 0.02) ** 2) / 0.003) * 0.18; // a warm band along the line
           const limb = 0.72 + 0.28 * pz;
-          img.data[o] = (night[0] + (day[0] - night[0]) * t + 90 * dusk) * limb;
-          img.data[o + 1] = (night[1] + (day[1] - night[1]) * t + 40 * dusk) * limb;
-          img.data[o + 2] = (night[2] + (day[2] - night[2]) * t + 10 * dusk) * limb;
+          let lk = 0;
+          if (land) {
+            // Back from the view to latitude and longitude, then into the mask.
+            const la = Math.asin(clamp(cl0 * py + sl0 * pz, -1, 1));
+            let lo = this.lon0 * D2R + Math.atan2(px, cl0 * pz - sl0 * py);
+            lo = ((lo / (2 * Math.PI) + 0.5) % 1 + 1) % 1;
+            const mx = Math.min(land.w - 1, Math.floor(lo * land.w));
+            const my = Math.min(land.h - 1, Math.max(0, Math.floor((0.5 - la / Math.PI) * land.h)));
+            lk = (land.px[(my * land.w + mx) * 4] / 255) * (0.45 + 0.55 * t);
+          }
+          img.data[o] = (night[0] + (day[0] - night[0]) * t + 90 * dusk + tint[0] * lk) * limb;
+          img.data[o + 1] = (night[1] + (day[1] - night[1]) * t + 40 * dusk + tint[1] * lk) * limb;
+          img.data[o + 2] = (night[2] + (day[2] - night[2]) * t + 10 * dusk + tint[2] * lk) * limb;
           img.data[o + 3] = 255;
         }
       }

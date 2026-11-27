@@ -148,6 +148,46 @@ func _on_action(name: String, arg: Variant) -> void:
 			_status = "Jumped to " + c[0]
 
 
+## The globe's surface: dark sea with the land shaded a little lighter, from
+## data/land_mask.png (Natural Earth, public domain; equirectangular, white =
+## land). Latitude and longitude come from the surface direction itself, so the
+## mask lines up with to_world() whatever the sphere's own UVs are.
+const SEA := Color("142030")
+const LAND := Color("24384c")
+
+func _globe_material() -> Material:
+	var mask: Texture2D = load("res://data/land_mask.png") if ResourceLoader.exists("res://data/land_mask.png") else null
+	if mask == null:
+		var gm := StandardMaterial3D.new()
+		gm.albedo_color = SEA
+		gm.roughness = 0.9
+		return gm
+	var sh := Shader.new()
+	sh.code = """
+shader_type spatial;
+uniform sampler2D land : filter_linear, repeat_enable;
+uniform vec3 sea_col : source_color;
+uniform vec3 land_col : source_color;
+varying vec3 dir;
+void vertex() { dir = normalize(VERTEX); }
+void fragment() {
+	vec3 d = normalize(dir);
+	float lat = asin(clamp(d.y, -1.0, 1.0));
+	float lon = atan(d.x, d.z);
+	vec2 uv = vec2(lon / 6.2831853 + 0.5, 0.5 - lat / 3.1415927);
+	float k = textureLod(land, uv, 0.0).r;
+	ALBEDO = mix(sea_col, land_col, k);
+	ROUGHNESS = 0.9;
+}
+"""
+	var m := ShaderMaterial.new()
+	m.shader = sh
+	m.set_shader_parameter("land", mask)
+	m.set_shader_parameter("sea_col", SEA)
+	m.set_shader_parameter("land_col", LAND)
+	return m
+
+
 func _build_world() -> void:
 	var env := Environment.new()
 	env.background_mode = Environment.BG_COLOR
@@ -172,10 +212,7 @@ func _build_world() -> void:
 	sm.radial_segments = 96
 	sm.rings = 48
 	globe.mesh = sm
-	var gm := StandardMaterial3D.new()
-	gm.albedo_color = Color("142030")
-	gm.roughness = 0.9
-	globe.material_override = gm
+	globe.material_override = _globe_material()
 	add_child(globe)
 
 	# Graticule every 10°, equator and prime meridian brighter.
