@@ -44,7 +44,7 @@ func _ready() -> void:
 	await get_tree().process_frame
 	check(not hud.collapsed, "desktop starts with the parts showing")
 	hud.set_collapsed(true)
-	check(hud._body.size() > 5 and hud._body.all(func(c): return not c.visible), "folded: only the key line shows")
+	check(hud._body.size() >= 1 and hud._body.all(func(c): return not c.visible), "folded: only the key line shows")
 	hud.set_collapsed(false)
 	check(hud._body.all(func(c): return c.visible or c == hud._help), "unfolded again")
 	print("trail_check: %s (%d failure(s))" % ["OK" if failures == 0 else "FAILED", failures])

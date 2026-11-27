@@ -50,7 +50,7 @@ func _ready() -> void:
 	# world by default, which walked the listener).
 	panel.mouse_filter = Control.MOUSE_FILTER_STOP
 	panel.position = Vector2(16, 16)
-	panel.custom_minimum_size = Vector2(360, 0)
+	panel.custom_minimum_size = Vector2(300, 0)
 	add_child(panel)
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 8)
@@ -66,7 +66,20 @@ func _ready() -> void:
 	v.add_child(_now)
 	_sub = _label("", 13, Color(1, 1, 1, 0.6))
 	v.add_child(_sub)
-	v.add_child(HSeparator.new())
+	# Two columns under the key line, so the open panel is short: the beacons
+	# you hear and the sound on the left, the parts on the right.
+	var cols := HBoxContainer.new()
+	cols.add_theme_constant_override("separation", 14)
+	v.add_child(cols)
+	var left := VBoxContainer.new()
+	left.add_theme_constant_override("separation", 8)
+	left.custom_minimum_size.x = 300
+	cols.add_child(left)
+	cols.add_child(VSeparator.new())
+	var right := VBoxContainer.new()
+	right.add_theme_constant_override("separation", 6)
+	right.custom_minimum_size.x = 330
+	cols.add_child(right)
 	for i in 3:
 		var row := VBoxContainer.new()
 		var l := _label("", 14, Color.WHITE)
@@ -76,9 +89,8 @@ func _ready() -> void:
 		bar.show_percentage = false
 		bar.custom_minimum_size.y = 6
 		row.add_child(bar)
-		v.add_child(row)
+		left.add_child(row)
 		_rows.append({"label": l, "bar": bar})
-	v.add_child(HSeparator.new())
 	for role in BeaconPlayer.PARTS:
 		var h := HBoxContainer.new()
 		# Fixed width (room for "Pluck · strings pizz") so every part's bar starts in line.
@@ -103,12 +115,13 @@ func _ready() -> void:
 		h.add_child(so)
 		_buttons[role] = [m, so]
 		h.add_theme_constant_override("separation", 6)
-		v.add_child(h)
+		right.add_child(h)
 		_parts[role] = bar
 		_names[role] = l
 	# Sound quality: what this device plays at, and a button to choose Auto, High or Light.
 	var qrow := HBoxContainer.new()
 	_quality = _label("", 12, Color(1, 1, 1, 0.6))
+	_quality.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_quality.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	qrow.add_child(_quality)
 	_quality_btn = Button.new()
@@ -119,10 +132,13 @@ func _ready() -> void:
 		var modes: Array = AudioQuality.MODES
 		player.set_quality_mode(modes[(modes.find(player.quality.mode) + 1) % modes.size()]))
 	qrow.add_child(_quality_btn)
-	v.add_child(qrow)
+	var gap := Control.new()
+	gap.size_flags_vertical = Control.SIZE_EXPAND_FILL # the sound line sits at the column's foot
+	left.add_child(gap)
+	left.add_child(qrow)
 	_help = _label("", 12, Color(1, 1, 1, 0.5))
 	_help.autowrap_mode = TextServer.AUTOWRAP_WORD
-	_help.custom_minimum_size.x = 330
+	_help.custom_minimum_size.x = 600
 	v.add_child(_help)
 	player.harmony_changed.connect(func(_i): _flash = 1.0)
 	# Everything below the key line folds away.
@@ -189,6 +205,7 @@ func _toggle(text: String, on_color: Color, on_toggle: Callable) -> Button:
 
 
 func _fit_scale() -> void:
+	_panel.reset_size() # shrink back after folding or a shorter line (no empty space at the foot)
 	var phone := BuildInfo.is_phone()
 	var want := PHONE_SCALE if phone else 1.0
 	var k := want
@@ -197,7 +214,7 @@ func _fit_scale() -> void:
 		# Phones keep the bottom-left My beacons button clear.
 		var bottom := FieldMenu.BAR * FieldMenu.PHONE_SCALE if phone else 0.0
 		var room := view - Vector2(32, 32 + bottom)
-		k = minf(want, minf(room.x * 0.5 / _panel.size.x, room.y / _panel.size.y))
+		k = minf(want, minf(room.x * 0.62 / _panel.size.x, room.y / _panel.size.y))
 	if not is_equal_approx(_panel.scale.x, k):
 		_panel.scale = Vector2(k, k)
 

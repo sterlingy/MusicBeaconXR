@@ -616,10 +616,9 @@ func _draw_trail() -> void:
 			var b := BeaconWalks.field_pos(player.field, line.pts[1].p) * view_scale
 			var pa := Vector3(a.x, 0.25, a.y)
 			var pb := Vector3(b.x, 0.25, b.y)
-			var n := clampi(int(pa.distance_to(pb) / 14.0), 2, 400)
-			var jcol: Color = MOOD_COLOR.get(line.pts[1].m, Color(0.6, 0.6, 0.6))
-			jcol.a = 0.55
-			var jside: Vector3 = (pb - pa).cross(Vector3.UP).normalized() * 1.0
+			var n := clampi(int(pa.distance_to(pb) / 16.0), 2, 400)
+			var jcol := Color(0.8, 0.83, 0.88, 0.85) # a readable grey
+			var jside: Vector3 = (pb - pa).cross(Vector3.UP).normalized() * 1.3
 			for k in range(0, n, 2):
 				var d0 := pa.lerp(pb, float(k) / n)
 				var d1 := pa.lerp(pb, float(k + 1) / n)

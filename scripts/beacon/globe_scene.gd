@@ -398,6 +398,18 @@ func _parse_args() -> void:
 			var cl := a.trim_prefix("--card=").split(",")
 			var at := Vector2(float(cl[1]), float(cl[0]))
 			get_tree().create_timer(0.5).timeout.connect(func(): _offer(at, _tap_km() * 0.5, false))
+		elif a == "--hud-open": # dev: the readout unfolded
+			get_tree().create_timer(0.2).timeout.connect(func(): hud.set_collapsed(false))
+		elif a == "--trail-demo": # dev: a walked stretch, a jump, another stretch
+			get_tree().create_timer(0.3).timeout.connect(func():
+				for i in 12:
+					player.pos = Vector2(-100.0 + i * 0.5, 34.0 + sin(i * 0.6) * 0.4)
+					walks._add_trail()
+				walks.mark_jump()
+				for i in 8:
+					player.pos = Vector2(-90.0 + i * 0.5, 38.0)
+					walks._add_trail()
+				input.jump_to(player.pos))
 		elif a.begins_with("--turn="): # dev: turn the view by dx,dy pixels
 			var tl := a.trim_prefix("--turn=").split(",")
 			get_tree().create_timer(0.3).timeout.connect(func(): _turn(Vector2(float(tl[0]), float(tl[1]))))
@@ -636,6 +648,7 @@ func _build_walks() -> void:
 	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	m.vertex_color_use_as_albedo = true
 	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	m.cull_mode = BaseMaterial3D.CULL_DISABLED # jump ribbons face either way
 	trail_mesh.material_override = m
 	add_child(trail_mesh)
 
@@ -679,24 +692,10 @@ func _draw_trail() -> void:
 	im.clear_surfaces()
 	var lift := maxf(0.0005, 0.3 * _k())
 	var any := false
+	var jumps := []
 	for line in walks.lines():
 		if line.get("jump", false):
-			# A jump's gap: dashes along the great circle (over the surface, not through the Earth).
-			var ga := Vector2(float(line.pts[0].p.lon), float(line.pts[0].p.lat))
-			var gb := Vector2(float(line.pts[1].p.lon), float(line.pts[1].p.lat))
-			var span := input.space.distance(ga, gb) # km
-			var n := clampi(int(span / maxf(1.0, altitude * 0.4)), 4, 300) * 2
-			var jcol: Color = MOOD_COLOR.get(line.pts[1].m, Color(0.7, 0.7, 0.7))
-			jcol.a = 0.6
-			for k in range(0, n, 2):
-				var q0 := input.space.interp(ga, gb, float(k) / n)
-				var q1 := input.space.interp(ga, gb, float(k + 1) / n)
-				if not any:
-					im.surface_begin(Mesh.PRIMITIVE_LINES)
-					any = true
-				for q in [q0, q1]:
-					im.surface_set_color(jcol)
-					im.surface_add_vertex(to_world(q.y, q.x, R + lift))
+			jumps.append(line) # drawn after the walked lines, as ribbons
 			continue
 		var prev = null
 		for pt in line.pts:
@@ -712,6 +711,27 @@ func _draw_trail() -> void:
 					im.surface_add_vertex(v)
 			prev = here
 	if any:
+		im.surface_end()
+	# A jump's gap: grey dashes along the great circle (over the surface, not
+	# through the Earth), wide enough to read at any zoom.
+	if not jumps.is_empty():
+		im.surface_begin(Mesh.PRIMITIVE_TRIANGLES)
+		var w := clampf(altitude * 0.004, 0.0003, 0.5)
+		var gcol := Color(0.8, 0.83, 0.88, 0.85)
+		for line in jumps:
+			var ga := Vector2(float(line.pts[0].p.lon), float(line.pts[0].p.lat))
+			var gb := Vector2(float(line.pts[1].p.lon), float(line.pts[1].p.lat))
+			var span := input.space.distance(ga, gb) # km
+			var dash_km := maxf(0.05, altitude / R * BeaconField.EARTH_RADIUS_KM * 0.025) # about 2.5% of the view
+			var n := clampi(int(span / dash_km), 2, 600)
+			for k in range(0, n, 2):
+				var v0 := to_world(input.space.interp(ga, gb, float(k) / n).y, input.space.interp(ga, gb, float(k) / n).x, R + lift)
+				var q1 := input.space.interp(ga, gb, float(k + 1) / n)
+				var v1 := to_world(q1.y, q1.x, R + lift)
+				var side := (v1 - v0).cross(v0.normalized()).normalized() * w
+				for v in [v0 - side, v0 + side, v1 + side, v0 - side, v1 + side, v1 - side]:
+					im.surface_set_color(gcol)
+					im.surface_add_vertex(v)
 		im.surface_end()
 
 

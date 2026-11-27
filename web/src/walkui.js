@@ -385,11 +385,12 @@ export function drawLines(g, lines, toScreen, moodColor, d, now = Date.now()) {
       const s = toScreen(pt.p);
       if (s && prev) {
         const age = replay ? 0 : Math.min(1, (now - pt.t) / (6 * 3600 * 1000)); // fades over six hours
-        g.strokeStyle = replay ? "#ffffff" : moodColor(pt.m);
-        g.globalAlpha = replay ? 0.55 : jump ? 0.5 : 0.85 - 0.6 * age;
-        g.lineWidth = (replay ? 2 : jump ? 2 : 3) * d;
+        g.strokeStyle = replay ? "#ffffff" : jump ? "#cbd2dc" : moodColor(pt.m);
+        g.globalAlpha = replay ? 0.55 : jump ? 0.8 : 0.85 - 0.6 * age;
+        g.lineWidth = (replay ? 2 : jump ? 2.5 : 3) * d;
+        g.lineCap = jump ? "butt" : "round";
         if (replay) g.setLineDash([5 * d, 5 * d]);
-        else if (jump) g.setLineDash([2 * d, 6 * d]); // a jump's gap: dotted
+        else if (jump) g.setLineDash([8 * d, 7 * d]); // a jump's gap: grey dashes
         g.beginPath(); g.moveTo(prev[0], prev[1]); g.lineTo(s[0], s[1]); g.stroke();
         if (replay || jump) g.setLineDash([]);
       }
