@@ -500,7 +500,7 @@ func _build() -> void:
 	_range.select(2)
 	pl.add_child(_range)
 	v.add_child(pl)
-	v.add_child(menu._small("Plant uses the song you hear most. Making beacons needs your location. Sharing works in the lower 48 US for now."))
+	v.add_child(menu._small("Plant uses the song you hear most. Making beacons needs your location."))
 
 
 	var tools := HBoxContainer.new()

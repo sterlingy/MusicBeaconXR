@@ -57,14 +57,14 @@ begin
   if (select tile from public.plants where id = pid) <> '30_-98' then raise exception 'plant tile not computed by the server'; end if;
   insert into ids values ('grid', gid), ('plant', pid), ('song', sid);
 
-  -- Outside the lower 48 (London), and someone else's owner id.
-  perform pg_temp.expect_error($q$insert into public.grids (center, spacing_m, tiles) values ('g51_5727300_-8900', 1000, '{x}')$q$, 'lower 48');
-  perform pg_temp.expect_error($q$insert into public.maps (name, beacons) values ('Away', '[{"id":"m1","lat":51.5,"lon":-0.1,"range_m":500}]')$q$, 'lower 48');
+  -- Anywhere (London) is fine now; and someone else's owner id.
+  insert into public.grids (center, spacing_m, tiles) values ('g51_5727300_-8900', 1000, '{x}') returning grids.tiles into tiles;
+  if not ('51_-1' = any(tiles) or '51_0' = any(tiles)) then raise exception 'London grid tiles wrong: %', tiles; end if;
   insert into public.maps (name, beacons) values ('Lakeside walk', '[{"id":"m1","lat":30.31,"lon":-97.76,"range_m":800}]');
   perform pg_temp.expect_error('select owner from public.grids', 'permission denied');
 
   -- The daily limit (5 grids).
-  for n in 2..5 loop
+  for n in 3..5 loop -- (Austin and London were 1 and 2)
     insert into public.grids (center, spacing_m, tiles) values (format('g30_%s_-9412000', 3366000 + n * 200000), 1000, '{}');
   end loop;
   perform pg_temp.expect_error($q$insert into public.grids (center, spacing_m, tiles) values ('g30_3466000_-9412000', 1000, '{}')$q$, 'daily limit');

@@ -124,4 +124,4 @@ The swooshes (`sfx/ui_open.ogg`, `sfx/ui_close.ogg`, and MP3 copies in `web/sfx/
 
 ## Map outlines
 
-The globes show the continents' coastlines (Natural Earth 1:110m, public domain, simplified to about 2,400 points: `data/coastlines.json` for the app, `web/data/coastlines.json` for the website) as thin solid lines; the US is drawn like every other coast. Beacons can be made anywhere; sharing them is still limited to the lower 48 US (the server checks). The land is shaded a little lighter than the sea, from a land mask (Natural Earth 1:110m land, rasterised to 2048x1024 equirectangular, white = land: `data/land_mask.png` and `web/data/land_mask.png`).
+The globes show the continents' coastlines (Natural Earth 1:110m, public domain, simplified to about 2,400 points: `data/coastlines.json` for the app, `web/data/coastlines.json` for the website) as thin solid lines; the US is drawn like every other coast. Beacons can be made and shared anywhere. The land is shaded a little lighter than the sea, from a land mask (Natural Earth 1:110m land, rasterised to 2048x1024 equirectangular, white = land: `data/land_mask.png` and `web/data/land_mask.png`).

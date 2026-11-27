@@ -22,6 +22,7 @@ python tools/pg.py supabase/migrations/0001_shared_map.sql
 | `0004_airline_codes.sql` | Ticket-style flight numbers: `private.airline_codes` maps about 120 two-letter IATA airline codes to the ICAO codes planes broadcast (DL934 → DAL934), and `flight_lookup` tries that callsign first. Upstream calls give up after 2.5 seconds, because the API ends public requests after 3. |
 | `0006_grid_size.sql` | A grid's size apart from its spacing: `half` (beacons from center to edge, 1 to 25, within 50 km; 10 = the original 21 × 21, the default), and tiles computed from it. |
 | `0007_spacing_10km.sql` | Grid spacing can be 10 km. |
+| `0008_share_anywhere.sql` | Sharing anywhere: the lower-48 checks on grids, planted songs and maps are gone; grid tiles wrap at the date line and a grid may touch up to 64 tiles. |
 
 **Checking the rules:** `python tools/pg.py supabase/tests/submit_check.sql` plays signed-in people against them inside a transaction that's rolled back (nothing stays), and ends with `submit_check: OK`.
 

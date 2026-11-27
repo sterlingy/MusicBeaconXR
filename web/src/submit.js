@@ -1,6 +1,6 @@
 // Sharing your beacons (beacon database, step 3): turns drafts into rows on
 // the server and back. No DOM; `rest(method, path, body)` is Auth.rest (or a
-// fake in tests). The server re-checks everything (owner, lower 48, tiles,
+// fake in tests). The server re-checks everything (owner, tiles,
 // limits; see supabase/migrations/0002_submit.sql).
 //
 // After a grid, planted song or map is shared, its draft keeps the server id

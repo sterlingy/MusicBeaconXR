@@ -41,6 +41,7 @@ const VERSION := 1
 const PATH := "user://beacon_drafts.json"
 
 ## The lower 48 United States, a coarse outline (lon, lat): the same points as web/src/drafts.js.
+## Nothing is limited to it any more (beacons are made and shared anywhere); kept for reference.
 const LOWER_48 := [
 	[-124.8, 48.4], [-123.0, 48.3], [-123.3, 49.0], [-95.15, 49.0], [-95.15, 49.38], [-94.8, 49.3], [-94.6, 48.7],
 	[-93.0, 48.6], [-91.0, 48.2], [-89.5, 48.0], [-88.0, 48.3], [-84.6, 46.7], [-84.4, 46.5], [-83.5, 46.0],
@@ -149,8 +150,7 @@ static func fix_problem(fix) -> String:
 	return ""
 
 
-## Beacons can be made and placed anywhere on this device; sharing them is
-## still limited to the lower 48 (the server checks; see BeaconAccount).
+## Beacons can be made, placed and shared anywhere.
 static func place_problem(_lat: float, _lon: float) -> String:
 	return ""
 

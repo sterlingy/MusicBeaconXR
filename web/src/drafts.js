@@ -100,6 +100,7 @@ export function meters(a, b) {
 
 // ------------------------------------------------------------------ where beacons may be made
 
+// Nothing is limited to this any more (beacons are made and shared anywhere); kept for reference.
 // The lower 48 United States, as a coarse outline (lon, lat), within about
 // 20 km of the real borders and coasts. Creating beacons is limited to it for
 // now; the globe layer still plays everywhere.
@@ -134,7 +135,6 @@ export function inLower48(p) {
 /**
  * Whether a location fix {lat, lon, accuracy} allows making beacons there:
  * anywhere, when it's accurate enough. Returns null when it does, else why not.
- * (Sharing is still limited to the lower 48: the server checks.)
  */
 export function fixProblem(fix) {
   if (!fix) return "Making beacons needs your location (GPS): beacons can only be made where you are.";
@@ -142,7 +142,7 @@ export function fixProblem(fix) {
   return null;
 }
 
-/** Map beacons can go anywhere on this device (sharing them is still lower 48 only). */
+/** Map beacons can go anywhere. */
 export function placeProblem(_pos) {
   return null;
 }
