@@ -24,6 +24,7 @@ var camera: Camera3D
 var listener: MeshInstance3D
 var arcs: MeshInstance3D
 var highlights := [] # 3 glowing pillars over the active beacons
+var halos := [] # and a soft glow around each, as big and bright as its share of the music
 var labels := [] # 3 labels for the active beacons
 var input: ListenerInput
 var altitude := 90.0
@@ -303,6 +304,21 @@ func _build_beacons() -> void:
 		hl.material_override = hm
 		add_child(hl)
 		highlights.append(hl)
+		var halo := MeshInstance3D.new()
+		var q := QuadMesh.new()
+		q.size = Vector2.ONE
+		halo.mesh = q
+		var gm := StandardMaterial3D.new()
+		gm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		gm.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+		gm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		gm.albedo_texture = _glow_texture()
+		gm.cull_mode = BaseMaterial3D.CULL_DISABLED
+		gm.no_depth_test = true # drawn over the surface it stands on (hidden by hand round the back)
+		halo.material_override = gm
+		halo.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(halo)
+		halos.append(halo)
 		var lab := Label3D.new()
 		lab.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 		lab.font_size = 48
@@ -394,23 +410,64 @@ func _process(delta: float) -> void:
 			get_tree().quit()
 
 
+## A soft round glow: white in the middle, fading to nothing at the edge.
+static func _glow_texture() -> Texture2D:
+	var g := Gradient.new()
+	g.offsets = PackedFloat32Array([0.0, 0.25, 0.6, 1.0])
+	g.colors = PackedColorArray([Color(1, 1, 1, 1), Color(1, 1, 1, 0.55), Color(1, 1, 1, 0.12), Color(1, 1, 1, 0)])
+	var t := GradientTexture2D.new()
+	t.gradient = g
+	t.fill = GradientTexture2D.FILL_RADIAL
+	t.fill_from = Vector2(0.5, 0.5)
+	t.fill_to = Vector2(1.0, 0.5)
+	t.width = 128
+	t.height = 128
+	return t
+
+
+## The beacons driving the music glow by how much each one drives it: the
+## pillar lights up and a halo around it grows and brightens with its share.
+## Your own beacons (slim pillars on their grids) get a glow their own size.
 func _update_active() -> void:
 	for i in 3: # the three loudest (the player sorts both layers loudest first)
 		var hl: MeshInstance3D = highlights[i]
+		var halo: MeshInstance3D = halos[i]
 		var lab: Label3D = labels[i]
-		if i >= player.active.size():
+		if i >= player.active.size() or float(player.active[i].w) < 0.01:
 			hl.visible = false
+			halo.visible = false
 			lab.visible = false
 			continue
 		var a: Dictionary = player.active[i]
+		var w := float(a.w)
 		var col: Color = MOOD_COLOR.get(a.song.get("mood", ""), Color.WHITE)
+		var lead := 1.0 if a.id == player.harmony.id else 0.0 # the beacon setting the key
+		var size := _beacon_size(a)
 		hl.visible = true
-		hl.transform = _surface_xform(a.beacon.pos.y, a.beacon.pos.x, 5.0 * _k())
-		hl.scale = Vector3.ONE * (0.8 + 0.6 * a.w) * _k()
+		hl.transform = _surface_xform(a.beacon.pos.y, a.beacon.pos.x, size.y * 0.55)
+		# The pillar a touch wider and taller than the beacon, lit by its share.
+		hl.scale = Vector3(size.x * (1.05 + 0.35 * w) / 2.8, size.y * (1.05 + 0.25 * w) / 10.0, size.x * (1.05 + 0.35 * w) / 2.8)
 		var m: StandardMaterial3D = hl.material_override
 		m.albedo_color = col
 		m.emission = col
-		m.emission_energy_multiplier = 0.5 + 3.0 * a.w + (1.0 if a.id == player.harmony.id else 0.0)
+		# Up close on your own grid a bright pillar blooms across the whole screen: gentler there.
+		m.emission_energy_multiplier = (0.35 + 1.1 * w + 0.3 * lead) if String(a.id).begins_with(MyBeacons.UID) else (0.6 + 4.5 * w + lead)
+		var top := to_world(a.beacon.pos.y, a.beacon.pos.x, R + size.y * 0.7)
+		# Round the back of the globe it would show through: hide it there.
+		halo.visible = top.normalized().dot((camera.global_position - top).normalized()) > -0.05
+		var own := String(a.id).begins_with(MyBeacons.UID)
+		# Across: on your grids, from about two to six beacon spacings; out on the
+		# world, a few pillar widths. Never more than a slice of the view.
+		var across := 2.8 * _k() * (10.0 + 24.0 * w)
+		if own:
+			var e: Dictionary = a.beacon.entry
+			var unit := R / (BeaconField.EARTH_RADIUS_KM * 1000.0)
+			across = minf(float(e.get("spacingM", 500)) * unit * (2.5 + 7.0 * w), altitude * 0.35)
+		# Facing the camera (turned by hand: a billboard here dropped the scale).
+		halo.global_transform = Transform3D(camera.global_transform.basis.orthonormalized().scaled(Vector3.ONE * across), top)
+		var gm: StandardMaterial3D = halo.material_override
+		var glow := 0.3 + 0.7 * w
+		gm.albedo_color = Color(col.r, col.g, col.b, clampf(glow + 0.1 * lead, 0.0, 1.0))
 		# Neighbouring beacons' labels mustn't collide: name and share only (the
 		# panel has the coordinates), quieter ones smaller and lower.
 		lab.visible = a.w >= 0.03
@@ -430,6 +487,18 @@ func _update_active() -> void:
 				stack += 1
 		lab.offset = Vector2(0, 125.0 * stack)
 		lab.modulate = Color.WHITE.lerp(col, 0.35)
+
+
+## A beacon's width (x) and height (y) on the globe right now, in scene units:
+## the global beacons' pillars, or one of your own beacons' slim ones.
+func _beacon_size(a: Dictionary) -> Vector2:
+	var e = a.beacon.get("entry")
+	if e is Dictionary and String(a.id).begins_with(MyBeacons.UID):
+		var unit := R / (BeaconField.EARTH_RADIUS_KM * 1000.0)
+		var gen: bool = e.kind == "gen" or e.kind == "edited"
+		var sw: float = minf((float(e.get("spacingM", 500)) * 0.16 if gen else 60.0) * unit, altitude * 0.02)
+		return Vector2(sw * 2.8 / 2.0, sw * (3.2 if gen else 5.0))
+	return Vector2(2.8 * _k(), 10.0 * _k())
 
 
 func _draw_arcs() -> void:
@@ -476,6 +545,10 @@ func _parse_args() -> void:
 			get_tree().create_timer(0.3).timeout.connect(func(): menu.set_open(true, false))
 		elif a == "--speed-open": # dev: the Wander pop-up
 			get_tree().create_timer(0.3).timeout.connect(func(): speed.set_open(true, false))
+		elif a == "--fake-flight": # dev: a plane over the listener, no network (for looking at it)
+			get_tree().create_timer(0.2).timeout.connect(func():
+				mine.flight._last_poll = FlightFollow.now_s() + 3600.0
+				mine.flight.fix = {"found": true, "lat": player.pos.y, "lon": player.pos.x, "gs_kt": 0.0, "track": 60.0, "at": FlightFollow.now_s() + 3600.0, "seen_pos": 0.0, "alt_ft": 35000.0, "flight": "TST1"})
 		elif a == "--drafts-demo":
 			_drafts_demo()
 		elif a.begins_with("--card="): # dev: the Jump / Move card for lat,lon (after a frame, once the camera is placed)
@@ -513,35 +586,26 @@ func _parse_args() -> void:
 
 # ---------------------------------------------------------------- the plane you're riding with
 
-## A small airliner (fuselage, wings, tail), nose along -z, glowing so it reads at any zoom.
+## A smooth little airliner (PlaneModel), nose along -z, lit by the sun and
+## glowing a little so it still reads at night and from far away.
 func _make_plane() -> Node3D:
 	var root := Node3D.new()
 	root.name = "Plane"
 	var mat := StandardMaterial3D.new()
 	mat.albedo_color = PLANE_SEEN
+	mat.metallic = 0.25
+	mat.roughness = 0.35
 	mat.emission_enabled = true
 	mat.emission = PLANE_SEEN
-	mat.emission_energy_multiplier = 1.2
+	mat.emission_energy_multiplier = 0.45
+	mat.rim_enabled = true # a bright edge, so the shape reads against the globe
+	mat.rim = 0.6
+	mat.rim_tint = 0.3
 	_plane_mat = mat
-	for part in [[Vector3(0.34, 0.34, 2.2), Vector3.ZERO], [Vector3(2.4, 0.08, 0.55), Vector3(0, 0, 0.05)],
-			[Vector3(0.95, 0.06, 0.32), Vector3(0, 0, 0.92)], [Vector3(0.06, 0.6, 0.38), Vector3(0, 0.3, 0.92)]]:
-		var m := MeshInstance3D.new()
-		var b := BoxMesh.new()
-		b.size = part[0]
-		m.mesh = b
-		m.position = part[1]
-		m.material_override = mat
-		root.add_child(m)
-	var nose := MeshInstance3D.new()
-	var cone := CylinderMesh.new()
-	cone.top_radius = 0.0
-	cone.bottom_radius = 0.17
-	cone.height = 0.5
-	nose.mesh = cone
-	nose.rotation_degrees = Vector3(-90, 0, 0)
-	nose.position = Vector3(0, 0, -1.35)
-	nose.material_override = mat
-	root.add_child(nose)
+	var m := MeshInstance3D.new()
+	m.mesh = PlaneModel.build()
+	m.material_override = mat
+	root.add_child(m)
 	root.visible = false
 	return root
 
