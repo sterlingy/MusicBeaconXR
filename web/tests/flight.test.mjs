@@ -46,3 +46,40 @@ test("the tracker polls, keeps gliding through failures, and eases new fixes in"
   tr.stop();
   assert.equal(tr.position(), null);
 });
+
+// ---------------------------------------------------------------- random flights and the card
+
+import { flightSummary, randomFlight } from "../src/flight.js";
+
+const KAL = { flight: "KAL251", reg: "HL7782", type: "B77W", lat: 33, lon: -78, alt_ft: 37000, gs_kt: 480, track: 30, vrate: 0, mach: 0.84, oat: -52, squawk: "2242" };
+const KAL_D = { route: { callsign_iata: "KE251", airline: { name: "Korean Air" },
+  origin: { municipality: "Miami", iata_code: "MIA", latitude: 25.7932, longitude: -80.2906 },
+  destination: { municipality: "New York", iata_code: "JFK", latitude: 40.6398, longitude: -73.7789 } },
+  aircraft: { manufacturer: "Boeing", type: "777 300ER", registered_owner: "Korean Air", registered_owner_country_name: "South Korea" } };
+
+test("the flight card: route, progress, estimated times, numbers, aircraft (same as the app)", () => {
+  const s = flightSummary(KAL, KAL_D, 1.8e9);
+  assert.equal(s.code, "KE251");
+  assert.equal(s.airline, "Korean Air");
+  assert.deepEqual([s.oCode, s.dCode, s.flown, s.left, s.toGo, s.airborne], ["MIA", "JFK", "831 km", "929 km", "1 h 3 min", "1 h 22 min"]);
+  assert.equal(s.alt, "37,000 ft");
+  assert.equal(s.speedAlt, "552 mph · 889 km/h");
+  assert.equal(s.heading, "NNE 30°");
+  assert.equal(s.aircraft, "Boeing 777 300ER");
+  assert.equal(s.owner, "HL7782 · Korean Air · South Korea");
+});
+
+test("a schedule route the plane isn't flying is unconfirmed, and its airline isn't named", () => {
+  const s = flightSummary({ ...KAL, lat: 51, lon: 10 }, KAL_D, 1.8e9);
+  assert.equal(s.plausible, false);
+  assert.equal(s.airline, "");
+  assert.equal(s.code, "KAL251");
+  assert.equal(s.progress, undefined);
+});
+
+test("a random flight: quiet hubs retry, then a plane", async () => {
+  const answers = [{ found: false, retry: true }, { found: false, retry: true }, { found: true, hex: "abc123", flight: "DAL1" }];
+  const f = await randomFlight(async () => answers.shift(), { wait: async () => {} });
+  assert.equal(f.hex, "abc123");
+  await assert.rejects(randomFlight(async () => ({ found: false, retry: false, reason: "daily limit" }), { wait: async () => {} }), /daily limit/);
+});

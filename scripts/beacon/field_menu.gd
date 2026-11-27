@@ -244,8 +244,11 @@ func _build_panel() -> void:
 		fr.add_child(_flight_q)
 		_flight_btn = _button("✈ Follow", func(): follow_flight(_flight_q.text) if _flight_btn.text.begins_with("✈") else stop_flight())
 		fr.add_child(_flight_btn)
+		var rnd := _button("🎲 Random", follow_random_flight)
+		rnd.tooltip_text = "Ride along with a random flight in the air somewhere in the world"
+		fr.add_child(rnd)
 		v.add_child(fr)
-		_flight_msg = _small("Type the flight number from your ticket, or the plane's tail number. Your position follows the plane.")
+		_flight_msg = _small("Type the flight number from your ticket or the plane's tail number, or pick a random flight. Your position follows the plane; tap the plane for its details.")
 		v.add_child(_flight_msg)
 
 	# Sound quality (AudioQuality): Auto fits the device, High plays the full
@@ -319,6 +322,24 @@ func follow_flight(q: String) -> void:
 	if _flight_btn:
 		_flight_btn.text = "■ Stop"
 	_flight_say("✈ Following %s. Data: adsb.lol (ODbL)." % FlightFollow.describe(m.flight.fix))
+	set_open(false)
+
+
+## Follows a random flight in the air (anywhere in the world, where it's daytime first).
+func follow_random_flight() -> void:
+	var m := _mine()
+	if m == null:
+		return
+	_flight_say("Finding a flight in the air…")
+	var why: String = await m.start_random_flight()
+	if why != "":
+		_flight_say(why, true)
+		return
+	if _flight_btn:
+		_flight_btn.text = "■ Stop"
+	if _flight_q:
+		_flight_q.text = String(m.flight.fix.get("flight", m.flight.fix.get("reg", "")))
+	_flight_say("✈ Following %s. Tap the plane for its details." % FlightFollow.describe(m.flight.fix))
 	set_open(false)
 
 

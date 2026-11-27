@@ -10,7 +10,8 @@ import { ListenerInput, planarSpace, geoSpace, localSpace, keyboardSource, point
 import { initDrafts } from "./draftsui.js";
 import { Globe3D } from "./globe3d.js";
 import { initWalks, drawLines } from "./walkui.js";
-import { FlightTracker, supabaseFlightLookup, describe as describeFlight } from "./flight.js";
+import { FlightTracker, supabaseFlightLookup, supabaseFlightRandom, randomFlight, describe as describeFlight } from "./flight.js";
+import { initFlightCard } from "./flightcard.js";
 import { SUPABASE_URL, SUPABASE_KEY } from "./config.js";
 
 const $ = (id) => document.getElementById(id);
@@ -484,6 +485,7 @@ input.on("action", (name, arg) => {
   if (name === "toggle_play") togglePlay();
   else if (name === "select") {
     if (drafts.placing && drafts.placeAt(view().toWorld(arg.x, arg.y))) return;
+    if (tappedPlane(arg.x, arg.y)) { flightCard.open(); return; }
     if (input.traveling) { input.stopTravel(); setMsg("fieldMsg", "Stopped here."); return; } // a tap while moving stops there
     const b = beaconAt(arg.x, arg.y);
     if (b) { select(b.id); offerPlace(b.pos, b, arg); }
@@ -1210,6 +1212,36 @@ $("flightGo").addEventListener("click", startFlight);
 $("flightQ").addEventListener("keydown", (e) => { if (e.key === "Enter") startFlight(); });
 $("flightStop").addEventListener("click", () => stopFlight());
 
+// A random flight in the air somewhere in the world (the database picks it; daytime hubs first).
+const flightRandom = supabaseFlightRandom({ url: SUPABASE_URL, key: SUPABASE_KEY });
+async function startRandomFlight() {
+  if (ui.mode !== "globe") setMode("globe");
+  stopFollow();
+  input.wander = false;
+  $("flightRandom").disabled = true;
+  setMsg("fieldMsg", "Finding a flight in the air…");
+  try {
+    const got = await randomFlight(flightRandom);
+    const f = flight.startWith(got, got.hex); // followed by its transponder code from here on
+    $("flightQ").value = f.flight || f.reg || "";
+    engine.setPosition({ lat: f.lat, lon: f.lon });
+    if (globe3d && is3d()) { globe3d.flyTo(f.lat, f.lon, Math.max(globe3d.zoom, 6)); globe3d.mode = "follow"; }
+    renderFlight();
+    setMsg("fieldMsg", `✈ Following ${describeFlight(f)}. Tap the plane for its details. Data: adsb.lol (ODbL).`);
+  } catch (err) {
+    setMsg("fieldMsg", err.message, true);
+  } finally { $("flightRandom").disabled = false; }
+}
+$("flightRandom").addEventListener("click", startRandomFlight);
+const flightCard = initFlightCard({ el: $("flightcard"), flight, onStop: () => stopFlight() });
+
+/** A tap on the plane (flat map) opens its card. */
+function tappedPlane(x, y) {
+  if (!flight.active || ui.mode !== "globe") return false;
+  const s = view().toScreen(engine.pos);
+  return !!s && Math.hypot(s[0] - x, s[1] - y) < 36 * (ui.dpr || 1);
+}
+
 /** Globe tab: the 3D globe or the flat map. The globe takes the pointer (drag turns it) while it shows. */
 function apply3d() {
   const on = is3d();
@@ -1245,6 +1277,7 @@ globe3d = new Globe3D({
   lines: () => walk.lines(),
   flight: () => (flight.active ? { track: flight.fix.track, label: flight.fix.reg || flight.fix.flight } : null),
   offer: ({ pos, label, song }, clientX, clientY) => offerPlace(pos, label ? { label } : null, { clientX, clientY }, song),
+  flightCard: () => { if (!flight.active) return false; flightCard.open(); return true; },
   stopTravel: () => { if (!input.traveling) return false; input.stopTravel(); setMsg("fieldMsg", "Stopped here."); return true; },
 });
 walk = initWalks({

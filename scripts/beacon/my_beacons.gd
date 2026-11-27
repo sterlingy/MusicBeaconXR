@@ -520,6 +520,14 @@ func start_flight(q: String) -> String:
 	return why
 
 
+## Follows a random flight in the air somewhere in the world. Returns "" or why not.
+func start_random_flight() -> String:
+	var why := await flight.start_random()
+	if why == "":
+		go_to.emit(flight.fix.lat, flight.fix.lon, 1500.0)
+	return why
+
+
 ## Stops following; returns what it was following ("" if nothing).
 func stop_flight() -> String:
 	if not flight.active():

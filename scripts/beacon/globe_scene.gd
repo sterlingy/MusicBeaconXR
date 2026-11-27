@@ -90,6 +90,11 @@ func _build_input() -> void:
 	_marker.material_override = pm
 	_marker.visible = false
 	add_child(_marker)
+	plane = _make_plane()
+	add_child(plane)
+	flight_card = FlightCard.new(mine.flight)
+	add_child(flight_card)
+	flight_card.stop_requested.connect(func(): menu.stop_flight())
 	input = ListenerInput.new()
 	input.name = "ListenerInput"
 	input.space = ListenerSpace.geo(WALK_DEG)
@@ -115,7 +120,9 @@ func _on_action(name: String, arg: Variant) -> void:
 		"zoom":
 			altitude = clampf(altitude * float(arg), MIN_ALT, 900.0)
 		"select":
-			if input.traveling():
+			if mine.flight.active() and _near_plane(arg):
+				flight_card.open() # tap the plane: what flight it is
+			elif input.traveling():
 				input.stop_travel() # a tap while moving stops there
 				_status = "Stopped here."
 			elif not mine.place_at(arg.x, arg.y):
@@ -293,6 +300,14 @@ func _process(delta: float) -> void:
 	var up := to_world(p.y, p.x, 1.0)
 	var k := _k()
 	listener.transform = _surface_xform(p.y, p.x, 3.5 * k).scaled_local(Vector3.ONE * k)
+	# Following a flight: a plane on its heading instead of the listener's marker.
+	var flying := mine.flight.active()
+	plane.visible = flying
+	listener.visible = not flying
+	if flying:
+		var xf := _surface_xform(p.y, p.x, 4.0 * k)
+		xf.basis = xf.basis * Basis(Vector3.UP, -deg_to_rad(float(mine.flight.fix.get("track", 0.0))))
+		plane.transform = xf.scaled_local(Vector3.ONE * 2.6 * k)
 	camera.near = clampf(altitude * 0.01, 0.0005, 0.05)
 	input.space.walk_speed = WALK_DEG * maxf(0.002, k)
 	_draw_user_beacons()
@@ -398,6 +413,9 @@ func _parse_args() -> void:
 			var cl := a.trim_prefix("--card=").split(",")
 			var at := Vector2(float(cl[1]), float(cl[0]))
 			get_tree().create_timer(0.5).timeout.connect(func(): _offer(at, _tap_km() * 0.5, false))
+		elif a == "--random-flight": # dev: ride along with a random flight, then show its card
+			menu.follow_random_flight()
+			get_tree().create_timer(7.0).timeout.connect(func(): flight_card.open())
 		elif a == "--hud-open": # dev: the readout unfolded
 			get_tree().create_timer(0.2).timeout.connect(func(): hud.set_collapsed(false))
 		elif a == "--trail-demo": # dev: a walked stretch, a jump, another stretch
@@ -419,10 +437,53 @@ func _parse_args() -> void:
 			Transport.start()
 
 
+# ---------------------------------------------------------------- the plane you're riding with
+
+## A small airliner (fuselage, wings, tail), nose along -z, glowing so it reads at any zoom.
+func _make_plane() -> Node3D:
+	var root := Node3D.new()
+	root.name = "Plane"
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = Color(0.95, 0.96, 1.0)
+	mat.emission_enabled = true
+	mat.emission = Color(1.0, 0.85, 0.6)
+	mat.emission_energy_multiplier = 1.2
+	for part in [[Vector3(0.34, 0.34, 2.2), Vector3.ZERO], [Vector3(2.4, 0.08, 0.55), Vector3(0, 0, 0.05)],
+			[Vector3(0.95, 0.06, 0.32), Vector3(0, 0, 0.92)], [Vector3(0.06, 0.6, 0.38), Vector3(0, 0.3, 0.92)]]:
+		var m := MeshInstance3D.new()
+		var b := BoxMesh.new()
+		b.size = part[0]
+		m.mesh = b
+		m.position = part[1]
+		m.material_override = mat
+		root.add_child(m)
+	var nose := MeshInstance3D.new()
+	var cone := CylinderMesh.new()
+	cone.top_radius = 0.0
+	cone.bottom_radius = 0.17
+	cone.height = 0.5
+	nose.mesh = cone
+	nose.rotation_degrees = Vector3(-90, 0, 0)
+	nose.position = Vector3(0, 0, -1.35)
+	nose.material_override = mat
+	root.add_child(nose)
+	root.visible = false
+	return root
+
+
+## Whether a tap (lon, lat) landed on the plane: within about 50 px of it on screen.
+func _near_plane(at: Vector2) -> bool:
+	var here := camera.unproject_position(plane.global_position)
+	var tap := camera.unproject_position(to_world(at.y, at.x, R))
+	return here.distance_to(tap) < 50.0 * (FieldMenu.PHONE_SCALE if BuildInfo.is_phone() else 1.0)
+
+
 # ---------------------------------------------------------------- turning the globe, Jump and Move
 
 var travel: TravelUi
 var _marker: MeshInstance3D
+var plane: Node3D # shown instead of the listener while following a flight
+var flight_card: FlightCard
 var _free := false # the view was turned away from the listener
 var _view := Vector2(-0.128, 51.507) # what the camera looks at while free (lon, lat)
 var _spin := Vector2.ZERO # a flick's turning speed, (lon, lat) degrees per second

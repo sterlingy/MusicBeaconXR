@@ -79,6 +79,16 @@ export class FlightTracker {
     return f;
   }
 
+  /** Follows a flight already found (a random one), polling it by `query` (its transponder code). */
+  startWith(fix, query) {
+    this.query = query;
+    this.fix = fix;
+    this.prev = null;
+    this.lastPoll = this.now();
+    this.lost = "";
+    return fix;
+  }
+
   stop() { this.fix = null; this.prev = null; this.query = ""; }
 
   /** Call often: fetches a new fix every POLL_S seconds. Resolves true when one arrived. */
@@ -115,4 +125,105 @@ export class FlightTracker {
     const s = k * k * (3 - 2 * k);
     return { lat: q.lat + (p.lat - q.lat) * s, lon: q.lon + (((((p.lon - q.lon) % 360) + 540) % 360) - 180) * s };
   }
+}
+
+// ---------------------------------------------------------------- random flights and the info card
+
+/** Asks the database for a random flight in the air (supabase/migrations/0005_flight_random.sql). */
+export function supabaseFlightRandom({ url, key, fetchFn = globalThis.fetch }) {
+  return async () => {
+    const res = await fetchFn(`${url}/rest/v1/rpc/flight_random`, {
+      method: "POST", headers: { apikey: key, "Content-Type": "application/json" }, body: "{}",
+    });
+    if (!res.ok) throw new Error(`the flight lookup failed (${res.status})`);
+    return res.json();
+  };
+}
+
+/**
+ * Finds a random flight in the air: asks up to `tries` times (a quiet hub
+ * answers "retry", and the next ask tries another hub). Resolves to a fix.
+ */
+export async function randomFlight(random, { tries = 6, wait = (ms) => new Promise((r) => setTimeout(r, ms)) } = {}) {
+  let last = null;
+  for (let i = 0; i < tries; i++) {
+    last = await random();
+    if (last?.found) return last;
+    if (!last?.retry) break;
+    await wait(1600);
+  }
+  throw new Error(last?.reason || "No flights found right now. Try again in a moment.");
+}
+
+const detailCache = new Map();
+
+/**
+ * The flight's airline, route and aircraft from adsbdb.com (cached; it
+ * allows calls from web pages). Route data comes from published schedules
+ * and can be stale for reused callsigns: flightSummary checks it.
+ */
+export async function flightDetails(fix, fetchFn = globalThis.fetch) {
+  const key = `${fix.flight || ""}|${fix.hex || ""}`;
+  if (detailCache.has(key)) return detailCache.get(key);
+  const get = async (u) => { try { const r = await fetchFn(u); return r.ok ? (await r.json())?.response : null; } catch { return null; } };
+  const out = {};
+  if (fix.flight) { const r = await get(`https://api.adsbdb.com/v0/callsign/${encodeURIComponent(fix.flight)}`); if (r?.flightroute) out.route = r.flightroute; }
+  const id = fix.reg || fix.hex;
+  if (id) { const a = await get(`https://api.adsbdb.com/v0/aircraft/${encodeURIComponent(id)}`); if (a?.aircraft) out.aircraft = a.aircraft; }
+  detailCache.set(key, out);
+  return out;
+}
+
+const COMPASS = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"];
+const kmBetween = (a1, o1, a2, o2) => {
+  const D = Math.PI / 180, p1 = a1 * D, p2 = a2 * D;
+  const h = Math.sin((p2 - p1) / 2) ** 2 + Math.cos(p1) * Math.cos(p2) * Math.sin(((o2 - o1) * D) / 2) ** 2;
+  return 2 * 6371 * Math.asin(Math.min(1, Math.sqrt(h)));
+};
+const th = (x) => Math.round(x).toLocaleString("en-US");
+const span = (s) => { const m = Math.round(s / 60); return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${m % 60} min`; };
+
+/**
+ * What the info card shows, from the live fix and the details. Same rules as
+ * FlightFollow.summary in the app. `now` is seconds since 1970.
+ */
+export function flightSummary(f, d = {}, now = Date.now() / 1000) {
+  const route = d.route || {}, air = d.aircraft || {}, airline = route.airline || {};
+  const call = f.flight || "";
+  const out = { code: route.callsign_iata || call, callsign: call, airline: airline.name || "" };
+  const o = route.origin, de = route.destination;
+  const gs = (f.gs_kt || 0) * 1.852;
+  if (o && de) {
+    const total = kmBetween(o.latitude, o.longitude, de.latitude, de.longitude);
+    const done = kmBetween(o.latitude, o.longitude, f.lat, f.lon), left = kmBetween(f.lat, f.lon, de.latitude, de.longitude);
+    out.plausible = done + left < total * 1.25 + 150;
+    Object.assign(out, { oCode: o.iata_code || o.icao_code, dCode: de.iata_code || de.icao_code, oCity: o.municipality || o.name, dCity: de.municipality || de.name });
+    if (!out.plausible) { out.code = call; out.airline = ""; } // that schedule is some other flight with this number
+    else if (done + left > 0) {
+      out.progress = Math.max(0, Math.min(1, done / (done + left)));
+      out.flown = `${th(done)} km`;
+      out.left = `${th(left)} km`;
+      if (gs > 100) {
+        const toGo = (left / gs) * 3600;
+        out.toGo = span(toGo);
+        out.lands = new Date((now + toGo) * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+        out.airborne = span((done / (gs * 0.9)) * 3600 + 1200);
+      }
+    }
+  }
+  const alt = f.alt_ft || 0;
+  const climb = f.vrate != null && Math.abs(f.vrate) > 300 ? (f.vrate > 0 ? " · climbing" : " · descending") : "";
+  out.alt = `${th(alt)} ft`;
+  out.altM = `${th(alt * 0.3048)} m${climb}`;
+  const kt = f.gs_kt || 0;
+  out.speed = `${Math.round(kt)} kt`;
+  out.speedAlt = `${Math.round(kt * 1.15078)} mph · ${Math.round(kt * 1.852)} km/h`;
+  const tr = (((f.track || 0) % 360) + 360) % 360;
+  out.heading = `${COMPASS[Math.floor((tr + 11.25) / 22.5) % 16]} ${Math.round(tr)}°`;
+  if (f.mach != null) out.mach = f.mach.toFixed(2);
+  if (f.oat != null) out.oat = `${Math.round(f.oat)} °C`;
+  if (f.squawk) out.squawk = f.squawk;
+  out.aircraft = [air.manufacturer, air.type].filter(Boolean).join(" ") || f.type || "";
+  out.owner = [f.reg, air.registered_owner, air.registered_owner_country_name].filter(Boolean).join(" · ");
+  return out;
 }

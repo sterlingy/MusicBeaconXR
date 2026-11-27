@@ -280,7 +280,8 @@ export class Globe3D {
     // Placing beacons on a custom map: a tap puts one there.
     const at = this.toWorld(x, y);
     if (at && this.h.place?.(at.lat, at.lon)) return;
-    // A tap while moving stops there; a tap on a beacon offers to go there.
+    // A tap on the plane shows its flight; a tap while moving stops there; a tap on a beacon offers to go there.
+    if (this._planeAt && Math.hypot(this._planeAt[0] - x, this._planeAt[1] - y) < 34 * (this.h.ui.dpr || 1) && this.h.flightCard?.()) return;
     if (this.h.stopTravel?.()) return;
     const hit = this.pick(x, y);
     if (hit) { this.h.select(hit.id); this._offerAt([x, y], e.clientX, e.clientY); }
@@ -615,6 +616,7 @@ export class Globe3D {
     const s = this.toScreen(this.h.engine.pos);
     if (!s) return;
     const fl = this.h.flight?.();
+    this._planeAt = fl ? [s[0], s[1]] : null;
     if (fl) {
       // Following a flight: a plane along its track (screen-north is the view's north near the middle).
       const ahead = this.toScreen(destinationLite(this.h.engine.pos, fl.track, 0.05));
