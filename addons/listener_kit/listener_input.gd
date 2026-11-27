@@ -26,6 +26,8 @@ signal action(name: String, arg: Variant)
 signal wander_changed(on: bool)
 ## A travel (travel_to) reached its destination.
 signal travel_finished()
+## jump_to teleported the listener (trails break here).
+signal jumped(from: Vector2, to: Vector2)
 
 var space := ListenerSpace.planar(Rect2(-250, -250, 500, 500))
 var position := Vector2.ZERO
@@ -60,7 +62,9 @@ func set_position(p: Vector2, emit := true) -> void:
 func jump_to(p: Vector2) -> void:
 	target = null
 	_travel = {}
+	var from := position
 	set_position(p)
+	jumped.emit(from, position)
 
 
 func set_target(p: Variant) -> void:

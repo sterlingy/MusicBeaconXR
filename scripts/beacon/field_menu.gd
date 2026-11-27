@@ -29,6 +29,9 @@ var _row: HBoxContainer
 var _scroll: ScrollContainer
 var _follow: CheckButton
 var _sound_btns := {} # quality mode -> button
+var _flight_q: LineEdit
+var _flight_btn: Button
+var _flight_msg: Label
 var _sound_now: Label
 ## 1 on desktops, PHONE_SCALE on phones (dev: --ui-scale=N).
 var ui_scale := 1.0
@@ -228,6 +231,23 @@ func _build_panel() -> void:
 	status.visible = false
 	v.add_child(status)
 
+	# Follow a flight (globe only): the plane drives the listener.
+	if kind == "globe":
+		v.add_child(_heading("FOLLOW A FLIGHT"))
+		var fr := HBoxContainer.new()
+		fr.add_theme_constant_override("separation", 6)
+		_flight_q = LineEdit.new()
+		_flight_q.placeholder_text = "Flight DL934 or tail N733YX"
+		_flight_q.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		_flight_q.add_theme_font_size_override("font_size", 15)
+		_flight_q.text_submitted.connect(func(_t): follow_flight(_flight_q.text))
+		fr.add_child(_flight_q)
+		_flight_btn = _button("✈ Follow", func(): follow_flight(_flight_q.text) if _flight_btn.text.begins_with("✈") else stop_flight())
+		fr.add_child(_flight_btn)
+		v.add_child(fr)
+		_flight_msg = _small("Type the flight number from your ticket, or the plane's tail number. Your position follows the plane.")
+		v.add_child(_flight_msg)
+
 	# Sound quality (AudioQuality): Auto fits the device, High plays the full
 	# samples at full quality, Light saves battery. Only where a beacon player runs.
 	v.add_child(_heading("SOUND QUALITY"))
@@ -277,6 +297,43 @@ static func fit_scroll(sc: ScrollContainer, avail: float) -> void:
 	var w := want.x + (14.0 if h < want.y else 0.0)
 	if not sc.custom_minimum_size.is_equal_approx(Vector2(w, h)):
 		sc.custom_minimum_size = Vector2(w, h)
+
+
+func _mine() -> MyBeacons:
+	return get_tree().get_first_node_in_group("my_beacons") as MyBeacons
+
+
+## Starts following a flight; the panel closes so you can watch the globe fly to it.
+func follow_flight(q: String) -> void:
+	var m := _mine()
+	if m == null or q.strip_edges() == "":
+		return
+	if _flight_q:
+		_flight_q.text = q
+		_flight_q.release_focus()
+	_flight_say("Looking for %s…" % q.strip_edges().to_upper())
+	var why: String = await m.start_flight(q)
+	if why != "":
+		_flight_say(why, true)
+		return
+	if _flight_btn:
+		_flight_btn.text = "■ Stop"
+	_flight_say("✈ Following %s. Data: adsb.lol (ODbL)." % FlightFollow.describe(m.flight.fix))
+	set_open(false)
+
+
+func stop_flight() -> void:
+	var m := _mine()
+	var was: String = m.stop_flight() if m else ""
+	if _flight_btn:
+		_flight_btn.text = "✈ Follow"
+	_flight_say("Stopped following %s." % was if was != "" else "")
+
+
+func _flight_say(text: String, err := false) -> void:
+	if _flight_msg:
+		_flight_msg.text = text
+		_flight_msg.add_theme_color_override("font_color", Color("ff6b6b") if err else Color("8d9aab"))
 
 
 func _player() -> BeaconPlayer:

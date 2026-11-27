@@ -589,6 +589,7 @@ var trail_mesh: MeshInstance3D
 func _build_walks() -> void:
 	walks = BeaconWalks.new()
 	walks.player = player
+	input.jumped.connect(func(_a, _b): walks.mark_jump())
 	walks.input = input
 	add_child(walks)
 	trail_mesh = MeshInstance3D.new()
@@ -609,6 +610,26 @@ func _draw_trail() -> void:
 	var any := false
 	var lp := _view_pos()
 	for line in walks.lines():
+		if line.get("jump", false):
+			# A jump's gap: dashes from where you were to where you landed.
+			var a := BeaconWalks.field_pos(player.field, line.pts[0].p) * view_scale
+			var b := BeaconWalks.field_pos(player.field, line.pts[1].p) * view_scale
+			var pa := Vector3(a.x, 0.25, a.y)
+			var pb := Vector3(b.x, 0.25, b.y)
+			var n := clampi(int(pa.distance_to(pb) / 14.0), 2, 400)
+			var jcol: Color = MOOD_COLOR.get(line.pts[1].m, Color(0.6, 0.6, 0.6))
+			jcol.a = 0.55
+			var jside: Vector3 = (pb - pa).cross(Vector3.UP).normalized() * 1.0
+			for k in range(0, n, 2):
+				var d0 := pa.lerp(pb, float(k) / n)
+				var d1 := pa.lerp(pb, float(k + 1) / n)
+				if not any:
+					im.surface_begin(Mesh.PRIMITIVE_TRIANGLES)
+					any = true
+				for v in [d0 - jside, d0 + jside, d1 + jside, d0 - jside, d1 + jside, d1 - jside]:
+					im.surface_set_color(jcol)
+					im.surface_add_vertex(v)
+			continue
 		var prev = null
 		for pt in line.pts:
 			var fp := BeaconWalks.field_pos(player.field, pt.p) * view_scale

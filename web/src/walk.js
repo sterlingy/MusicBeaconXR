@@ -46,11 +46,12 @@ export class Trail {
    * (a jump further than `jumpM` starts a new stretch, so no line is drawn
    * across it). `mood` is the loudest song's mood there.
    */
-  add(pos, mood, t, { minM = 3, jumpM = 5000 } = {}) {
+  add(pos, mood, t, { minM = 3, jumpM = 5000, jumped = false } = {}) {
     const last = this.points[this.points.length - 1];
     const d = moved(last?.p, pos);
     if (last && d < minM) return false;
-    this.points.push({ p: posOf(pos), m: mood || "", t: Math.round(t), b: !!last && d > jumpM });
+    // A jump (beyond a GPS fix's few meters) or a leap too long to walk breaks the line.
+    this.points.push({ p: posOf(pos), m: mood || "", t: Math.round(t), b: !!last && (d > jumpM || (jumped && d > 4 * minM)) });
     if (this.points.length > TRAIL_MAX) this.points.splice(0, this.points.length - TRAIL_MAX);
     return true;
   }
@@ -66,6 +67,21 @@ export class Trail {
       cur.push(pt);
     }
     if (cur.length) out.push(cur);
+    return out;
+  }
+
+  /**
+   * What to draw: walked stretches and, between them, the gaps jumps left
+   * ({pts: [from, to], jump: true}, drawn dotted).
+   */
+  pieces() {
+    const out = [];
+    let cur = [];
+    for (const pt of this.points) {
+      if (pt.b && cur.length) { out.push({ pts: cur, jump: false }, { pts: [cur[cur.length - 1], pt], jump: true }); cur = []; }
+      cur.push(pt);
+    }
+    if (cur.length) out.push({ pts: cur, jump: false });
     return out;
   }
 

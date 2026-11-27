@@ -361,7 +361,9 @@ export class Globe3D {
     g.save();
     g.beginPath(); g.arc(cx, cy, Math.max(0, R - 0.5), 0, Math.PI * 2); g.clip();
     this._drawGraticule(g, d, light);
-    this._drawOutline(g, LOWER_48, d, light ? "rgba(180,110,20,0.55)" : "rgba(255,181,71,0.42)");
+    // Brighter and a little heavier where it's night over the US, so it never gets lost in the dark.
+    const night = this._nightAt(39, -98);
+    this._drawOutline(g, LOWER_48, d * (1 + 0.6 * night), light ? `rgba(180,110,20,${0.6 + 0.25 * night})` : `rgba(255,181,71,${0.6 + 0.35 * night})`, night);
     // Your trail, and a replaying walk's path.
     const lines = this.h.lines?.() || [];
     if (lines.length) drawLines(g, lines, (p) => this.toScreen(p), this.h.moodColor, d);
@@ -464,14 +466,23 @@ export class Globe3D {
     g.stroke();
   }
 
-  _drawOutline(g, ring, d, color) {
+  _drawOutline(g, ring, d, color, glow = 0) {
     g.strokeStyle = color;
-    g.lineWidth = 1.2 * d;
-    g.setLineDash([5 * d, 4 * d]);
+    g.lineWidth = 2 * d;
+    g.setLineDash([6 * d, 4 * d]);
+    if (glow > 0) { g.shadowColor = color; g.shadowBlur = 6 * d * glow; }
     g.beginPath();
     this._path(g, [...ring, ring[0]].map(([lon, lat]) => ({ lat, lon })));
     g.stroke();
     g.setLineDash([]);
+    g.shadowBlur = 0;
+  }
+
+  /** 0 in daylight, rising to 1 a little past dusk, at a lat/lon right now. */
+  _nightAt(lat, lon) {
+    const sun = subsolar(), D = Math.PI / 180;
+    const lit = Math.sin(lat * D) * Math.sin(sun.lat * D) + Math.cos(lat * D) * Math.cos(sun.lat * D) * Math.cos((lon - sun.lon) * D);
+    return Math.max(0, Math.min(1, 0.5 - lit * 2.5));
   }
 
   _glow(g, x, y, r, color, alpha) {

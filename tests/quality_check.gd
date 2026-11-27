@@ -25,6 +25,8 @@ func _init() -> void:
 		[small, "auto", "phone", AudioQuality.LIGHT],
 		[small, "high", "full", AudioQuality.HIGH],
 		[desktop, "light", "phone", AudioQuality.LIGHT],
+		[{"mobile": true, "ram_gb": 0.0, "cores": 9}, "auto", "full", AudioQuality.HIGH], # Pixel 8 Pro: memory unknown
+		[{"mobile": true, "ram_gb": 0.0, "cores": 4}, "auto", "phone", AudioQuality.LIGHT],
 	]
 	for c in cases:
 		var q := AudioQuality.new(c[1], c[0])

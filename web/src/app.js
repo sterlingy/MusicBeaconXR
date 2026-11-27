@@ -476,6 +476,7 @@ const pointer = input.add(pointerSource(canvas, (x, y) => view().toWorld(x, y), 
   onOrbitEnd: (vx, vy) => { ui.panVel = Math.hypot(vx, vy) > 60 ? { x: vx, y: vy } : null; },
 }));
 input.on("moved", (p) => { engine.setPosition(p); ui.pan = null; ui.panVel = null; });
+input.on("jumped", () => walk.markJump?.());
 input.on("manual", () => stopFlight("Walking by hand, so you stopped following the flight."));
 input.on("manual", (kind) => stopFollow(kind === "pointer" ? "Moved by hand, so the map stopped following your location." : "Walking by hand, so the map stopped following your location."));
 input.on("wander", (on) => { $("wander").checked = on; if (on) stopFollow("Auto-walk is on, so the map stopped following your location."); });

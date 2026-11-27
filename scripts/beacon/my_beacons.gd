@@ -34,8 +34,6 @@ var _reason: OptionButton
 var _terms: ConfirmationDialog
 ## Following a flight (FlightFollow): the globe scene moves the listener with it.
 var flight: FlightFollow
-var _flight_q: LineEdit
-var _flight_btn: Button
 var geo: GeoLocation
 ## The latest location fix {lat, lon, accuracy, at}; dev: --fakegps=lat,lon[,accuracy].
 var fix := {}
@@ -67,6 +65,7 @@ func _init() -> void:
 
 
 func _ready() -> void:
+	add_to_group("my_beacons") # the Fields panel's flight section finds it
 	drafts = BeaconDrafts.load_file()
 	ui_scale = FieldMenu.PHONE_SCALE if BuildInfo.is_phone() else 1.0
 	for a in OS.get_cmdline_user_args():
@@ -415,14 +414,6 @@ func _build() -> void:
 	v.add_child(pl)
 	v.add_child(menu._small("Plant uses the song you hear most. Making beacons needs your location (lower 48 US for now)."))
 
-	var fl := HBoxContainer.new()
-	_flight_q = LineEdit.new()
-	_flight_q.placeholder_text = "DL934 or N733YX"
-	_flight_q.custom_minimum_size = Vector2(150, 0)
-	fl.add_child(_flight_q)
-	_flight_btn = menu._button("✈ Follow flight", _toggle_flight)
-	fl.add_child(_flight_btn)
-	v.add_child(fl)
 
 	var tools := HBoxContainer.new()
 	tools.add_child(menu._button("New map", _new_map))
@@ -519,21 +510,23 @@ func _build() -> void:
 
 # ---------------------------------------------------------------- following a flight
 
-func _toggle_flight() -> void:
-	if flight.active():
-		var f := flight.fix
-		flight.stop()
-		_flight_btn.text = "✈ Follow flight"
-		_say("Stopped following %s." % f.get("reg", "the flight"))
-		return
-	_say("Looking for %s…" % _flight_q.text)
-	var why := await flight.start(_flight_q.text)
-	if why != "":
-		_say(why, true)
-		return
-	_flight_btn.text = "■ Stop flight"
-	go_to.emit(flight.fix.lat, flight.fix.lon, 1500.0)
-	_say("✈ Following %s. Data: adsb.lol (ODbL)." % FlightFollow.describe(flight.fix))
+## Starts following a flight (number as on a ticket, DL934, or tail number,
+## N733YX) and flies the globe to it. Returns "" or why it couldn't.
+## The Fields panel's "Follow a flight" calls this.
+func start_flight(q: String) -> String:
+	var why := await flight.start(q)
+	if why == "":
+		go_to.emit(flight.fix.lat, flight.fix.lon, 1500.0)
+	return why
+
+
+## Stops following; returns what it was following ("" if nothing).
+func stop_flight() -> String:
+	if not flight.active():
+		return ""
+	var f := flight.fix
+	flight.stop()
+	return String(f.get("reg", f.get("flight", "the flight")))
 
 
 # ---------------------------------------------------------------- sharing (step 3)

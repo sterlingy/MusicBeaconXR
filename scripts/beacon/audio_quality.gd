@@ -78,15 +78,19 @@ static func this_device() -> Dictionary:
 	}
 
 
-## Total memory in bytes from /proc/meminfo (Linux and Android), or 0.
+## Total memory in bytes from /proc/meminfo (Linux and Android), or 0. Read
+## as one buffer: /proc files report a length of 0, so line-by-line reading
+## can stop before it starts.
 static func _proc_meminfo() -> float:
 	var f := FileAccess.open("/proc/meminfo", FileAccess.READ)
 	if f == null:
 		return 0.0
-	while not f.eof_reached():
-		var line := f.get_line()
+	var text := f.get_buffer(16384).get_string_from_utf8()
+	for line in text.split("
+"):
 		if line.begins_with("MemTotal:"):
-			return float(line.trim_prefix("MemTotal:").strip_edges().split(" ")[0]) * 1024.0
+			var parts := line.trim_prefix("MemTotal:").strip_edges().split(" ", false)
+			return float(parts[0]) * 1024.0 if not parts.is_empty() else 0.0
 	return 0.0
 
 
@@ -107,6 +111,9 @@ static func pick(dev: Dictionary, m: String) -> Dictionary:
 		return {"tier": "full", "level": HIGH}
 	var ram := float(dev.get("ram_gb", 0.0))
 	var cores := int(dev.get("cores", 1))
+	# Memory unknown (some phones won't say): judge by cores; the load watch steps down if needed.
+	if ram <= 0.0:
+		return {"tier": "full", "level": HIGH} if cores >= 8 else {"tier": "phone", "level": MEDIUM if cores >= 6 else LIGHT}
 	if ram >= 7.0 and cores >= 8:
 		return {"tier": "full", "level": HIGH}
 	if ram >= 5.0 and cores >= 6:
@@ -153,4 +160,5 @@ func describe() -> String:
 
 ## What the device was judged on: "11.2 GB · 9 cores".
 func device_text() -> String:
-	return "%.1f GB · %d cores" % [float(device.get("ram_gb", 0.0)), int(device.get("cores", 0))]
+	var ram := float(device.get("ram_gb", 0.0))
+	return "%s · %d cores" % ["%.1f GB" % ram if ram > 0.0 else "memory unknown", int(device.get("cores", 0))]

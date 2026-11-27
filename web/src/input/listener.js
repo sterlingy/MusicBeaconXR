@@ -124,7 +124,7 @@ export class ListenerInput {
     this.enabled = true;
     this.sources = [];
     this.travel = null;
-    this._handlers = { moved: [], action: [], wander: [], manual: [], arrived: [] };
+    this._handlers = { moved: [], action: [], wander: [], manual: [], arrived: [], jumped: [] };
   }
 
   on(ev, fn) { this._handlers[ev].push(fn); return () => { this._handlers[ev] = this._handlers[ev].filter((f) => f !== fn); }; }
@@ -141,7 +141,7 @@ export class ListenerInput {
     this.position = this.space.clamp(p);
     if (emit) this.emit("moved", this.position);
   }
-  jumpTo(p) { this.target = null; this.travel = null; this.setPosition(p); }
+  jumpTo(p) { this.target = null; this.travel = null; const from = this.position; this.setPosition(p); this.emit("jumped", from, this.position); }
   setTarget(p) { this.travel = null; this.target = p ? this.space.clamp(p) : null; }
   /**
    * Glides to `p` over `seconds`, easing in and out, along the space's own path

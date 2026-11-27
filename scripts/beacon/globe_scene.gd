@@ -34,6 +34,8 @@ var _status := ""
 var mine: MyBeacons
 var user_mesh: MultiMeshInstance3D
 var outlines: MeshInstance3D
+var us_outline: MeshInstance3D # the lower 48, where beacons can be made for now
+var _us_k := -1.0 # the altitude it was last built for
 var _drawn_pool := {} # the pool the user beacons were last drawn from
 var _drawn_at := Vector2(INF, INF)
 
@@ -294,6 +296,7 @@ func _process(delta: float) -> void:
 	camera.near = clampf(altitude * 0.01, 0.0005, 0.05)
 	input.space.walk_speed = WALK_DEG * maxf(0.002, k)
 	_draw_user_beacons()
+	_draw_us_outline()
 	_draw_trail()
 	# Camera: above and a little south of the listener (or of the spot the globe
 	# was turned to), north at the top of the screen.
@@ -535,6 +538,15 @@ func _build_user_beacons() -> void:
 	user_mesh = MultiMeshInstance3D.new()
 	user_mesh.multimesh = mm
 	add_child(user_mesh)
+	us_outline = MeshInstance3D.new()
+	us_outline.mesh = ImmediateMesh.new()
+	var um := StandardMaterial3D.new()
+	um.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	um.albedo_color = Color(1.0, 0.71, 0.28, 0.85)
+	um.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	um.cull_mode = BaseMaterial3D.CULL_DISABLED
+	us_outline.material_override = um
+	add_child(us_outline)
 	outlines = MeshInstance3D.new()
 	outlines.mesh = ImmediateMesh.new()
 	var lm := StandardMaterial3D.new()
@@ -615,6 +627,7 @@ var trail_mesh: MeshInstance3D
 func _build_walks() -> void:
 	walks = BeaconWalks.new()
 	walks.player = player
+	input.jumped.connect(func(_a, _b): walks.mark_jump())
 	walks.input = input
 	add_child(walks)
 	trail_mesh = MeshInstance3D.new()
@@ -628,12 +641,63 @@ func _build_walks() -> void:
 
 
 ## The trail (and a replaying walk's path) as lines just above the surface.
+## The lower 48 outline as a dashed ribbon on the surface, its width kept the
+## same on screen as you zoom (rebuilt when the zoom changes by a tenth).
+func _draw_us_outline() -> void:
+	var k := _k()
+	if _us_k > 0.0 and absf(altitude / _us_k - 1.0) < 0.1:
+		return
+	_us_k = altitude
+	var im: ImmediateMesh = us_outline.mesh
+	im.clear_surfaces()
+	var w := clampf(altitude * 0.006, 0.0004, 0.6) # half-width, scene units
+	var lift := maxf(0.0003, 0.15 * k)
+	var ring: Array = BeaconDrafts.LOWER_48.duplicate()
+	ring.append(ring[0])
+	im.surface_begin(Mesh.PRIMITIVE_TRIANGLES)
+	var dash := 0
+	for i in ring.size() - 1:
+		var a := Vector2(ring[i][0], ring[i][1])
+		var b := Vector2(ring[i + 1][0], ring[i + 1][1])
+		var steps := maxi(1, int(a.distance_to(b) / 0.6))
+		for j in steps:
+			dash += 1
+			if dash % 3 == 0:
+				continue # a gap every third piece: dashed, like the website's
+			var p0 := a.lerp(b, float(j) / steps)
+			var p1 := a.lerp(b, float(j + 1) / steps)
+			var v0 := to_world(p0.y, p0.x, R + lift)
+			var v1 := to_world(p1.y, p1.x, R + lift)
+			var side := (v1 - v0).cross(v0.normalized()).normalized() * w
+			for v in [v0 - side, v0 + side, v1 + side, v0 - side, v1 + side, v1 - side]:
+				im.surface_add_vertex(v)
+	im.surface_end()
+
+
 func _draw_trail() -> void:
 	var im: ImmediateMesh = trail_mesh.mesh
 	im.clear_surfaces()
 	var lift := maxf(0.0005, 0.3 * _k())
 	var any := false
 	for line in walks.lines():
+		if line.get("jump", false):
+			# A jump's gap: dashes along the great circle (over the surface, not through the Earth).
+			var ga := Vector2(float(line.pts[0].p.lon), float(line.pts[0].p.lat))
+			var gb := Vector2(float(line.pts[1].p.lon), float(line.pts[1].p.lat))
+			var span := input.space.distance(ga, gb) # km
+			var n := clampi(int(span / maxf(1.0, altitude * 0.4)), 4, 300) * 2
+			var jcol: Color = MOOD_COLOR.get(line.pts[1].m, Color(0.7, 0.7, 0.7))
+			jcol.a = 0.6
+			for k in range(0, n, 2):
+				var q0 := input.space.interp(ga, gb, float(k) / n)
+				var q1 := input.space.interp(ga, gb, float(k + 1) / n)
+				if not any:
+					im.surface_begin(Mesh.PRIMITIVE_LINES)
+					any = true
+				for q in [q0, q1]:
+					im.surface_set_color(jcol)
+					im.surface_add_vertex(to_world(q.y, q.x, R + lift))
+			continue
 		var prev = null
 		for pt in line.pts:
 			var here := to_world(float(pt.p.lat), float(pt.p.lon), R + lift)
@@ -653,6 +717,4 @@ func _draw_trail() -> void:
 
 ## Dev: --flight=<tail or flight no.> starts following it (for screenshots).
 func _follow_flight_dev(q: String) -> void:
-	mine._flight_q.text = q
-	mine._panel.visible = true
-	mine._toggle_flight()
+	menu.follow_flight(q)

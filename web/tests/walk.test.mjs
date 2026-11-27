@@ -83,3 +83,15 @@ test("WAV: header and samples", () => {
   assert.equal(v.getInt16(44 + 2 * 2, true), 16383); // 0.5 of full scale, truncated
   assert.equal(W.clockText(187), "3:07");
 });
+
+test("a jump breaks the trail and leaves a dotted gap; GPS-sized hops don't", () => {
+  const t = new W.Trail();
+  t.add({ x: 0, y: 0 }, "Glow", 0, { minM: 4, jumpM: 400 });
+  t.add({ x: 10, y: 0 }, "Glow", 1, { minM: 4, jumpM: 400 });
+  t.add({ x: 15, y: 0 }, "Glow", 2, { minM: 4, jumpM: 400, jumped: true }); // a few meters: still walking
+  t.add({ x: 200, y: 0 }, "Tide", 3, { minM: 4, jumpM: 400, jumped: true }); // a real jump
+  t.add({ x: 210, y: 0 }, "Tide", 4, { minM: 4, jumpM: 400 });
+  const pieces = t.pieces();
+  assert.deepEqual(pieces.map((p) => [p.jump, p.pts.length]), [[false, 3], [true, 2], [false, 2]]);
+  assert.deepEqual(pieces[1].pts.map((p) => p.p.x), [15, 200]);
+});

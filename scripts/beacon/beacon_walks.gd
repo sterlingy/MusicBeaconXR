@@ -38,6 +38,7 @@ var _audio_on := false
 var _audio_started := 0.0
 var _toggle: Button
 var _panel: PanelContainer
+var _jump := false # a jump happened since the last trail point
 var _scroll: ScrollContainer
 var _list: VBoxContainer
 var _msg: Label
@@ -54,6 +55,9 @@ func _init() -> void:
 
 func _ready() -> void:
 	DirAccess.make_dir_recursive_absolute(WALK_DIR)
+	for k in ["grid", "local", "globe"]: # trails used to be kept between launches
+		if FileAccess.file_exists("user://trail_%s.json" % k):
+			DirAccess.remove_absolute("user://trail_%s.json" % k)
 	ui_scale = FieldMenu.PHONE_SCALE if BuildInfo.is_phone() else 1.0
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--ui-scale="):
@@ -102,11 +106,16 @@ static func moved(a: Dictionary, b: Dictionary) -> float:
 
 # ---------------------------------------------------------------- trail
 
+## The trail of this session (each launch starts clean; Record walk keeps a path).
 func trail(kind: String) -> Array:
 	if not trails.has(kind):
-		var pts = _read_json("user://trail_%s.json" % kind)
-		trails[kind] = pts if pts is Array else []
+		trails[kind] = []
 	return trails[kind]
+
+
+## The next trail point follows a jump: the line breaks there and the gap is drawn dotted.
+func mark_jump() -> void:
+	_jump = true
 
 
 func _add_trail() -> void:
@@ -124,7 +133,10 @@ func _add_trail() -> void:
 		if a.w > top:
 			top = a.w
 			mood = a.song.get("mood", "")
-	t.append({"p": p, "m": mood, "t": Time.get_unix_time_from_system() * 1000.0, "b": not last.is_empty() and d > (400.0 if kind == "grid" else 20000.0)})
+	# A jump (beyond a GPS fix's few meters) or a leap too long to have been walked breaks the line.
+	var leap := d > (400.0 if kind == "grid" else 20000.0) or (_jump and d > 4.0 * min_m)
+	_jump = false
+	t.append({"p": p, "m": mood, "t": Time.get_unix_time_from_system() * 1000.0, "b": not last.is_empty() and leap})
 	if t.size() > TRAIL_MAX:
 		t = t.slice(t.size() - TRAIL_MAX)
 		trails[kind] = t
@@ -133,13 +145,13 @@ func _add_trail() -> void:
 
 
 func _save_trails() -> void:
-	_saved_at = Time.get_ticks_msec()
-	for k in trails:
-		_write_json("user://trail_%s.json" % k, trails[k])
+	_saved_at = Time.get_ticks_msec() # the trail isn't kept between launches any more
 
 
 ## Stretches to draw for the current field: [{pts: [{p, m}], replay}], the
 ## trail split at jumps, plus a replaying walk's path.
+## What to draw: [{pts, replay, jump}]. `jump` lines are the gaps a jump left
+## (two points, drawn dotted); the others are walked (or glided) paths.
 func lines() -> Array:
 	var out := []
 	if show_trail:
@@ -147,6 +159,7 @@ func lines() -> Array:
 		for pt in trail(player.field.kind):
 			if pt.b and not cur.is_empty():
 				out.append({"pts": cur, "replay": false})
+				out.append({"pts": [cur[-1], pt], "replay": false, "jump": true})
 				cur = []
 			cur.append(pt)
 		if not cur.is_empty():

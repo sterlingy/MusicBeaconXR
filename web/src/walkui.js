@@ -7,6 +7,7 @@
 // player's own instruments, after the compressor), then encode it.
 
 import * as W from "./walk.js";
+import { geoSpace } from "./input/listener.js";
 import { Harmony } from "./mixer.js";
 
 // lamejs, the MP3 encoder, loaded only when someone exports an MP3.
@@ -34,20 +35,14 @@ export function initWalks(ctx) {
 
   // ---------------------------------------------------------------- trail
 
+  // The trail of this visit only: each page load starts clean (Record walk keeps a path).
+  for (const k of ["grid", "local", "globe"]) { try { localStorage.removeItem(`beacon.trail.${k}`); } catch {} }
   function trail(kind = engine.field.kind) {
-    if (!st.trails[kind]) {
-      let pts = [];
-      try { pts = JSON.parse(localStorage.getItem(`beacon.trail.${kind}`) || "[]"); } catch {}
-      st.trails[kind] = new W.Trail(Array.isArray(pts) ? pts : []);
-    }
+    if (!st.trails[kind]) st.trails[kind] = new W.Trail([]);
     return st.trails[kind];
   }
 
-  function saveTrails(force = false) {
-    if (!force && Date.now() - st.savedAt < TRAIL_SAVE_MS) return;
-    st.savedAt = Date.now();
-    for (const [k, t] of Object.entries(st.trails)) { try { localStorage.setItem(`beacon.trail.${k}`, JSON.stringify(t.points)); } catch {} }
-  }
+  function saveTrails() {} // trails aren't kept between visits any more
 
   const minStep = () => (engine.field.kind === "grid" ? 4 : engine.field.kind === "local" ? Math.max(3, engine.field.spacing / 40) : 30);
 
@@ -340,7 +335,7 @@ export function initWalks(ctx) {
   function frame() {
     if (st.replay) return tick();
     const top = engine.active.reduce((m, a) => (!m || a.w > m.w ? a : m), null);
-    if (trail().add(engine.pos, top?.song?.mood, Date.now(), { minM: minStep(), jumpM: engine.field.kind === "grid" ? 400 : 20000 })) saveTrails();
+    if (trail().add(engine.pos, top?.song?.mood, Date.now(), { minM: minStep(), jumpM: engine.field.kind === "grid" ? 400 : 20000, jumped: st.jumped })) st.jumped = false;
     if (st.recorder) st.recorder.sample((performance.now() - st.recStart) / 1000, engine.pos, engine.active);
     return false;
   }
@@ -351,7 +346,18 @@ export function initWalks(ctx) {
    */
   function lines() {
     const out = [];
-    if (st.showTrail) for (const pts of trail().stretches()) out.push({ pts, replay: false });
+    if (st.showTrail) {
+      for (const piece of trail().pieces()) {
+        if (!piece.jump) { out.push({ pts: piece.pts, replay: false }); continue; }
+        // A jump's gap, dotted; on the globe along the great circle, so it follows the surface.
+        let pts = piece.pts;
+        if (engine.field.kind === "globe") {
+          const g = geoSpace(), [a, b] = pts, n = 24;
+          pts = Array.from({ length: n + 1 }, (_, i) => ({ p: g.interp(a.p, b.p, i / n), m: b.m, t: b.t }));
+        }
+        out.push({ pts, replay: false, jump: true });
+      }
+    }
     if (st.replay && st.replay.rec.field.kind === engine.field.kind) out.push({ pts: W.walkTrail(st.replay.rec).points, replay: true });
     return out;
   }
@@ -362,6 +368,8 @@ export function initWalks(ctx) {
 
   return {
     frame, lines, setSong, findBeacon,
+    /** The listener just jumped: the trail breaks at the next point. */
+    markJump() { st.jumped = true; },
     get replaying() { return !!st.replay; },
     get state() { return st; },
   };
@@ -371,18 +379,19 @@ export function initWalks(ctx) {
 export function drawLines(g, lines, toScreen, moodColor, d, now = Date.now()) {
   g.lineCap = "round";
   g.lineJoin = "round";
-  for (const { pts, replay } of lines) {
+  for (const { pts, replay, jump } of lines) {
     let prev = null;
     for (const pt of pts) {
       const s = toScreen(pt.p);
       if (s && prev) {
         const age = replay ? 0 : Math.min(1, (now - pt.t) / (6 * 3600 * 1000)); // fades over six hours
         g.strokeStyle = replay ? "#ffffff" : moodColor(pt.m);
-        g.globalAlpha = replay ? 0.55 : 0.85 - 0.6 * age;
-        g.lineWidth = (replay ? 2 : 3) * d;
+        g.globalAlpha = replay ? 0.55 : jump ? 0.5 : 0.85 - 0.6 * age;
+        g.lineWidth = (replay ? 2 : jump ? 2 : 3) * d;
         if (replay) g.setLineDash([5 * d, 5 * d]);
+        else if (jump) g.setLineDash([2 * d, 6 * d]); // a jump's gap: dotted
         g.beginPath(); g.moveTo(prev[0], prev[1]); g.lineTo(s[0], s[1]); g.stroke();
-        if (replay) g.setLineDash([]);
+        if (replay || jump) g.setLineDash([]);
       }
       prev = s;
     }

@@ -7,12 +7,8 @@ extends CanvasLayer
 const ACCENT := Color("ffb547")
 const MUTE_COLOR := Color("e0565b")
 ## The expand button scales the panel up to this (less if the screen is smaller).
-const LARGE_SCALE := 1.6
-## Phones start larger (and their expand button goes larger still); either way
-## the panel shrinks to fit above the buttons along the bottom edge.
+## Phones show the panel larger; it shrinks to fit above the buttons along the bottom edge.
 const PHONE_SCALE := 2.0
-const PHONE_LARGE_SCALE := 2.6
-const PREFS := "user://beacon_hud.cfg"
 const ROLE_COLOR := {"drums": Color("ff8a3d"), "bass": Color("2ec4b6"), "keys": Color("f5c04a"), "lead": Color("ff4f9a"), "pluck": Color("9ccc65"), "texture": Color("8b6cf0"), "pad": Color("7ad7ff")}
 
 var player: BeaconPlayer
@@ -30,8 +26,10 @@ var _quality: Label
 var _quality_btn: Button
 var _flash := 0.0
 var _panel: PanelContainer
-var _expand: Button
-var large := false
+var _collapse: Button
+## Collapsed: only the key, chord and tempo show (phones start this way, out of the map's way).
+var collapsed := false
+var _body: Array[Control] = []
 
 
 func _init(p_player: BeaconPlayer) -> void:
@@ -61,8 +59,8 @@ func _ready() -> void:
 	var title := _label(title_text, 13, ACCENT)
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	head.add_child(title)
-	_expand = _expand_button()
-	head.add_child(_expand)
+	_collapse = _collapse_button()
+	head.add_child(_collapse)
 	v.add_child(head)
 	_now = _label("", 22, Color.WHITE)
 	v.add_child(_now)
@@ -127,51 +125,43 @@ func _ready() -> void:
 	_help.custom_minimum_size.x = 330
 	v.add_child(_help)
 	player.harmony_changed.connect(func(_i): _flash = 1.0)
-	var cfg := ConfigFile.new()
-	if cfg.load(PREFS) == OK:
-		large = bool(cfg.get_value("panel", "large", false))
+	# Everything below the key line folds away.
+	var past_sub := false
+	for c in v.get_children():
+		if past_sub:
+			_body.append(c)
+		if c == _sub:
+			past_sub = true
+	set_collapsed(BuildInfo.is_phone())
 
 
-## Toggles the panel between its normal size and a larger one that is easier
-## to read and tap. Remembered between runs.
-func set_large(on: bool) -> void:
-	large = on
-	var cfg := ConfigFile.new()
-	cfg.set_value("panel", "large", on)
-	cfg.save(PREFS)
+func set_collapsed(on: bool) -> void:
+	collapsed = on
+	for c in _body:
+		c.visible = not on
+	_collapse.tooltip_text = "Show the parts" if on else "Fold the panel away"
+	_collapse.queue_redraw()
+	_panel.reset_size()
 
 
-## A square button with corner arrows drawn on it: outward to expand, inward
-## to go back to normal size.
-func _expand_button() -> Button:
+## A finger-sized button with a chevron: down to unfold the panel, up to fold it.
+func _collapse_button() -> Button:
 	var b := Button.new()
 	b.focus_mode = Control.FOCUS_NONE
-	b.custom_minimum_size = Vector2(28, 24)
-	b.tooltip_text = "Larger panel"
+	b.custom_minimum_size = Vector2(40, 32)
 	for state in ["normal", "hover", "pressed"]:
 		var sb := StyleBoxFlat.new()
 		sb.bg_color = Color(0.13, 0.16, 0.2) if state != "pressed" else Color(0.2, 0.24, 0.3)
 		sb.border_color = ACCENT if state == "hover" else Color(0.25, 0.3, 0.38)
 		sb.set_border_width_all(1)
-		sb.set_corner_radius_all(5)
+		sb.set_corner_radius_all(6)
 		b.add_theme_stylebox_override(state, sb)
 	b.draw.connect(func():
 		var c := b.size / 2.0
-		var r := 6.0
-		var t := 3.5
-		var col := Color(1, 1, 1, 0.85)
-		for sx in [-1.0, 1.0]:
-			for sy in [-1.0, 1.0]:
-				var corner := c + Vector2(sx, sy) * r
-				# Expand: corner brackets point outward. Shrink: they point inward.
-				var d := Vector2(-sx, -sy) * t if not large else Vector2(sx, sy) * t
-				var tip := corner if not large else corner - Vector2(sx, sy) * t
-				b.draw_line(tip, tip + Vector2(d.x, 0), col, 1.6, true)
-				b.draw_line(tip, tip + Vector2(0, d.y), col, 1.6, true))
-	b.pressed.connect(func():
-		set_large(not large)
-		b.tooltip_text = "Normal size" if large else "Larger panel"
-		b.queue_redraw())
+		var w := 8.0
+		var h := 4.5 * (1.0 if collapsed else -1.0) # down when folded, up when open
+		b.draw_polyline(PackedVector2Array([c + Vector2(-w, -h), c + Vector2(0, h), c + Vector2(w, -h)]), Color(1, 1, 1, 0.9), 2.2, true))
+	b.pressed.connect(func(): set_collapsed(not collapsed))
 	return b
 
 
@@ -200,14 +190,14 @@ func _toggle(text: String, on_color: Color, on_toggle: Callable) -> Button:
 
 func _fit_scale() -> void:
 	var phone := BuildInfo.is_phone()
-	var want := (PHONE_LARGE_SCALE if large else PHONE_SCALE) if phone else (LARGE_SCALE if large else 1.0)
+	var want := PHONE_SCALE if phone else 1.0
 	var k := want
 	if _panel.size.y > 0.0:
 		var view := get_viewport().get_visible_rect().size
 		# Phones keep the bottom-left My beacons button clear.
 		var bottom := FieldMenu.BAR * FieldMenu.PHONE_SCALE if phone else 0.0
 		var room := view - Vector2(32, 32 + bottom)
-		k = minf(want, minf(room.x * 0.5 / _panel.size.x, room.y / _panel.size.y)) if phone else maxf(1.0, minf(want, minf(room.x / _panel.size.x, room.y / _panel.size.y)))
+		k = minf(want, minf(room.x * 0.5 / _panel.size.x, room.y / _panel.size.y))
 	if not is_equal_approx(_panel.scale.x, k):
 		_panel.scale = Vector2(k, k)
 
@@ -256,5 +246,5 @@ func _process(delta: float) -> void:
 		_quality.text = "Sound: " + player.quality.describe()
 		_quality_btn.text = AudioQuality.MODE_NAMES[player.quality.mode]
 	# Keyboard hints mean nothing on a phone, and the room is better spent on the parts.
-	_help.visible = not BuildInfo.is_phone()
+	_help.visible = not BuildInfo.is_phone() and not collapsed
 	_help.text = ("Space stop" if Transport.running else "Space PLAY") + "  ·  " + help_text
