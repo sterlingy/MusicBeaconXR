@@ -55,6 +55,7 @@ Transport.start()
 ## Known gaps
 
 - SynthKit is shared with AudioSyncMaster and lives in its own private repo (github.com/sterlingy/SynthKit), included here as a git submodule at `addons/synthkit`. Clone with `git clone --recurse-submodules`, or run `git submodule update --init` in an existing checkout. Change the instruments in SynthKit, push there, then bump the submodule here (`git -C addons/synthkit pull` and commit the new pointer); don't edit `addons/synthkit` in this repo. Building the engine needs its third-party libraries and VS 2022 (see SynthKit's README).
+- MusicInputKit (`addons/music_input_kit`) is also its own private repo (github.com/sterlingy/MusicInputKit) and a git submodule, shared with JamSyncXR (formerly AudioSyncMaster). Change it in its own clone (`D:\MusicInputKit` on music-machine), push, then bump the submodule here (`git submodule update --remote addons/music_input_kit`) and commit the new pointer. Don't edit `addons/music_input_kit` here.
 - The browser synths are ports of the instrument designs, not the C++ engine.
 - The Godot player doesn't follow song forms or automation yet.
 

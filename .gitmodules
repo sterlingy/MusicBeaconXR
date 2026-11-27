@@ -1,3 +1,6 @@
 [submodule "addons/synthkit"]
 	path = addons/synthkit
 	url = https://github.com/sterlingy/SynthKit.git
+[submodule "addons/music_input_kit"]
+	path = addons/music_input_kit
+	url = https://github.com/sterlingy/MusicInputKit.git
