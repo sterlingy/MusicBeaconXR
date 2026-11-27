@@ -758,16 +758,30 @@ canvas.addEventListener("wheel", (e) => {
   ui.closeKm = Math.max(1, Math.min(400, ui.closeKm * Math.pow(1.0015, e.deltaY)));
 }, { passive: false });
 
+/**
+ * My location, a city, or typed coordinates: a jump like any other (as the
+ * app's Center on me): a followed flight, auto-walk and following your location
+ * stop, the trail breaks, and the view comes back to you.
+ */
 function jumpTo(lat, lon, how) {
   input.target = null;
+  input.wander = false;
+  const was = flight.active;
+  stopFlight();
   if (ui.mode === "local") {
     stopFollow();
     centerLocal({ lat, lon });
     setMsg("fieldMsg", `Grid centered on ${how === "Moved to" ? `${lat.toFixed(3)}, ${lon.toFixed(3)}` : how}.`);
     return;
   }
-  engine.setPosition({ lat, lon });
-  setMsg("fieldMsg", `${how}: ${lat.toFixed(2)}, ${lon.toFixed(2)}`);
+  stopFollow();
+  ui.pan = null;
+  ui.panVel = null;
+  input.space = spaces[ui.mode];
+  input.setPosition(engine.pos, false);
+  input.jumpTo({ lat, lon });
+  if (globe3d && is3d()) { globe3d.flyTo(lat, lon); globe3d.follow(); }
+  setMsg("fieldMsg", `${how}: ${lat.toFixed(2)}, ${lon.toFixed(2)}${was ? " (stopped following the flight)" : ""}`);
 }
 
 // ------------------------------------------------------------------ local grid and location
@@ -972,7 +986,17 @@ function closeEditor() { editorId = null; editor.close(); $("editorWrap").hidden
 $("editSong").addEventListener("click", () => { const id = needBeacon(); if (id) openEditor(id); });
 $("closeEditor").addEventListener("click", closeEditor);
 
-$("goBeacon").addEventListener("click", () => { const b = findBeacon(inspectedId()); if (b) input.target = { ...b.pos }; });
+// Walk here: you walk there yourself, so a followed flight and auto-walk stop (as Jump and Move).
+$("goBeacon").addEventListener("click", () => {
+  const b = findBeacon(inspectedId());
+  if (!b) return;
+  input.wander = false;
+  stopFlight("Walking to a beacon, so you stopped following the flight.");
+  stopFollow("Walking to a beacon, so the map stopped following your location.");
+  ui.pan = null;
+  input.target = { ...b.pos };
+  globe3d?.follow?.();
+});
 /** The inspected beacon's id, or null after saying there's none (an exclusive map's silence). */
 function needBeacon() {
   const id = inspectedId();
@@ -1303,7 +1327,7 @@ $("view2d").addEventListener("click", () => setView3d(false));
 $("view3d").addEventListener("click", () => setView3d(true));
 
 drafts = initDrafts({
-  engine, input, ui, $, esc, setMsg, fmtDist, label, canvas, view, setZoom, select, inspectedId, stopFollow,
+  engine, input, ui, $, esc, setMsg, fmtDist, label, canvas, view, setZoom, select, inspectedId, stopFollow, jumpTo,
   moodColor: (m) => MOOD_COLOR[m] || "#888888",
   renderInspector: () => renderInspector(),
   inspectedSong: () => { const id = needBeacon(); return id ? engine.songFor(id) : null; },

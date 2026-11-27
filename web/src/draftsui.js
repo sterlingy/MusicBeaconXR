@@ -176,9 +176,9 @@ export function initDrafts(ctx) {
     else if (item.beacons?.length) pos = item.beacons[0];
     else if (item.point) pos = D.parsePoint(item.point);
     if (!pos) return;
-    ctx.stopFollow?.("Jumped to your beacons, so the map stopped following your location.");
-    ctx.input.target = null;
-    engine.setPosition({ lat: pos.lat, lon: pos.lon });
+    // A jump like any other: a followed flight, auto-walk and following your location stop.
+    if (ctx.jumpTo) ctx.jumpTo(pos.lat, pos.lon, "Jumped to your beacons");
+    else { ctx.stopFollow?.("Jumped to your beacons, so the map stopped following your location."); ctx.input.target = null; engine.setPosition({ lat: pos.lat, lon: pos.lon }); }
     ui.closeKm = item.spacingM ? Math.max(2, (D.sidePoints(item) + 3) * item.spacingM / 1000) : 3;
     ctx.setZoom("close");
   }

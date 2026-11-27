@@ -105,6 +105,17 @@ func _ready() -> void:
 	check(FieldPrefs.follow(), "following your location again")
 	scene.mine._plane_drives()
 	check(not FieldPrefs.follow() and not scene.menu._follow.button_pressed, "a flight stops following your location")
+	# A city key (1-9) while following a flight: the flight stops and you land there.
+	scene.mine.flight._last_poll = FlightFollow.now_s()
+	scene.mine.flight.fix = {"found": true, "lat": 40.0, "lon": -100.0, "gs_kt": 450.0, "track": 90.0, "at": FlightFollow.now_s(), "seen_pos": 0.0, "alt_ft": 35000.0, "flight": "TST1"}
+	await get_tree().process_frame
+	scene._free = true
+	scene.input.send_action("jump", 0)
+	await get_tree().process_frame
+	await get_tree().process_frame
+	var city: Array = scene.CITIES[0]
+	check(not scene.mine.flight.active() and scene.input.position.distance_to(Vector2(city[2], city[1])) < 0.01 and not scene._free,
+		"a city key stops the flight and takes you (and the view) there (%s)" % scene.input.position)
 	# Center on me while location is already running and you're standing still
 	# (Android sends no new fix): the last fix is used, the view comes back to you.
 	FieldPrefs.set_value("follow", false)

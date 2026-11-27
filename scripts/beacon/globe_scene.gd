@@ -157,8 +157,10 @@ func _on_action(name: String, arg: Variant) -> void:
 		"orbit_end":
 			_spin = Vector2(-arg.x, arg.y) * _deg_per_px()
 		"jump":
+			# A city (1-9): a jump like any other: a followed flight, auto-walk and
+			# following your location stop, and the view comes back to you.
 			var c: Array = CITIES[int(arg)]
-			input.jump_to(Vector2(c[2], c[1]))
+			_go("jump", Vector2(c[2], c[1]))
 			_status = "Jumped to " + c[0]
 
 

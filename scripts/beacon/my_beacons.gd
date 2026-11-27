@@ -271,6 +271,7 @@ func _act(action: String, id: String) -> void:
 			BeaconDrafts.regenerate_all(item)
 			_say("New songs on all of %s's generated beacons." % item.name)
 		"go":
+			_leave_drivers() # going to your beacons: a followed flight, auto-walk and following your location stop
 			if id == "plants":
 				if drafts.doc.plants.is_empty():
 					return
@@ -616,6 +617,17 @@ func start_random_flight() -> String:
 	if why == "":
 		go_to.emit(flight.fix.lat, flight.fix.lon, 1500.0)
 	return why
+
+
+## You're going somewhere on purpose: a followed flight, wandering and
+## following your location stop (they'd move you straight back).
+func _leave_drivers() -> void:
+	player.get_tree().call_group("listener_input", "set", "wander", false)
+	if flight.active():
+		player.get_tree().call_group("field_menu", "stop_flight")
+	if FieldPrefs.follow():
+		FieldPrefs.set_value("follow", false)
+		player.get_tree().call_group("field_menu", "set_follow", false)
 
 
 ## The plane drives now: wandering and following your location stop.
