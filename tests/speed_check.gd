@@ -14,8 +14,11 @@ func check(ok: bool, what: String) -> void:
 
 
 func _ready() -> void:
-	check(absf(SpeedUi.from_t(0.0) - 1.0) < 1e-4 and absf(SpeedUi.from_t(1.0) - 100.0) < 1e-3, "the slider runs 1 to 100 m/s")
-	check(absf(SpeedUi.from_t(0.5) - 10.0) < 1e-3, "10 m/s is the middle (log scale)")
+	check(absf(SpeedUi.from_t(0.0) - 1.0) < 1e-4 and absf(SpeedUi.from_t(1.0) - 250.0) < 1e-3, "the slider runs 1 to 250 m/s (a jet cruising)")
+	check(absf(SpeedUi.from_t(0.5) - sqrt(250.0)) < 1e-3, "log scale: the middle is about 16 m/s")
+	for c in [[1.4, "Walk"], [3.0, "Jog"], [6.0, "Run"], [10.0, "Bike"], [25.0, "Drive"], [45.0, "Train"], [83.0, "Bullet train"], [140.0, "Prop plane"], [250.0, "Jet"]]:
+		check(SpeedUi.band_of(c[0]) == c[1], "%s m/s is %s (got %s)" % [c[0], c[1], SpeedUi.band_of(c[0])])
+	check(SpeedUi.describe(25.0) == "25 m/s · Drive · 90 km/h", "described: " + SpeedUi.describe(25.0))
 	for m in SpeedUi.MARKS:
 		check(is_equal_approx(SpeedUi.snapped_speed(SpeedUi.to_t(m) + 0.02), m), "snaps to %d m/s" % m)
 	check(not is_equal_approx(SpeedUi.snapped_speed(SpeedUi.to_t(15.0)), 10.0) and absf(SpeedUi.snapped_speed(SpeedUi.to_t(15.0)) - 15.0) < 1.0, "between marks it's free (15 m/s)")

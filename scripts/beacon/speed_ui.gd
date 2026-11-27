@@ -1,8 +1,10 @@
 class_name SpeedUi
 extends CanvasLayer
-## Walking speed: a button beside Walks showing the speed, and a pop-up with a
-## horizontal slider from 1 to 100 m/s. The slider is logarithmic (slow speeds
-## get as much room as fast ones) and snaps to 1, 2, 5, 10, 25, 50 and 100 m/s.
+## Travel speed: a button beside Walks showing the speed, and a pop-up with a
+## horizontal slider from 1 m/s (walking) to 250 m/s (a jet cruising). The
+## slider is logarithmic (slow speeds get as much room as fast ones), snaps to
+## 1, 2, 5, 10, 25, 50, 100 and 250 m/s, and names the ranges: walk, jog, run,
+## bike, drive, train, bullet train, prop plane, jet.
 ## Remembered between launches (FieldPrefs "walk_speed"). Walking with keys or
 ## a stick, walking to a tapped spot and auto-walk all use it.
 ##
@@ -13,8 +15,12 @@ extends CanvasLayer
 signal changed(mps: float)
 
 const MIN := 1.0
-const MAX := 100.0
-const MARKS := [1.0, 2.0, 5.0, 10.0, 25.0, 50.0, 100.0]
+const MAX := 250.0
+const MARKS := [1.0, 2.0, 5.0, 10.0, 25.0, 50.0, 100.0, 250.0]
+## Named ranges: [from m/s, short name (under the slider), full name].
+const BANDS := [[1.0, "Walk", "Walk"], [2.0, "Jog", "Jog"], [4.0, "Run", "Run"], [8.0, "Bike", "Bike"],
+	[15.0, "Drive", "Drive"], [35.0, "Train", "Train"], [60.0, "Bullet", "Bullet train"],
+	[100.0, "Prop", "Prop plane"], [180.0, "Jet", "Jet"]]
 const SNAP := 0.035 # how close (in slider travel, 0..1) snaps to a mark
 
 var ui_scale := 1.0
@@ -61,6 +67,20 @@ static func label_of(v: float) -> String:
 	return ("%d m/s" % roundi(v)) if v >= 2.0 or is_equal_approx(v, roundf(v)) else ("%.1f m/s" % v)
 
 
+## The named range a speed falls in ("Walk" ... "Jet").
+static func band_of(v: float) -> String:
+	var name: String = BANDS[0][2]
+	for b in BANDS:
+		if v >= float(b[0]) - 0.001:
+			name = b[2]
+	return name
+
+
+## "25 m/s · Drive · 90 km/h"
+static func describe(v: float) -> String:
+	return "%s · %s · %d km/h" % [label_of(v), band_of(v), roundi(v * 3.6)]
+
+
 func _ready() -> void:
 	ui_scale = FieldMenu.PHONE_SCALE if BuildInfo.is_phone() else 1.0
 	for a in OS.get_cmdline_user_args():
@@ -68,8 +88,8 @@ func _ready() -> void:
 			ui_scale = float(a.trim_prefix("--ui-scale="))
 	mps = saved()
 	var menu := FieldMenu.new("grid")
-	_toggle = menu._button("🚶 " + label_of(mps), func(): set_open(not PopupFx.is_open(_panel)), true)
-	_toggle.tooltip_text = "Walking speed"
+	_toggle = menu._button(_button_text(mps), func(): set_open(not PopupFx.is_open(_panel)), true)
+	_toggle.tooltip_text = "Travel speed"
 	add_child(_toggle)
 	_panel = PanelContainer.new()
 	_panel.mouse_filter = Control.MOUSE_FILTER_STOP
@@ -84,15 +104,15 @@ func _ready() -> void:
 	add_child(_panel)
 	PopupFx.glass(_panel)
 	var v := VBoxContainer.new()
-	v.custom_minimum_size = Vector2(380, 0)
+	v.custom_minimum_size = Vector2(440, 0)
 	v.add_theme_constant_override("separation", 6)
 	_panel.add_child(v)
 	var head := HBoxContainer.new()
-	var h := menu._heading("WALKING SPEED")
+	var h := menu._heading("TRAVEL SPEED")
 	h.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	head.add_child(h)
 	_value = Label.new()
-	_value.add_theme_font_size_override("font_size", 22)
+	_value.add_theme_font_size_override("font_size", 18)
 	head.add_child(_value)
 	v.add_child(head)
 	_slider = HSlider.new()
@@ -108,7 +128,7 @@ func _ready() -> void:
 	_slider.drag_ended.connect(func(_c): _slider.set_value_no_signal(to_t(mps))) # settle on the snapped mark
 	v.add_child(_slider)
 	_ticks = Control.new()
-	_ticks.custom_minimum_size = Vector2(0, 22)
+	_ticks.custom_minimum_size = Vector2(0, 40)
 	_ticks.draw.connect(_draw_ticks)
 	v.add_child(_ticks)
 	_note = menu._small("")
@@ -121,6 +141,19 @@ func _draw_ticks() -> void:
 	var font := ThemeDB.fallback_font
 	var w := _ticks.size.x
 	var grab := 10.0 # the slider's grabber keeps the ends this far in
+	# The named ranges, each label centred in its stretch of the slider.
+	for i in BANDS.size():
+		var a := to_t(float(BANDS[i][0]))
+		var b := to_t(float(BANDS[i + 1][0])) if i + 1 < BANDS.size() else 1.0
+		var x0 := grab + (w - 2.0 * grab) * a
+		var x1 := grab + (w - 2.0 * grab) * b
+		var here: bool = band_of(mps) == String(BANDS[i][2])
+		var col := FieldMenu.ACCENT if here else Color(1, 1, 1, 0.4)
+		var name: String = BANDS[i][1]
+		var nw := font.get_string_size(name, HORIZONTAL_ALIGNMENT_LEFT, -1, 11).x
+		_ticks.draw_string(font, Vector2(clampf((x0 + x1 - nw) * 0.5, 0.0, w - nw), 37), name, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, col)
+		if i > 0:
+			_ticks.draw_line(Vector2(x0, 25), Vector2(x0, 39), Color(1, 1, 1, 0.12), 1.0)
 	for m in MARKS:
 		var x := grab + (w - 2.0 * grab) * to_t(m)
 		var on := is_equal_approx(m, mps)
@@ -131,11 +164,15 @@ func _draw_ticks() -> void:
 		_ticks.draw_string(font, Vector2(clampf(x - tw * 0.5, 0.0, w - tw), 19), t, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, col)
 
 
+static func _button_text(v: float) -> String:
+	return "%s · %s" % [band_of(v), label_of(v)]
+
+
 ## Sets the speed (and saves it); `tell` sends changed.
 func set_speed(v: float, tell := true) -> void:
 	mps = clampf(v, MIN, MAX)
-	_value.text = label_of(mps)
-	_toggle.text = "🚶 " + label_of(mps)
+	_value.text = describe(mps)
+	_toggle.text = _button_text(mps)
 	_slider.set_value_no_signal(to_t(mps)) # dragging past a mark settles on it (a detent)
 	_ticks.queue_redraw()
 	_note.text = note
