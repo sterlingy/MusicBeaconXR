@@ -227,6 +227,10 @@ static func generate(seed: String, hint := {}) -> Dictionary:
 	g._a = hash_string(seed)
 	var song := g._song(hint)
 	assign_samples(song, seed)
+	# Each part's SynthKit sound (KitSounds), from the seed's own stream so the notes don't change.
+	var k := SongGen.new()
+	k._a = hash_string(seed + "|kit")
+	KitSounds.choose_kits(k, song)
 	return song
 
 

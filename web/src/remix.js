@@ -8,6 +8,7 @@
 // file's answers in tests/fixtures/remix.json (web/tools/export_remix.mjs).
 
 import { hash01 } from "./song.js";
+import { KIT_SOUNDS } from "./kitsounds.js";
 
 export const PARTS = ["drums", "bass", "keys", "lead", "pluck", "texture", "pad"];
 /** The dials: [id, label, min, max, step]. All rest at 0 ("as written"). */
@@ -25,17 +26,19 @@ export const DIALS = [
 export const MOOD_LADDER = ["lydian", "major", "mixolydian", "dorian", "minor", "phrygian"];
 /**
  * Swap sound: each part's other instruments, after its own (index 0).
- * "wave:x" a synth wave, "model:x" a pluck model, "sample:x" a sampled
- * instrument, "synth" the part's synth (no sample).
+ * "kit:x" a SynthKit preset (src/kitsounds.js), "wave:x" a synth wave,
+ * "model:x" a pluck model, "sample:x" a sampled instrument, "synth" the
+ * part's synth (no sample).
  */
+const kits = (role) => KIT_SOUNDS[role].map(([name]) => `kit:${name}`);
 export const SWAPS = {
-  drums: ["own", "synth", "sample:orch_kit"],
-  bass: ["own", "wave:sawtooth", "wave:square", "wave:triangle", "sample:contrabass_pizz", "sample:tuba", "sample:bassoon"],
-  keys: ["own", "wave:sine", "wave:triangle", "wave:sawtooth", "sample:piano"],
-  lead: ["own", "wave:sine", "wave:triangle", "wave:sawtooth", "wave:square", "sample:flute", "sample:horn", "sample:clarinet", "sample:trumpet", "sample:oboe"],
-  pluck: ["own", "model:nylon", "model:marimba", "model:vibes", "model:kalimba", "model:bell", "model:glass", "sample:harp", "sample:strings_pizz", "sample:glock"],
-  texture: ["own"],
-  pad: ["own", "synth", "sample:strings", "sample:horn", "sample:trombone"],
+  drums: ["own", "synth", ...kits("drums"), "sample:orch_kit"],
+  bass: ["own", ...kits("bass"), "wave:sawtooth", "wave:square", "wave:triangle", "sample:contrabass_pizz", "sample:tuba", "sample:bassoon"],
+  keys: ["own", ...kits("keys"), "wave:sine", "wave:triangle", "wave:sawtooth", "sample:piano"],
+  lead: ["own", ...kits("lead"), "wave:sine", "wave:triangle", "wave:sawtooth", "wave:square", "sample:flute", "sample:horn", "sample:clarinet", "sample:trumpet", "sample:oboe"],
+  pluck: ["own", ...kits("pluck"), "model:nylon", "model:marimba", "model:vibes", "model:kalimba", "model:bell", "model:glass", "sample:harp", "sample:strings_pizz", "sample:glock"],
+  texture: ["own", ...kits("texture")],
+  pad: ["own", "synth", ...kits("pad"), "sample:strings", "sample:horn", "sample:trombone"],
 };
 /** Each part's level multiplier runs 0..1.5 (levels themselves stop at 1). */
 export const LEVEL_MAX = 1.5;
@@ -152,13 +155,20 @@ export function remixSong(song, s) {
     }
     // Swap sound.
     applySwap(t, p, SWAPS[role]?.[s.parts?.[role]?.swap || 0]);
+    // A SynthKit sound turns with the same dials.
+    if (t.kit) t.kit = turnKit(t.kit, s);
   }
   // The pad: its level follows the song (energy, mood), so only its instrument swaps.
   const padSwap = SWAPS.pad[s.parts?.pad?.swap || 0];
   if (padSwap && padSwap !== "own") {
     if (padSwap === "synth") delete out.pad;
     else if (padSwap.startsWith("sample:")) out.pad = { ...(out.pad || {}), sample: padSwap.slice(7) };
+    else if (padSwap.startsWith("kit:")) {
+      out.pad = { ...(out.pad || {}), kit: { preset: padSwap.slice(4), tune: { ...(out.pad?.kit?.tune || {}) } } };
+      delete out.pad.sample;
+    }
   }
+  if (out.pad?.kit) out.pad.kit = turnKit(out.pad.kit, s);
   if (s.parts?.pad && s.parts.pad.level !== 1) out.padLevel = r3(clamp(s.parts.pad.level, 0, LEVEL_MAX));
   return out;
 }
@@ -166,9 +176,22 @@ export function remixSong(song, s) {
 function applySwap(t, p, sw) {
   if (!sw || sw === "own") return;
   if (sw === "synth") delete t.sample;
-  else if (sw.startsWith("wave:")) { p["osc.wave"] = sw.slice(5); delete t.sample; }
-  else if (sw.startsWith("model:")) { p.model = sw.slice(6); delete t.sample; }
+  else if (sw.startsWith("kit:")) { t.kit = { preset: sw.slice(4), tune: { ...(t.kit?.tune || {}) } }; delete t.sample; }
+  // A wave or model is a setting of the part's base synth, so the SynthKit preset steps aside.
+  else if (sw.startsWith("wave:")) { p["osc.wave"] = sw.slice(5); delete t.sample; delete t.kit; }
+  else if (sw.startsWith("model:")) { p.model = sw.slice(6); delete t.sample; delete t.kit; }
   else if (sw.startsWith("sample:")) t.sample = sw.slice(7);
+}
+
+/** Brightness, space, character and width move a SynthKit sound's tune (-1..1). */
+const KIT_DIALS = [["bright", "brightness"], ["space", "space"], ["grit", "character"], ["width", "width"]];
+function turnKit(kit, s) {
+  const tune = { ...(kit.tune || {}) };
+  for (const [k, dial] of KIT_DIALS) {
+    const d = s[dial] || 0;
+    if (d) tune[k] = r3(clamp((tune[k] || 0) + 0.8 * d, -1, 1));
+  }
+  return { ...kit, tune };
 }
 
 /** Drums: sparser keeps the main hits (kick on the beat, loud hits); busier adds quiet off-beat hats and lifts velocities. */

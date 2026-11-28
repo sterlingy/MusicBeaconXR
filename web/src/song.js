@@ -42,6 +42,7 @@ export const SONG_SECTIONS = ["intro", "verse", "pre", "chorus", "bridge", "brea
 
 import { PRESETS, presetSound } from "./presets.js";
 import { controls, isChoice, automatable, checkAutomation, SHAPES } from "./params.js";
+import { chooseKits, checkKit } from "./kitsounds.js";
 
 export const ROLES = ["drums", "bass", "keys", "lead", "pluck", "texture"];
 export const ROLE_INSTRUMENT = {
@@ -309,6 +310,8 @@ export function generateSong(seedString, hint = {}) {
   // Part levels are mixed for SynthKit, the instruments every platform plays.
   for (const role of ROLES) song.tracks[role].level = round(song.tracks[role].level * MIX[role], 3);
   assignSamples(song, seedString);
+  // Each part's SynthKit sound (src/kitsounds.js), from the seed's own stream so the notes don't change.
+  chooseKits(rng(hashString(`${seedString}|kit`)), song, pick, range);
   return song;
 }
 
@@ -812,9 +815,11 @@ export function validateSong(s) {
     else if (role === "drums" ? typeof t.pattern !== "object" : !Array.isArray(t.pattern)) errs.push(`${role}.pattern has the wrong shape`);
     else if (t.patternB != null && (role === "drums" ? typeof t.patternB !== "object" : !Array.isArray(t.patternB) || !t.patternB.length)) errs.push(`${role}.patternB has the wrong shape`);
     else if (t.sample != null && typeof t.sample !== "string") errs.push(`${role}.sample must be a sample id`);
+    else if (t.kit != null && checkKit(role, t.kit)) errs.push(`${role}: ${checkKit(role, t.kit)}`);
     else for (const e of checkAutomation(ROLE_INSTRUMENT[role], t.automation)) errs.push(`${role}: ${e}`);
   }
   if (s.pad != null && (typeof s.pad !== "object" || (s.pad.sample != null && typeof s.pad.sample !== "string"))) errs.push("pad.sample must be a sample id");
+  else if (s.pad?.kit != null && checkKit("pad", s.pad.kit)) errs.push(`pad: ${checkKit("pad", s.pad.kit)}`);
   if (s.form != null) {
     if (!Array.isArray(s.form) || !s.form.length) errs.push("form must be a non-empty array");
     else s.form.forEach((f, i) => {

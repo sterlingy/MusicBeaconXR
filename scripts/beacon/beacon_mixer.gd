@@ -122,8 +122,43 @@ static func blend(active: Array) -> Dictionary:
 			total += s.share
 		for s in sources:
 			s.share = s.share / total if total > 0.0 else 0.0
-		roles[role] = {"gain": gain, "params": _blend_params(active, role, sources), "sample": _lead_sample(active, role, sources), "sources": sources}
+		roles[role] = {"gain": gain, "params": _blend_params(active, role, sources), "sample": _lead_sample(active, role, sources), "kits": kit_shares(active, role, sources), "sources": sources}
 	return roles
+
+
+## The SynthKit sounds a part's songs ask for, loudest first: [{preset, tune,
+## share}], one per preset (its tune from the loudest song using it); preset
+## "" = songs without a kit. As web/src/mixer.js kitShares.
+static func kit_shares(active: Array, role: String, sources: Array) -> Array:
+	var by := {}
+	var order := []
+	for i in sources.size():
+		var t = active[i].song.tracks.get(role)
+		var kit = t.get("kit") if t is Dictionary else null
+		var name: String = str(kit.get("preset", "")) if kit is Dictionary else ""
+		if not by.has(name):
+			by[name] = {"preset": name, "tune": null, "share": 0.0, "best": -1.0}
+			order.append(name)
+		var e: Dictionary = by[name]
+		e.share += float(sources[i].share)
+		if float(sources[i].share) > e.best:
+			e.best = float(sources[i].share)
+			e.tune = kit.get("tune") if kit is Dictionary else null
+	var out := []
+	for name in order:
+		out.append({"preset": name, "tune": by[name].tune, "share": by[name].share})
+	out.sort_custom(func(a, b): return a.share > b.share or (a.share == b.share and String(a.preset) < String(b.preset)))
+	return out
+
+
+## The sound a part keeps: switches only when another is louder by `margin` (null when there's none).
+static func choose_kit(kits: Array, current: String, margin := 0.15):
+	if kits.is_empty():
+		return null
+	for k in kits:
+		if k.preset == current and k.share >= kits[0].share - margin:
+			return k
+	return kits[0]
 
 
 ## The sampled instrument a part plays: the loudest song's choice in that role ("" = its synth).

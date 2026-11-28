@@ -8,8 +8,9 @@ import { readFileSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { toSynth } from "../src/kit/parammap.js";
 import { changedParams, padLevel, padGain, isPhone, PAD_MIX, KIT_GAIN_DB, INSTRUMENT, BASE_PRESET, PARTS, DRUM_NOTE } from "../src/kit/kitplayer.js";
-import { blend, Harmony, stepEvents } from "../src/mixer.js";
-import { chordNotes, generateSong } from "../src/song.js";
+import { blend, Harmony, stepEvents, chooseKit, kitShares } from "../src/mixer.js";
+import { chordNotes, generateSong, validateSong } from "../src/song.js";
+import { KIT_SOUNDS, KIT_INSTRUMENT, kitParams, checkKit, TUNE_MAX } from "../src/kitsounds.js";
 
 const root = new URL("../../", import.meta.url);
 const read = (rel) => readFileSync(fileURLToPath(new URL(rel, root)), "utf-8");
@@ -78,6 +79,10 @@ test("every grid song (and every family) stays mellow on SynthKit's web engine",
     return JSON.parse(readFileSync(fileURLToPath(new URL(`presets/factory/${e.file}`, KIT)), "utf-8"));
   };
   const presets = Object.fromEntries(PARTS.map((r) => [r, preset(r)]));
+  const named = (instrument, name) => {
+    const e = index[instrument].find((p) => p.name === name);
+    return JSON.parse(readFileSync(fileURLToPath(new URL(`presets/factory/${e.file}`, KIT)), "utf-8"));
+  };
   const worst = {};
   const over = [];
   // Every test-grid song, plus five of each generator family (v2), so every kind of song is checked.
@@ -95,9 +100,12 @@ test("every grid song (and every family) stays mellow on SynthKit's web engine",
       if (role !== "pad" && mix.roles[role].gain <= 0.001) continue;
       const s = new SynthKitCore(module, SR, { log: () => {}, isolated: true });
       s.setInstrument(INSTRUMENT[role]);
-      s.applyPreset(presets[role]);
+      // The SynthKit sound the part plays: the song's kit (as kitplayer.js), else the base preset and parammap.
+      const kit = role === "pad" ? (song.pad?.kit ? { ...song.pad.kit, share: 1 } : null) : chooseKit(mix.roles[role].kits, "");
+      s.applyPreset(kit?.preset ? named(INSTRUMENT[role], kit.preset) : presets[role]);
       if (INSTRUMENT[role] === "Prism") s.setParam("voice.quality", 0);
-      for (const [k, v] of Object.entries(toSynth(role, role === "pad" ? {} : mix.roles[role].params))) s.setParam(k, v);
+      const target = kit?.preset ? kitParams(INSTRUMENT[role], (k) => s.getParam(k), kit.tune || {}, role === "pad" ? 1 : mix.roles[role].bright) : toSynth(role, role === "pad" ? {} : mix.roles[role].params);
+      for (const [k, v] of Object.entries(target)) s.setParam(k, v);
       for (const k of ["send.space", "send.echo", "reverb.mix"]) s.setParam(k, 0); // the dry part
       const ons = []; // [frame, note, vel, offFrame]
       for (let bar = 0; bar < 2; bar++) {
@@ -137,6 +145,54 @@ test("every grid song (and every family) stays mellow on SynthKit's web engine",
   }
   console.log("  worst above 2.5 kHz: " + Object.entries(worst).map(([r, [db, id]]) => `${r} ${db.toFixed(1)} (${id})`).join(", "));
   assert.deepEqual(over, [], "shrill parts");
+});
+
+test("songs choose SynthKit sounds from their part's list, with small tunes", () => {
+  const seen = {};
+  for (let i = 0; i < 300; i++) {
+    const song = generateSong(`kits:${i}`);
+    assert.deepEqual(validateSong(song), []);
+    for (const role of [...Object.keys(song.tracks), "pad"]) {
+      const kit = role === "pad" ? song.pad?.kit : song.tracks[role].kit;
+      assert.equal(checkKit(role, kit), null, `${role}: ${JSON.stringify(kit)}`);
+      for (const v of Object.values(kit.tune)) assert.ok(Math.abs(v) <= TUNE_MAX + 1e-9);
+      (seen[role] ||= new Set()).add(kit.preset);
+    }
+  }
+  // Every listed sound is used by some song.
+  for (const [role, list] of Object.entries(KIT_SOUNDS)) for (const [name] of list) assert.ok(seen[role].has(name), `${role} ${name} never chosen`);
+  assert.ok(checkKit("bass", { preset: "Growler" }), "unlisted presets are refused");
+  assert.ok(checkKit("keys", { preset: "Glass EP", tune: { bright: 2 } }), "tunes stay -1..1");
+});
+
+test("kits don't change a song's notes", () => {
+  // The kits come from their own random stream: the song without them is the generator's v2 song.
+  const a = generateSong("grid:g00"), b = JSON.parse(readFileSync(fileURLToPath(new URL("tests/fixtures/song_gen.json", root)), "utf-8"))[0];
+  assert.ok(a.tracks.bass.kit);
+  assert.deepEqual(a.tracks.bass.pattern, generateSong("grid:g00").tracks.bass.pattern);
+  assert.ok(b.song.tracks.bass.kit, "the app's fixture songs carry kits too");
+});
+
+test("a part keeps its sound until another is clearly louder", () => {
+  const kits = [{ preset: "A", share: 0.55 }, { preset: "B", share: 0.45 }];
+  assert.equal(chooseKit(kits, "B").preset, "B");
+  assert.equal(chooseKit(kits, "").preset, "A");
+  assert.equal(chooseKit([{ preset: "A", share: 0.7 }, { preset: "B", share: 0.3 }], "B").preset, "A");
+  assert.equal(chooseKit([], "A"), null);
+  const x = generateSong("x:1"), y = generateSong("x:2");
+  delete y.tracks.bass.kit;
+  const k = kitShares([{ song: x }, { song: y }], "bass", [{ share: 0.4 }, { share: 0.6 }]);
+  assert.deepEqual(k.map((e) => [e.preset, e.share]), [["", 0.6], [x.tracks.bass.kit.preset, 0.4]]);
+});
+
+test("the tune can darken a part more than brighten it", () => {
+  const base = (id) => ({ "f1.cutoff": 2000, "filter.cutoff": 800 })[id] ?? 2;
+  assert.equal(kitParams("Prism", base, { bright: 1 })["f1.cutoff"], Math.round(2000 * Math.SQRT2 * 1e4) / 1e4);
+  assert.equal(kitParams("Prism", (id) => (id === "f1.cutoff" ? 3600 : 2), { bright: 1 })["f1.cutoff"], 3600, "bright presets don't get brighter");
+  assert.equal(kitParams("Prism", base, { bright: -1 })["f1.cutoff"], 1000);
+  assert.equal(kitParams("Undertow", base, {}, 2)["filter.cutoff"], 1600);
+  assert.deepEqual(kitParams("Tangle", base, { bright: 1 }), {});
+  assert.equal(KIT_INSTRUMENT.pad, INSTRUMENT.pad);
 });
 
 test("the app and the website mix SynthKit the same way", () => {

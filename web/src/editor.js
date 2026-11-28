@@ -222,6 +222,7 @@ export class SongEditor {
     });
     R.querySelectorAll("[data-param]").forEach((el) => el.addEventListener("input", () => {
       s.tracks[this.role].params[el.dataset.param] = +el.value;
+      delete s.tracks[this.role].kit; // your own settings: the part plays its base synth with them (src/kitsounds.js)
       R.querySelector(`[data-out="${el.dataset.param}"]`).textContent = fmt(+el.value);
       this._commit(false);
     }));

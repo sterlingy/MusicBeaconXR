@@ -1,7 +1,8 @@
 // The beacon blend on SynthKit's own instruments, through its web module
 // (the same C++ engine as the Godot app, compiled to WebAssembly). A browser
-// twin of scripts/beacon/beacon_player.gd: same instrument and base preset per
-// part, the same song-parameter translation (parammap.js), and a pad holding
+// twin of scripts/beacon/beacon_player.gd: same instrument per part, each
+// part loading the SynthKit preset its songs chose (src/kitsounds.js; songs
+// without one play the base preset through parammap.js), and a pad holding
 // the harmony's chords. Song automation isn't played here yet, as in the app.
 //
 // makeKitInstruments() returns the same shape as synths.js makeInstruments(),
@@ -10,6 +11,8 @@
 import { Channel } from "../synths.js";
 import { toSynth } from "./parammap.js";
 import { SampleLibrary, PartSampler } from "./samples.js";
+import { kitParams, kitTrim, KIT_READS } from "../kitsounds.js";
+import { chooseKit } from "../mixer.js";
 
 export const INSTRUMENT = { drums: "Pulsar", bass: "Undertow", keys: "Prism", lead: "Prism", pluck: "Driftwood", texture: "Tangle", pad: "Prism" };
 export const BASE_PRESET = { drums: "Classic Eight", bass: "Deep Current", keys: "Prism Keys", lead: "Comet Tail", pluck: "Nylon Pluck", texture: "Drone Garden", pad: "Aurora Pad" };
@@ -57,10 +60,19 @@ export function changedParams(done, target) {
 }
 
 class KitPart {
-  constructor(role, synth, channel, sampler = null) {
+  constructor(role, synth, channel, sampler = null, { instrument = INSTRUMENT[role], presetFor = null, prepare = () => {}, gain = 1 } = {}) {
     this.role = role;
     this.synth = synth;
     this.channel = channel;
+    this.instrument = instrument;
+    this.presetFor = presetFor; // (instrument, name) => preset JSON
+    this.prepare = prepare; // re-applies the device's voice settings after a preset load
+    this.gain = gain; // the channel's input gain before the preset's trim
+    this.kitName = ""; // the SynthKit preset loaded ("" = the base preset, played through parammap)
+    this.kitBase = {}; // the loaded preset's values kitParams moves
+    this.kitTune = null;
+    this.kitBright = 1;
+    this.loading = null;
     this.sampler = sampler; // PartSampler: a recorded instrument the blend can switch to
     this.useSampler = false;
     this.applied = {};
@@ -69,7 +81,40 @@ class KitPart {
   /** Where notes go: the Sampler once the program the blend wants is loaded, else the synth. */
   get target() { return this.useSampler ? this.sampler.synth : this.synth; }
   setParams(params) {
-    for (const [id, v] of Object.entries(changedParams(this.applied, toSynth(this.role, params || {})))) this.synth.setParam(id, v);
+    if (this.loading !== null) return;
+    const target = this.kitName ? kitParams(this.instrument, (id) => this.kitBase[id] ?? 0, this.kitTune || {}, this.kitBright) : toSynth(this.role, params || {});
+    for (const [id, v] of Object.entries(changedParams(this.applied, target))) this.synth.setParam(id, v);
+  }
+  /** The SynthKit sounds the blend asks for (mixer.js kitShares): keeps the loaded one until another is clearly louder. */
+  setKit(kits, bright = 1) {
+    if (!this.presetFor) return;
+    const want = chooseKit(kits, this.loading ?? this.kitName);
+    if (!want) return;
+    this.kitBright = bright;
+    if (want.preset === this.kitName && this.loading === null) {
+      this.kitTune = want.tune;
+      return;
+    }
+    if (this.loading === want.preset) return;
+    this.loading = want.preset;
+    this._load(want).catch((e) => {
+      console.warn(`SynthKit ${this.instrument} / ${want.preset}:`, e);
+      if (this.loading === want.preset) this.loading = null;
+    });
+  }
+  async _load(want) {
+    const json = await this.presetFor(this.instrument, want.preset || BASE_PRESET[this.role]);
+    if (this.loading !== want.preset) return; // something else was asked for meanwhile
+    await this.synth.applyPreset(json);
+    if (this.loading !== want.preset) return;
+    this.prepare(this.synth);
+    this.kitBase = {};
+    for (const id of KIT_READS[this.instrument] || []) this.kitBase[id] = this.synth.getParam(id);
+    this.kitName = want.preset;
+    this.kitTune = want.tune;
+    this.applied = {};
+    this.channel.input.gain.value = this.gain * Math.pow(10, (want.preset ? kitTrim(want.preset) : 0) / 20);
+    this.loading = null;
   }
   /** The sampled instrument the blend wants for this part (null = the synth). */
   setSample(id) {
@@ -131,10 +176,15 @@ export async function makeKitInstruments(bus, { base = new URL("../../synthkit/"
   const { loadSynthKit } = await import(new URL("synthkit.js", base).href);
   const kit = await loadSynthKit(bus.ctx);
   const index = await (await fetch(new URL("presets/factory/index.json", base))).json();
-  const presetFor = async (instrument, name) => {
-    const entry = (index[instrument] || []).find((p) => p.name === name);
-    if (!entry) throw new Error(`SynthKit preset ${instrument} / ${name} not found`);
-    return (await fetch(new URL(`presets/factory/${entry.file}`, base))).json();
+  const cache = new Map();
+  const presetFor = (instrument, name) => {
+    const key = `${instrument}/${name}`;
+    if (!cache.has(key)) {
+      const entry = (index[instrument] || []).find((p) => p.name === name);
+      if (!entry) return Promise.reject(new Error(`SynthKit preset ${instrument} / ${name} not found`));
+      cache.set(key, fetch(new URL(`presets/factory/${entry.file}`, base)).then((r) => r.json()));
+    }
+    return cache.get(key);
   };
   const out = { kind: "kit", kit, channels: {}, parts: PARTS };
   const synths = [];
@@ -144,18 +194,23 @@ export async function makeKitInstruments(bus, { base = new URL("../../synthkit/"
   await Promise.all(PARTS.map(async (role) => {
     const synth = await kit.createSynth(INSTRUMENT[role]);
     await synth.applyPreset(await presetFor(INSTRUMENT[role], BASE_PRESET[role]));
-    if (INSTRUMENT[role] === "Prism") {
-      synth.setParam("voice.quality", phone ? 0 : 2);
-      synth.setParam("voice.budget", phone ? 12 : 24);
-      synth.setParam("out.gain", 0); // asleep until the blend brings the part in
-    }
+    const prism = INSTRUMENT[role] === "Prism";
     const ch = new Channel(bus);
-    ch.input.gain.value = Math.pow(10, KIT_GAIN_DB / 20);
+    // A preset load resets every setting: put the device's voices (and sleep) back.
+    const prepare = (s) => {
+      if (!prism) return;
+      s.setParam("voice.quality", phone ? 0 : 2);
+      s.setParam("voice.budget", phone ? 12 : 24);
+      s.setParam("out.gain", ch.awake ? 1 : 0); // asleep until the blend brings the part in
+    };
+    prepare(synth);
+    const gain = Math.pow(10, KIT_GAIN_DB / 20);
+    ch.input.gain.value = gain;
     synth.connect(ch.input);
-    out.channels[role] = wakeOnLevel(ch, synth, INSTRUMENT[role] === "Prism");
+    out.channels[role] = wakeOnLevel(ch, synth, prism);
     const sampler = library && role !== "texture" ? new PartSampler(kit, library, ch.input, { phone }) : null;
     if (sampler) samplers.push(sampler);
-    out[role] = new KitPart(role, synth, ch, sampler);
+    out[role] = new KitPart(role, synth, ch, sampler, { presetFor, prepare, gain });
     synths.push(synth);
   }));
   out.setTempo = (bpm) => { for (const s of synths) s.setTempo(bpm); };
@@ -175,12 +230,13 @@ export async function makeKitInstruments(bus, { base = new URL("../../synthkit/"
 function wakeOnLevel(ch, synth, prism) {
   if (!prism) return ch;
   const set = ch.set.bind(ch);
-  let awake = false, timer = null;
+  let timer = null;
+  ch.awake = false;
   ch.set = (param, value, tc = 0.15, at = 0) => {
     if (param === "level") {
       clearTimeout(timer);
-      if (value > AWAKE && !awake) { awake = true; synth.setParam("out.gain", 1); }
-      else if (value <= AWAKE && awake) timer = setTimeout(() => { awake = false; synth.setParam("out.gain", 0); }, Math.max(500, tc * 8000));
+      if (value > AWAKE && !ch.awake) { ch.awake = true; synth.setParam("out.gain", 1); }
+      else if (value <= AWAKE && ch.awake) timer = setTimeout(() => { ch.awake = false; synth.setParam("out.gain", 0); }, Math.max(500, tc * 8000));
     }
     set(param, value, tc, at);
   };

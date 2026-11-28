@@ -86,6 +86,16 @@ tools/.venv/Scripts/python.exe tools/separate.py
 
 Parts land in `analysis/stems/<song>/<part>.wav`, with `parts.json` giving how loud each is. Then `tools/.venv/Scripts/python.exe tools/analyze.py` measures each song (tempo, key, chords by bar, rough sections) and each part (tone balance, brightness, attack and decay, how busy and wide, pitch range, the drums' typical bar) into `analysis/stems/<song>/report.json`, the numbers SynthKit presets get matched against. The Python environment (`tools/.venv/`, PyTorch with CUDA, Demucs 4.0.1, soundfile) and `analysis/` stay out of git; setup steps are at the top of the script.
 
+## SynthKit song sounds
+
+Every part of a song plays one of SynthKit's own factory presets, chosen for the song's energy: drums on Pulsar (Classic Eight, Tight Funk, Boom Bap, Deep House, Trap Thunder, Lo-Fi Dust, Hand Toms), bass on Undertow, keys, lead and pad on Prism, pluck on Driftwood and texture on Tangle. On top of the preset, each song has a small **tune** of its own (bright, space, grit, width; each -0.4..0.4), so no two beacons sound quite alike. Songs store it as `track.kit = {preset, tune}` (and `song.pad.kit`), chosen from the seed's own random stream, so the notes are the same as before.
+
+- The lists, the tune rules and the level trims are in `web/src/kitsounds.js` and `scripts/beacon/kit_sounds.gd`. `tests/kit_sound_check.gd` checks the app against the website's answers (`tests/fixtures/kit_sounds.json`, from `node web/tools/export_kit.mjs`). `tests/kit_player_check` checks that the app's player loads the presets.
+- `node web/tools/kit_levels.mjs` measures each preset on SynthKit's engine and writes the level trims into both files, so every preset plays at its part's usual loudness.
+- Each part plays the sound of the song it hears most. It keeps its current sound until another song's sound is clearly louder (by 0.15 of the part), so walking along a border doesn't flip it back and forth.
+- Songs without a kit (planted or shared before kits) play the part's base preset with their own settings, as before. Editing a part's sound settings in the song editor does the same.
+- All of them stay under the "never shrill" limits (`tools/tone_check.gd`, `web/tests/kit.test.mjs`). The tune can darken a part by up to an octave but brighten it by only half an octave (Prism's cutoff stops at 3 kHz).
+
 ## Sampled instruments
 
 Some parts of a song can play a recorded instrument instead of a synth: piano, string section, pizzicato, harp, horn, trumpet, trombone, tuba, flute, clarinet, oboe, bassoon, contrabass, marimba, glockenspiel, xylophone and an orchestral percussion kit, all from VSCO 2 Community Edition (CC0). Each song rolls its sampled parts from its own seed (`SAMPLE_CHOICES` and `SAMPLE_ODDS` in `web/src/song.js`, mirrored in `scripts/beacon/song_gen.gd`), ambient and journey songs most often; the notes and synth sounds are unchanged. The loudest song in a part picks its sound, and a part plays its synth until its samples have loaded. They play on SynthKit's Sampler.
@@ -130,7 +140,7 @@ On the globe and the grids, one finger (or the mouse) turns the globe or pans th
 **Remix** (a switch in the song panel; **Edit** opens its window, and on the website it's at the top of the Instruments panel) is a layer over whatever is playing. Off, everything plays exactly as written. On, every song you hear goes through your settings before the blend, wherever you walk:
 
 - **Dials** (all resting at "as written"): Energy (sparser to busier patterns: the main hits stay, quiet off-beat hats come in), Brightness (every filter together), Space (reverb and delay), Mood (the mode, bright to dark: lydian, major, mixolydian, dorian, minor, phrygian, keeping the key), Tempo (±15%), Key (±6 semitones), Character (smooth to gritty), Width (chorus and detune). Every setting stays in tasteful, in-key ranges.
-- **Parts:** each part's level, and **Swap sound** to step through its other instruments (synth waves, pluck models and the orchestral samples).
+- **Parts:** each part's level, and **Swap sound** to step through its other instruments (the part's SynthKit presets, synth waves, pluck models and the orchestral samples). Brightness, Space, Character and Width also turn a SynthKit sound's tune.
 - **Dice** rolls a new flavour, **Hold** freezes the blend so the music stops changing as you move, **Reset** goes back to as written. **Flavours** save and load named settings.
 - **Place my version here** plants what you hear as a normal beacon where you are (needs your location): the song you hear most, with your settings baked in and named "(remix)", noting the song it came from. It plays the same everywhere (app, website, shared map) without anyone needing Remix; your own Remix layer still applies on top of remixed beacons while it's on.
 - Walks record what you hear, so replays sound the way you heard them.

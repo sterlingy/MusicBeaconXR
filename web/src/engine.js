@@ -299,6 +299,7 @@ export class BeaconEngine {
     for (const role of ROLES) {
       const m = this.mix.roles[role];
       const inst = this.inst[role];
+      inst.setKit?.(m.kits, m.bright);
       inst.setParams(m.params);
       inst.setSample?.(this.samplesOn ? m.sample : null);
       inst.setAutomation(m.automation, this.beatAt);
@@ -308,6 +309,8 @@ export class BeaconEngine {
     if (this.inst.pad) {
       this.inst.channels.pad.set("level", padGain(this.active), tc);
       this.inst.pad.setSample?.((this.samplesOn && this.harmony?.song?.pad?.sample) || null);
+      const padKit = this.harmony?.song?.pad?.kit;
+      this.inst.pad.setKit?.([{ preset: padKit?.preset || "", tune: padKit?.tune || null, share: 1 }], 1);
     }
   }
 

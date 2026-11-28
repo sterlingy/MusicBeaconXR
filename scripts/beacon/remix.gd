@@ -27,15 +27,28 @@ const DIALS := [
 ## Mood steps through modes from bright to dark, keeping the key's root.
 const MOOD_LADDER := ["lydian", "major", "mixolydian", "dorian", "minor", "phrygian"]
 ## Swap sound: each part's other instruments after its own (index 0).
-const SWAPS := {
-	"drums": ["own", "synth", "sample:orch_kit"],
-	"bass": ["own", "wave:sawtooth", "wave:square", "wave:triangle", "sample:contrabass_pizz", "sample:tuba", "sample:bassoon"],
-	"keys": ["own", "wave:sine", "wave:triangle", "wave:sawtooth", "sample:piano"],
-	"lead": ["own", "wave:sine", "wave:triangle", "wave:sawtooth", "wave:square", "sample:flute", "sample:horn", "sample:clarinet", "sample:trumpet", "sample:oboe"],
-	"pluck": ["own", "model:nylon", "model:marimba", "model:vibes", "model:kalimba", "model:bell", "model:glass", "sample:harp", "sample:strings_pizz", "sample:glock"],
-	"texture": ["own"],
-	"pad": ["own", "synth", "sample:strings", "sample:horn", "sample:trombone"],
-}
+## "kit:x" a SynthKit preset (KitSounds), "wave:x" a synth wave, "model:x" a
+## pluck model, "sample:x" a sampled instrument, "synth" the part's synth.
+static var SWAPS := _make_swaps()
+
+
+static func _kits(role: String) -> Array:
+	var out := []
+	for s in KitSounds.KIT_SOUNDS[role]:
+		out.append("kit:" + String(s[0]))
+	return out
+
+
+static func _make_swaps() -> Dictionary:
+	return {
+		"drums": ["own", "synth"] + _kits("drums") + ["sample:orch_kit"],
+		"bass": ["own"] + _kits("bass") + ["wave:sawtooth", "wave:square", "wave:triangle", "sample:contrabass_pizz", "sample:tuba", "sample:bassoon"],
+		"keys": ["own"] + _kits("keys") + ["wave:sine", "wave:triangle", "wave:sawtooth", "sample:piano"],
+		"lead": ["own"] + _kits("lead") + ["wave:sine", "wave:triangle", "wave:sawtooth", "wave:square", "sample:flute", "sample:horn", "sample:clarinet", "sample:trumpet", "sample:oboe"],
+		"pluck": ["own"] + _kits("pluck") + ["model:nylon", "model:marimba", "model:vibes", "model:kalimba", "model:bell", "model:glass", "sample:harp", "sample:strings_pizz", "sample:glock"],
+		"texture": ["own"] + _kits("texture"),
+		"pad": ["own", "synth"] + _kits("pad") + ["sample:strings", "sample:horn", "sample:trombone"],
+	}
 const LEVEL_MAX := 1.5
 ## Safe ranges for the sound settings the dials move (as web/src/params.js allows).
 const RANGES := {
@@ -194,6 +207,9 @@ static func remix_song(song: Dictionary, s: Dictionary) -> Dictionary:
 				_put(p, r, "osc.detune", float(p["osc.detune"]) * (1.0 + 0.8 * wd))
 		var opts: Array = SWAPS.get(role, ["own"])
 		_apply_swap(t, p, opts[clampi(int(pr.get("swap", 0)), 0, opts.size() - 1)])
+		# A SynthKit sound turns with the same dials.
+		if t.get("kit") is Dictionary:
+			t["kit"] = _turn_kit(t.kit, s)
 	var pad: Dictionary = parts.get("pad", {})
 	var pad_swap: String = SWAPS.pad[clampi(int(pad.get("swap", 0)), 0, SWAPS.pad.size() - 1)]
 	if pad_swap == "synth":
@@ -202,6 +218,14 @@ static func remix_song(song: Dictionary, s: Dictionary) -> Dictionary:
 		var pd: Dictionary = out.get("pad", {}) if typeof(out.get("pad")) == TYPE_DICTIONARY else {}
 		pd["sample"] = pad_swap.substr(7)
 		out["pad"] = pd
+	elif pad_swap.begins_with("kit:"):
+		var pd: Dictionary = out.get("pad", {}) if typeof(out.get("pad")) == TYPE_DICTIONARY else {}
+		var old = pd.get("kit")
+		pd["kit"] = {"preset": pad_swap.substr(4), "tune": (old.get("tune", {}) as Dictionary).duplicate() if old is Dictionary and old.get("tune") is Dictionary else {}}
+		pd.erase("sample")
+		out["pad"] = pd
+	if typeof(out.get("pad")) == TYPE_DICTIONARY and out.pad.get("kit") is Dictionary:
+		out.pad["kit"] = _turn_kit(out.pad.kit, s)
 	if not pad.is_empty() and float(pad.get("level", 1.0)) != 1.0:
 		out["padLevel"] = _r3(clampf(float(pad.level), 0.0, LEVEL_MAX))
 	return out
@@ -222,14 +246,37 @@ static func _apply_swap(t: Dictionary, p: Dictionary, sw: String) -> void:
 		return
 	if sw == "synth":
 		t.erase("sample")
+	elif sw.begins_with("kit:"):
+		var old = t.get("kit")
+		t["kit"] = {"preset": sw.substr(4), "tune": (old.get("tune", {}) as Dictionary).duplicate() if old is Dictionary and old.get("tune") is Dictionary else {}}
+		t.erase("sample")
+	# A wave or model is a setting of the part's base synth, so the SynthKit preset steps aside.
 	elif sw.begins_with("wave:"):
 		p["osc.wave"] = sw.substr(5)
 		t.erase("sample")
+		t.erase("kit")
 	elif sw.begins_with("model:"):
 		p["model"] = sw.substr(6)
 		t.erase("sample")
+		t.erase("kit")
 	elif sw.begins_with("sample:"):
 		t["sample"] = sw.substr(7)
+
+
+## Brightness, space, character and width move a SynthKit sound's tune (-1..1).
+const KIT_DIALS := [["bright", "brightness"], ["space", "space"], ["grit", "character"], ["width", "width"]]
+
+
+static func _turn_kit(kit: Dictionary, s: Dictionary) -> Dictionary:
+	var out := kit.duplicate(true)
+	var tune: Dictionary = out.get("tune", {}) if out.get("tune") is Dictionary else {}
+	for kd in KIT_DIALS:
+		var d := float(s.get(kd[1], 0.0))
+		if d != 0.0:
+			var cur := float(tune.get(kd[0], 0.0)) if tune.get(kd[0]) != null else 0.0
+			tune[kd[0]] = _r3(clampf(cur + 0.8 * d, -1.0, 1.0))
+	out["tune"] = tune
+	return out
 
 
 ## Drums: sparser keeps the main hits; busier adds quiet off-beat hats and lifts velocities.

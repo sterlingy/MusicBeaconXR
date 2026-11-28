@@ -21,6 +21,9 @@ const settings = [
   set({ mood: -1, key: 5, tempo: 0.6 }),
   set({ mood: 1, key: -6, tempo: -1, character: -1, width: -1 }),
   withParts({ energy: 0.3 }, { lead: { swap: 6 }, pluck: { swap: 3, level: 1.4 }, drums: { swap: 2, level: 0.5 }, bass: { swap: 4 }, keys: { swap: 4 }, pad: { swap: 2, level: 0.4 } }),
+  // SynthKit sounds: kit swaps keep the tune, a wave swap steps the kit aside, the dials turn the tune.
+  withParts({ brightness: 0.6, character: -0.5 }, { lead: { swap: 2 }, texture: { swap: 2 }, pad: { swap: 3 }, bass: { swap: 7 }, pluck: { swap: 5 }, drums: { swap: 4 } }),
+  withParts({ space: -0.8, width: 1 }, { keys: { swap: 1 }, pad: { swap: 1 }, drums: { swap: 1 } }),
 ];
 const songs = ["fix:1", "fix:2"].map((seed) => generateSong(seed));
 const cases = [];

@@ -61,6 +61,12 @@ var _param_t := 0.0
 var _gain := {} # role -> smoothed linear gain
 var _pad_notes: Array = [] # the chord the pad is holding
 var _awake := {} # role -> Prism part awake (out.gain 1) or asleep (0)
+## SynthKit sounds (KitSounds): the preset each part has loaded ("" = its base
+## preset, played through ParamMap), the values a tune moves, and its tune.
+var kit_loaded := {}
+var _kit_base := {}
+var _kit_tune := {}
+var _presets := {} # instrument -> {preset name: preset}
 ## Sampled instruments: the pack this device carries, and per part a Sampler rig
 ## (made when a song first asks for one) that plays instead of the synth once
 ## the program the blend wants has loaded.
@@ -99,9 +105,14 @@ func _ready() -> void:
 		rig.local_input = false
 		add_child(rig)
 		rig.sequencer.enabled = false # the beacon blend plays these, not their own sequencers
-		for p in PresetLibrary.list(INSTRUMENT[role]):
-			if p.name == BASE_PRESET[role]:
-				rig.load_preset(p)
+		if not _presets.has(INSTRUMENT[role]):
+			var by := {}
+			for p in PresetLibrary.list(INSTRUMENT[role]):
+				by[p.name] = p
+			_presets[INSTRUMENT[role]] = by
+		if _presets[INSTRUMENT[role]].has(BASE_PRESET[role]):
+			rig.load_preset(_presets[INSTRUMENT[role]][BASE_PRESET[role]])
+		kit_loaded[role] = ""
 		rig.set_volume_db(-80.0)
 		if INSTRUMENT[role] == "Prism":
 			_awake[role] = true
@@ -299,7 +310,7 @@ func _process(delta: float) -> void:
 		var want := float(mix[role].gain) if Transport.running and audible(role) else 0.0
 		_gain[role] = lerpf(_gain[role], want, minf(1.0, delta * 6.0))
 		var db := linear_to_db(maxf(_gain[role], 0.0001)) + KIT_GAIN_DB
-		rigs[role].set_volume_db(db)
+		rigs[role].set_volume_db(db + KitSounds.trim(kit_loaded.get(role, "")))
 		if sample_rigs.has(role):
 			sample_rigs[role].set_volume_db(db + float(_sample_level.get(role, 0.0)))
 		# A Prism part faded out of the blend (or played by its Sampler) sleeps: no voices, no CPU.
@@ -318,13 +329,50 @@ func _process(delta: float) -> void:
 
 func _apply_params(role: String) -> void:
 	var synth: JamSynth = rigs[role].synth
-	var target := ParamMap.to_synth(role, mix[role].params)
+	var kits: Array = mix[role].get("kits", [])
+	if role == "pad":
+		var pk = harmony.song.get("pad", {}).get("kit") if typeof(harmony.song.get("pad")) == TYPE_DICTIONARY else null
+		kits = [{"preset": str(pk.get("preset", "")) if pk is Dictionary else "", "tune": pk.get("tune") if pk is Dictionary else null, "share": 1.0}]
+	var want = BeaconMixer.choose_kit(kits, kit_loaded.get(role, ""))
+	if want != null:
+		if want.preset != kit_loaded.get(role, ""):
+			_load_kit(role, want.preset)
+		_kit_tune[role] = want.tune if want.tune is Dictionary else {}
+	var target: Dictionary
+	if kit_loaded.get(role, "") != "":
+		target = KitSounds.kit_params(INSTRUMENT[role], _kit_base.get(role, {}), _kit_tune.get(role, {}))
+	else:
+		target = ParamMap.to_synth(role, mix[role].params)
 	var done: Dictionary = _applied[role]
 	for id in target:
 		var v: float = target[id]
 		if not done.has(id) or absf(done[id] - v) > 0.002 * maxf(1.0, absf(v)):
 			synth.set_param(id, v)
 			done[id] = v
+
+
+## Loads a part's SynthKit sound ("" = its base preset) and puts the device's
+## voice settings and sleep back (a preset load resets every setting).
+func _load_kit(role: String, preset: String) -> void:
+	var name := preset if preset != "" else String(BASE_PRESET[role])
+	var p: Dictionary = _presets.get(INSTRUMENT[role], {}).get(name, {})
+	if p.is_empty():
+		push_warning("SynthKit preset %s / %s not found" % [INSTRUMENT[role], name])
+		kit_loaded[role] = preset # don't ask again every tick
+		return
+	var rig: InstrumentRig = rigs[role]
+	rig.load_preset(p)
+	if INSTRUMENT[role] == "Prism":
+		var q := quality.settings()
+		rig.set_param("voice.quality", q.prism_quality)
+		rig.set_param("voice.budget", q.prism_budget)
+		rig.synth.set_param("out.gain", 1.0 if _awake.get(role, true) else 0.0)
+	var base := {}
+	for id in KitSounds.KIT_READS.get(INSTRUMENT[role], []):
+		base[id] = rig.synth.get_param(id)
+	_kit_base[role] = base
+	_applied[role] = {}
+	kit_loaded[role] = preset
 
 
 # ---- meters

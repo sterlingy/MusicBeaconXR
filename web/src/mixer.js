@@ -48,9 +48,43 @@ export function blend(active) {
     }
     const total = sources.reduce((s, x) => s + x.share, 0);
     for (const s of sources) s.share = total > 0 ? s.share / total : 0;
-    roles[role] = { gain, params: blendParams(active, role, sources), automation: leadAutomation(active, role, sources), sample: leadSample(active, role, sources), sources };
+    roles[role] = { gain, params: blendParams(active, role, sources), automation: leadAutomation(active, role, sources), sample: leadSample(active, role, sources), kits: kitShares(active, role, sources), bright: sectionBright(active, sources), sources };
   }
   return { roles };
+}
+
+/** The sections' brightness for a part, by each song's share (multiplies a kit's cutoff). */
+function sectionBright(active, sources) {
+  let acc = 0, w = 0;
+  sources.forEach((s, i) => { acc += s.share * Math.log(brightness(active[i])); w += s.share; });
+  return w > 0 ? Math.exp(acc / w) : 1;
+}
+
+/**
+ * The SynthKit sounds a part's songs ask for, loudest first: [{preset, tune,
+ * share}], one entry per preset (its tune from the loudest song using it).
+ * preset "" = songs without a kit (the part's base preset and its params).
+ * The players keep the sound they have until another is clearly louder.
+ */
+export function kitShares(active, role, sources) {
+  const by = new Map();
+  sources.forEach((s, i) => {
+    const kit = active[i].song.tracks[role]?.kit;
+    const name = kit?.preset || "";
+    const e = by.get(name) || { preset: name, tune: null, share: 0, best: -1 };
+    e.share += s.share;
+    if (s.share > e.best) { e.best = s.share; e.tune = kit?.tune || null; }
+    by.set(name, e);
+  });
+  return [...by.values()].map(({ preset, tune, share }) => ({ preset, tune, share }))
+    .sort((a, b) => b.share - a.share || (a.preset < b.preset ? -1 : a.preset > b.preset ? 1 : 0));
+}
+
+/** The sound a part keeps, given what it has now: switches only when another is louder by `margin`. */
+export function chooseKit(kits, current, margin = 0.15) {
+  if (!kits?.length) return null;
+  const cur = kits.find((k) => k.preset === current);
+  return cur && cur.share >= kits[0].share - margin ? cur : kits[0];
 }
 
 /** The sampled instrument a part plays: the loudest song's choice in that role (null = its synth). */

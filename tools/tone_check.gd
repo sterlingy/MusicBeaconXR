@@ -3,6 +3,8 @@ extends SceneTree
 ## packs it plays each melodic part the way the beacon player does (the song's
 ## own notes, ranges and settings through ParamMap, on phone quality) and
 ## measures the share of energy above 2.5 kHz, in dB. Lists the worst songs.
+## A part with a SynthKit sound (KitSounds) plays that preset and its tune, as
+## the player does; songs without one play the base preset through ParamMap.
 ##   godot --headless --path . -s res://tools/tone_check.gd -- [--role=lead] [--wav=<folder>] [--all] [--presets] [--json=<file>]
 ## --all checks the globe pack too (slower). --wav writes the worst song per part.
 
@@ -100,18 +102,28 @@ func check_presets() -> int:
 ## Plays two bars of a song's part like BeaconPlayer: same notes, same settings.
 func render(role: String, song: Dictionary) -> PackedVector2Array:
 	var t: Dictionary = song.tracks.get(role, {})
+	var kit = t.get("kit")
 	if role == "pad":
+		kit = song.get("pad", {}).get("kit") if song.get("pad") is Dictionary else null
 		t = {"params": {}, "pattern": [[{"d": 0, "v": 0.7, "g": 16}]]} # the pad holds each bar's chord
 	if t.is_empty():
 		return PackedVector2Array()
 	var s := JamSynth.new()
 	s.instrument = SYNTH[role][0]
+	var preset_name: String = kit.preset if kit is Dictionary else SYNTH[role][1]
 	for p in PresetLibrary.list(SYNTH[role][0]):
-		if p.name == SYNTH[role][1]:
+		if p.name == preset_name:
 			PresetLibrary.apply(s, p)
 	if s.instrument == "Prism":
 		s.set_param("voice.quality", 0)
-	var params: Dictionary = ParamMap.to_synth(role, t.get("params", {}))
+	var params: Dictionary
+	if kit is Dictionary:
+		var base := {}
+		for id in KitSounds.KIT_READS[s.instrument]:
+			base[id] = s.get_param(id)
+		params = KitSounds.kit_params(s.instrument, base, kit.get("tune", {}) if kit.get("tune") is Dictionary else {})
+	else:
+		params = ParamMap.to_synth(role, t.get("params", {}))
 	for k in params:
 		s.set_param(k, params[k])
 	var ids := {}

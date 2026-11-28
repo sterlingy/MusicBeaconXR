@@ -12,7 +12,7 @@ test("sample choices are deterministic and only from the list", () => {
     assert.deepEqual(a, b);
     assert.deepEqual(validateSong(a), []);
     for (const [role, t] of Object.entries(a.tracks)) if (t.sample) { parts++; assert.ok(SAMPLE_CHOICES[role].includes(t.sample), `${role}: ${t.sample}`); }
-    if (a.pad) assert.ok(SAMPLE_CHOICES.pad.includes(a.pad.sample));
+    if (a.pad?.sample) assert.ok(SAMPLE_CHOICES.pad.includes(a.pad.sample));
   }
   assert.ok(parts > 150 && parts < 700, `sampled parts in 200 songs: ${parts}`);
 });

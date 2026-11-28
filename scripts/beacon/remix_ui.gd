@@ -250,6 +250,8 @@ static func swap_label(sw: String) -> String:
 	if sw == "synth":
 		return "Synth"
 	var parts := sw.split(":")
+	if parts[0] == "kit":
+		return String(parts[1]) # a SynthKit preset's own name
 	var n := String(parts[1]).replace("_", " ").capitalize()
 	return n + " synth" if parts[0] == "wave" else n
 
