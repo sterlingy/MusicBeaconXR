@@ -5,7 +5,10 @@ extends "res://scripts/beacon/field_scene.gd"
 ## card offers to Jump or Move there (point at a button and pull the trigger);
 ## grip switches between life size and a tabletop field. A / X play, B / Y auto-walk.
 ## On headsets with passthrough (Quest 3, Pro) the tabletop field floats in your
-## room; the left menu button toggles passthrough.
+## room; the left menu button toggles passthrough. A MIDI keyboard plays along
+## (MidiKeys: USB, or Bluetooth on Android XR headsets such as XREAL's Aura,
+## where paired keyboards connect by themselves and, until one does, it looks
+## for Bluetooth MIDI keyboards every 45 seconds).
 ##
 ## Run on PC VR:  godot --path . --xr-mode on res://scenes/xr_field.tscn
 ## Without a headset it falls back to the flat overhead view, so it can still be
@@ -21,11 +24,14 @@ var panel: Label3D
 var card: XRTravelCard
 var passthrough := false
 var xr_active := false
+var midi_keys: MidiKeys # play along on a MIDI keyboard
 
 
 func _ready() -> void:
 	super._ready()
 	hud.title_text = "MUSIC BEACON XR"
+	midi_keys = MidiKeys.new()
+	add_child(midi_keys)
 	xr = XRServer.find_interface("OpenXR")
 	if xr != null and xr.is_initialized():
 		_start_xr()
@@ -219,5 +225,6 @@ func _update_panel() -> void:
 	var lines := ["%s   %s" % ["▶" if Transport.running else "■", player.harmony.song.get("title", "")]]
 	for a in player.active:
 		lines.append("%s  %s  %d%%" % [a.beacon.label, a.song.title, roundi(a.w * 100)])
+	lines.append(midi_keys.status if midi_keys else "")
 	lines.append("A play · B wander · grip scale")
 	panel.text = "\n".join(lines)
